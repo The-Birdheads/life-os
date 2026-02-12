@@ -3,7 +3,7 @@ import { supabase } from "./lib/supabase";
 import { todayJST } from "./lib/day";
 import type { Action, Task } from "./lib/types";
 
-type Tab = "today" | "review" | "week" | "tasks" | "actions";
+type Tab = "today" | "review" | "week" | "register";
 type Mode = "signIn" | "signUp";
 
 function num(v: any, fallback = 0) {
@@ -20,18 +20,35 @@ export default function App() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
 
   const [msg, setMsg] = useState<string>("");
+  const [todayActionEntries, setTodayActionEntries] = useState<any[]>([]);
 
   // ------- UI -------
   const [tab, setTab] = useState<Tab>("today");
-  const day = useMemo(() => todayJST(), []);
+  const [day, setDay] = useState(() => todayJST());
+  const layoutStyle: React.CSSProperties = {
+    display: "flex",
+    justifyContent: "center",
+    width: "100%",
+  };
+
+  const containerStyle: React.CSSProperties = {
+    width: "100%",
+    maxWidth: 720,
+    padding: "16px 12px 40px",
+    boxSizing: "border-box",
+  };
 
   // ------- Data -------
   const [tasks, setTasks] = useState<Task[]>([]);
   const [actions, setActions] = useState<Action[]>([]);
   const [doneTaskIds, setDoneTaskIds] = useState<Set<string>>(new Set());
   const [doneActionIds, setDoneActionIds] = useState<Set<string>>(new Set());
+  const [doneTaskIdsAnyDay, setDoneTaskIdsAnyDay] = useState<Set<string>>(new Set());
   const computed = useMemo(() => calcFulfillmentNow(), [tasks, actions, doneTaskIds, doneActionIds]);
 
+  // ------- Sub tab -------
+  type RegisterTab = "habit" | "oneoff" | "action";
+  const [registerTab, setRegisterTab] = useState<RegisterTab>("habit");
 
   // ------- Auth init -------
   useEffect(() => {
@@ -114,17 +131,35 @@ export default function App() {
     });
     setDoneTaskIds(doneT);
 
+    // ✅ 過去いつでも done の task_id を取得（突発タスクの非表示判定に使う）
+    const { data: teAll, error: teAllErr } = await supabase
+      .from("task_entries")
+      .select("task_id, status")
+      .eq("user_id", userId)
+      .eq("status", "done");
+
+    if (teAllErr) throw teAllErr;
+
+    const doneAll = new Set<string>();
+    (teAll ?? []).forEach((r: any) => doneAll.add(r.task_id));
+    setDoneTaskIdsAnyDay(doneAll);
+
     const { data: ae, error: aeErr } = await supabase
       .from("action_entries")
-      .select("action_id")
+      .select("id, action_id, note, satisfaction, created_at")
       .eq("user_id", userId)
-      .eq("day", day);
+      .eq("day", day)
+      .order("created_at", { ascending: true });
 
     if (aeErr) throw aeErr;
 
+    setTodayActionEntries(ae ?? []);
+
+    // 互換：今日やった行動IDセット（振り返り等で使える）
     const doneA = new Set<string>();
     (ae ?? []).forEach((r: any) => doneA.add(r.action_id));
     setDoneActionIds(doneA);
+
 
   }
 
@@ -153,7 +188,7 @@ export default function App() {
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId]);
+  }, [userId, day]);
 
   // ------- Insert helpers -------
   async function addTask(form: {
@@ -285,65 +320,6 @@ export default function App() {
     }
   }
 
-
-  async function toggleActionDone(actionId: string, nextDone: boolean) {
-    if (!userId) return;
-
-    // ✅ 先にローカルstateを更新（即時反映）
-    setDoneActionIds((prev) => {
-      const next = new Set(prev);
-      if (nextDone) next.add(actionId);
-      else next.delete(actionId);
-      return next;
-    });
-
-    try {
-      if (nextDone) {
-        const { error } = await supabase.from("action_entries").upsert(
-          { user_id: userId, day, action_id: actionId },
-          { onConflict: "user_id,day,action_id" }
-        );
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from("action_entries")
-          .delete()
-          .eq("user_id", userId)
-          .eq("day", day)
-          .eq("action_id", actionId);
-        if (error) throw error;
-      }
-    } catch (e) {
-      await loadTodayEntries();
-      throw e;
-    }
-  }
-
-  async function recalcAndSaveDaily() {
-    if (!userId) return;
-
-    const c = computed;
-
-    const { error } = await supabase.from("daily_logs").upsert(
-      {
-        user_id: userId,
-        day,
-        task_total: c.taskTotal,
-        action_total: c.actionTotal,
-        total_score: c.totalScore,
-        task_ratio: c.taskRatio,
-        action_ratio: c.actionRatio,
-        balance_factor: c.balanceFactor,
-        fulfillment: c.fulfillment,
-      },
-      { onConflict: "user_id,day" }
-    );
-
-    if (error) throw error;
-    setMsg("今日の充実度を保存しました。");
-  }
-
-
   function calcFulfillmentNow() {
     console.log("DEBUG ids", {
       sampleTaskId: tasks[0]?.id,
@@ -354,9 +330,17 @@ export default function App() {
       .filter((t) => t.is_active && doneTaskIds.has(t.id))
       .reduce((s, t) => s + num(t.must_score, 0), 0);
 
-    const actionTotal = actions
-      .filter((a) => a.is_active && doneActionIds.has(a.id))
-      .reduce((s, a) => s + num(a.want_score, 0), 0);
+    const actionById = new Map(actions.map((a) => [a.id, a]));
+
+    const actionTotal = todayActionEntries.reduce((sum: number, e: any) => {
+      const a = actionById.get(e.action_id);
+      if (!a) return sum;
+      if (a.is_active === false) return sum;
+
+      const sat = Number(e.satisfaction ?? 3); // 未入力なら3扱い
+      const weight = Math.min(5, Math.max(1, sat)) / 5;
+      return sum + num(a.want_score, 0) * weight;
+    }, 0);
 
     const totalScore = taskTotal + actionTotal;
     const taskRatio = totalScore === 0 ? 0 : taskTotal / totalScore;
@@ -375,19 +359,16 @@ export default function App() {
     return (
       <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
         <button onClick={() => setTab("today")} disabled={tab === "today"}>
-          今日
+          記録
+        </button>
+        <button onClick={() => setTab("register")} disabled={tab === "register"}>
+          登録
         </button>
         <button onClick={() => setTab("review")} disabled={tab === "review"}>
           振り返り
         </button>
         <button onClick={() => setTab("week")} disabled={tab === "week"}>
           週
-        </button>
-        <button onClick={() => setTab("tasks")} disabled={tab === "tasks"}>
-          タスク
-        </button>
-        <button onClick={() => setTab("actions")} disabled={tab === "actions"}>
-          行動
         </button>
       </div>
     );
@@ -401,79 +382,103 @@ export default function App() {
     );
   }
 
+  function ActionEntryForm({ activeActions }: { activeActions: any[] }) {
+    const [actionId, setActionId] = useState<string>(activeActions[0]?.id ?? "");
+    const [detail, setDetail] = useState<string>("");
+    const [satisfaction, setSatisfaction] = useState<number>(3);
+
+    useEffect(() => {
+      if (!actionId && activeActions[0]?.id) setActionId(activeActions[0].id);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeActions.length]);
+
+    return (
+      <form
+        onSubmit={async (e) => {
+          e.preventDefault();
+          if (!userId) return;
+          setMsg("");
+
+          try {
+            const { error } = await supabase.from("action_entries").insert({
+              user_id: userId,
+              day,
+              action_id: actionId,
+              note: detail.trim() ? detail.trim() : null,
+              satisfaction: Math.min(5, Math.max(1, Number(satisfaction))),
+            });
+            if (error) throw error;
+
+            setDetail("");
+            setSatisfaction(3);
+            await loadTodayEntries();
+          } catch (err: any) {
+            setMsg(err?.message ?? "追加エラー");
+          }
+        }}
+        style={{ display: "grid", gap: 10 }}
+      >
+        <label>
+          行動名
+          <select value={actionId} onChange={(e) => setActionId(e.target.value)} style={{ width: "100%" }}>
+            {activeActions.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.title}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label>
+          詳細（自由入力）
+          <input value={detail} onChange={(e) => setDetail(e.target.value)} style={{ width: "100%", boxSizing: "border-box" }} />
+        </label>
+
+        <label>
+          満足度（1-5）
+          <input
+            type="number"
+            min={1}
+            max={5}
+            value={satisfaction}
+            onChange={(e) => setSatisfaction(Number(e.target.value))}
+            style={{ width: "100%" }}
+          />
+        </label>
+
+        <button type="submit" disabled={!actionId}>
+          行動ログを追加
+        </button>
+      </form>
+    );
+  }
+
+
   function TodayView() {
     const habits = tasks.filter((t) => t.is_active && t.task_type === "habit");
-    const oneoffs = tasks.filter((t) => t.is_active && t.task_type === "oneoff");
-    const activeActions = actions.filter(a => a.is_active);
+    const activeActions = actions.filter((a) => a.is_active);
+    const activeOneoffs = tasks.filter((t) => t.is_active && t.task_type === "oneoff");
 
+    // ✅ 非表示ルール：過去完了済み かつ 今日完了ではない → 隠す
+    const visibleOneoffs = activeOneoffs.filter(
+      (t) => !doneTaskIdsAnyDay.has(t.id) || doneTaskIds.has(t.id)
+    );
 
     return (
       <>
         <Card>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-            <h2 style={{ margin: 0 }}>今日 ({day})</h2>
-            <div>
-              充実度: <b>{computed.fulfillment.toFixed(2)}</b>
-            </div>
-          </div>
-
-          <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
-            <label>
-              納得度（1-5）
-              <input
-                type="number"
-                min={1}
-                max={5}
-                defaultValue={3}
-                id="satisfaction"
-                style={{ width: "100%" }}
-              />
-            </label>
-
-            <label>
-              メモ（振り返り）
-              <textarea id="dailyNote" rows={3} style={{ width: "100%" }} />
-            </label>
-
-            <button
-              onClick={async () => {
-                try {
-                  // 入力値を取得
-                  const satEl = document.getElementById("satisfaction") as HTMLInputElement | null;
-                  const noteEl = document.getElementById("dailyNote") as HTMLTextAreaElement | null;
-                  const satisfaction = satEl ? Number(satEl.value) : null;
-                  const note = noteEl ? noteEl.value : null;
-
-                  // まず充実度を再計算して保存
-                  await recalcAndSaveDaily();
-
-                  // その後、納得度とメモを追記保存
-                  const { error } = await supabase
-                    .from("daily_logs")
-                    .update({
-                      satisfaction:
-                        satisfaction && satisfaction >= 1 && satisfaction <= 5 ? satisfaction : null,
-                      note: note && note.trim() ? note.trim() : null,
-                    })
-                    .eq("user_id", userId)
-                    .eq("day", day);
-
-                  if (error) throw error;
-
-                  setMsg("充実度＋納得度＋メモを保存しました。");
-                } catch (e: any) {
-                  setMsg(e?.message ?? "保存エラー");
-                }
-              }}
-            >
-              今日の振り返りを保存（充実度も更新）
-            </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <b>日付</b>
+            <input
+              type="date"
+              value={day}
+              max={todayJST()}
+              onChange={(e) => setDay(e.target.value)}
+            />
           </div>
         </Card>
-
-
         <Card>
-          <h3 style={{ marginTop: 0 }}>習慣タスク</h3>
+          <h3 style={{ marginTop: 0 }}>習慣</h3>
           {habits.length === 0 ? (
             <p>まだありません（タスクタブで追加）</p>
           ) : (
@@ -501,12 +506,12 @@ export default function App() {
         </Card>
 
         <Card>
-          <h3 style={{ marginTop: 0 }}>突発タスク</h3>
-          {oneoffs.length === 0 ? (
-            <p>まだありません（タスクタブで追加）</p>
+          <h3 style={{ marginTop: 0 }}>タスク</h3>
+          {visibleOneoffs.length === 0 ? (
+            <p>タスクがありません（タスクタブで追加）</p>
           ) : (
             <ul style={{ paddingLeft: 18 }}>
-              {oneoffs.map((t) => {
+              {visibleOneoffs.map((t) => {
                 const checked = doneTaskIds.has(t.id);
                 return (
                   <li key={t.id} style={{ marginBottom: 6 }}>
@@ -532,40 +537,66 @@ export default function App() {
         </Card>
 
         <Card>
-          <h3 style={{ marginTop: 0 }}>行動（やりたいこと）</h3>
-          {actions.length === 0 ? (
-            <p>まだありません（行動タブで追加）</p>
-          ) : (
-            <ul style={{ paddingLeft: 18 }}>
-              {activeActions.map((a) => {
-                const checked = doneActionIds.has(a.id);
-                return (
-                  <li key={a.id} style={{ marginBottom: 6 }}>
-                    <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={(e) => toggleActionDone(a.id, e.target.checked)}
-                      />
-                      <span>{a.title}</span>
-                      <small style={{ opacity: 0.7 }}>want {a.want_score} / cat {a.category}</small>
-                    </label>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+          <h3 style={{ marginTop: 0 }}>行動（都度入力）</h3>
+
+          <ActionEntryForm activeActions={activeActions} />
+
+          <div style={{ marginTop: 12 }}>
+            <h4 style={{ margin: "12px 0 6px" }}>今日の行動ログ</h4>
+            {todayActionEntries.length === 0 ? (
+              <p>まだありません</p>
+            ) : (
+              <ul style={{ paddingLeft: 18 }}>
+                {todayActionEntries.map((e: any) => {
+                  const a = actions.find((x) => x.id === e.action_id);
+                  return (
+                    <li key={e.id} style={{ marginBottom: 8 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                        <div>
+                          <b>{a?.title ?? "（不明な行動）"}</b>{" "}
+                          <small style={{ opacity: 0.7 }}>
+                            満足度 {e.satisfaction ?? "-"} / {e.note ? `詳細: ${e.note}` : "詳細なし"}
+                          </small>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            if (!userId) return;
+                            if (!confirm("この行動ログを削除しますか？")) return;
+                            const { error } = await supabase
+                              .from("action_entries")
+                              .delete()
+                              .eq("user_id", userId)
+                              .eq("id", e.id);
+                            if (error) {
+                              setMsg(error.message);
+                              return;
+                            }
+                            await loadTodayEntries();
+                          }}
+                        >
+                          削除
+                        </button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
         </Card>
+
       </>
     );
   }
 
-  function TasksView() {
-    const [title, setTitle] = useState("");
-    const [taskType, setTaskType] = useState<"habit" | "oneoff">("habit");
+  function TasksView({ fixedType, title }: { fixedType: "habit" | "oneoff"; title: string }) {
+    const taskType = fixedType; // 固定
+    const [newTitle, setNewTitle] = useState("");
     const [mustScore, setMustScore] = useState(3);
     const [wantScore, setWantScore] = useState(0);
     const [dueDate, setDueDate] = useState<string>("");
+
+    const shownTasks = tasks.filter((t) => t.task_type === fixedType);
 
     function TaskRow({
       task,
@@ -576,7 +607,6 @@ export default function App() {
     }) {
       const [editing, setEditing] = useState(false);
       const [title, setTitle] = useState(task.title);
-      const [taskType, setTaskType] = useState<Task["task_type"]>(task.task_type);
       const [mustScore, setMustScore] = useState<number>(task.must_score);
       const [wantScore, setWantScore] = useState<number>(task.want_score);
       const [dueDate, setDueDate] = useState<string>(task.due_date ?? "");
@@ -584,7 +614,6 @@ export default function App() {
       // 外部更新に追従（loadBaseでtasksが更新された時用）
       useEffect(() => {
         setTitle(task.title);
-        setTaskType(task.task_type);
         setMustScore(task.must_score);
         setWantScore(task.want_score);
         setDueDate(task.due_date ?? "");
@@ -648,17 +677,8 @@ export default function App() {
           <div style={{ display: "grid", gap: 8 }}>
             <label>
               タイトル
-              <input value={title} onChange={(e) => setTitle(e.target.value)} style={{ width: "100%" }} />
+              <input value={newTitle} onChange={(e) => setTitle(e.target.value)} style={{ width: "100%", boxSizing: "border-box" }} placeholder={`${title}名を入力`} />
             </label>
-
-            <label>
-              種別
-              <select value={taskType} onChange={(e) => setTaskType(e.target.value as any)} style={{ width: "100%" }}>
-                <option value="habit">習慣</option>
-                <option value="oneoff">突発</option>
-              </select>
-            </label>
-
             <label>
               やるべき度（1-5）
               <input
@@ -667,7 +687,7 @@ export default function App() {
                 max={5}
                 value={mustScore}
                 onChange={(e) => setMustScore(Number(e.target.value))}
-                style={{ width: "100%" }}
+                style={{ width: "100%", boxSizing: "border-box" }}
               />
             </label>
 
@@ -679,7 +699,7 @@ export default function App() {
                 max={5}
                 value={wantScore}
                 onChange={(e) => setWantScore(Number(e.target.value))}
-                style={{ width: "100%" }}
+                style={{ width: "100%", boxSizing: "border-box" }}
               />
             </label>
 
@@ -690,7 +710,7 @@ export default function App() {
                   type="date"
                   value={dueDate}
                   onChange={(e) => setDueDate(e.target.value)}
-                  style={{ width: "100%" }}
+                  style={{ width: "100%", boxSizing: "border-box" }}
                 />
               </label>
             )}
@@ -700,7 +720,7 @@ export default function App() {
                 onClick={async () => {
                   await onSave({
                     title: title.trim() || task.title,
-                    task_type: taskType,
+                    task_type: fixedType,
                     must_score: Math.min(5, Math.max(1, mustScore)),
                     want_score: Math.min(5, Math.max(0, wantScore)),
                     due_date: taskType === "oneoff" ? (dueDate ? dueDate : null) : null,
@@ -714,7 +734,6 @@ export default function App() {
                 onClick={() => {
                   // 変更を破棄して戻す
                   setTitle(task.title);
-                  setTaskType(task.task_type);
                   setMustScore(task.must_score);
                   setWantScore(task.want_score);
                   setDueDate(task.due_date ?? "");
@@ -733,20 +752,20 @@ export default function App() {
     return (
       <>
         <Card>
-          <h2 style={{ marginTop: 0 }}>タスク追加</h2>
+          <h2 style={{ marginTop: 0 }}>{title}追加</h2>
           <form
             onSubmit={async (e) => {
               e.preventDefault();
               setMsg("");
               try {
                 await addTask({
-                  title,
-                  task_type: taskType,
+                  title: newTitle,
+                  task_type: fixedType,
                   must_score: mustScore,
                   want_score: wantScore,
-                  due_date: dueDate ? dueDate : null,
+                  due_date: fixedType === "oneoff" ? (dueDate ? dueDate : null) : null,
                 });
-                setTitle("");
+                setNewTitle("");
                 setDueDate("");
                 setMsg("タスクを追加しました。");
               } catch (err: any) {
@@ -757,15 +776,7 @@ export default function App() {
           >
             <label>
               タイトル
-              <input value={title} onChange={(e) => setTitle(e.target.value)} style={{ width: "100%" }} />
-            </label>
-
-            <label>
-              種別
-              <select value={taskType} onChange={(e) => setTaskType(e.target.value as any)} style={{ width: "100%" }}>
-                <option value="habit">習慣</option>
-                <option value="oneoff">突発</option>
-              </select>
+              <input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} style={{ width: "100%", boxSizing: "border-box" }} placeholder={`${title}名を入力`} />
             </label>
 
             <label>
@@ -788,18 +799,18 @@ export default function App() {
                 max={5}
                 value={wantScore}
                 onChange={(e) => setWantScore(num(e.target.value, 0))}
-                style={{ width: "100%" }}
+                style={{ width: "100%", boxSizing: "border-box" }}
               />
             </label>
 
             {taskType === "oneoff" && (
               <label>
                 期限（任意）
-                <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} style={{ width: "100%" }} />
+                <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} style={{ width: "100%", boxSizing: "border-box" }} />
               </label>
             )}
 
-            <button type="submit" disabled={!title.trim()}>
+            <button type="submit" disabled={!newTitle.trim()}>
               追加
             </button>
           </form>
@@ -812,7 +823,7 @@ export default function App() {
             <p>まだありません</p>
           ) : (
             <div style={{ display: "grid", gap: 10 }}>
-              {tasks.map((t) => (
+              {shownTasks.map((t) => (
                 <TaskRow
                   key={t.id}
                   task={t}
@@ -923,7 +934,7 @@ export default function App() {
           <div style={{ display: "grid", gap: 8 }}>
             <label>
               タイトル
-              <input value={title} onChange={(e) => setTitle(e.target.value)} style={{ width: "100%" }} />
+              <input value={title} onChange={(e) => setTitle(e.target.value)} style={{ width: "100%", boxSizing: "border-box" }} />
             </label>
 
             <label>
@@ -944,7 +955,7 @@ export default function App() {
                 max={5}
                 value={wantScore}
                 onChange={(e) => setWantScore(Number(e.target.value))}
-                style={{ width: "100%" }}
+                style={{ width: "100%", boxSizing: "border-box" }}
               />
             </label>
 
@@ -1011,8 +1022,8 @@ export default function App() {
             style={{ display: "grid", gap: 10 }}
           >
             <label>
-              タイトル
-              <input value={title} onChange={(e) => setTitle(e.target.value)} style={{ width: "100%" }} />
+              種類
+              <input value={title} onChange={(e) => setTitle(e.target.value)} style={{ width: "100%", boxSizing: "border-box" }} placeholder={`行動の種類を入力`} />
             </label>
 
             <label>
@@ -1033,7 +1044,7 @@ export default function App() {
                 max={5}
                 value={wantScore}
                 onChange={(e) => setWantScore(num(e.target.value, 3))}
-                style={{ width: "100%" }}
+                style={{ width: "100%", boxSizing: "border-box" }}
               />
             </label>
 
@@ -1045,7 +1056,7 @@ export default function App() {
                 max={3}
                 value={mustScore}
                 onChange={(e) => setMustScore(num(e.target.value, 0))}
-                style={{ width: "100%" }}
+                style={{ width: "100%", boxSizing: "border-box" }}
               />
             </label>
 
@@ -1092,21 +1103,33 @@ export default function App() {
     // 今日のログ（note/satisfaction）を読み込み
     useEffect(() => {
       if (!userId) return;
+
+      // 日付切替時に一旦初期化（前日の表示が残らないように）
+      setNote("");
+      setSatisfaction(3);
+
       (async () => {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from("daily_logs")
           .select("note,satisfaction")
           .eq("user_id", userId)
           .eq("day", day)
           .maybeSingle();
 
-        if (data?.note) setNote(data.note);
-        if (data?.satisfaction) setSatisfaction(data.satisfaction);
+        if (error) {
+          setMsg(error.message);
+          return;
+        }
+
+        setNote(data?.note ?? "");
+        setSatisfaction(data?.satisfaction ?? 3);
       })();
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [userId]);
+    }, [userId, day]);
 
-    const doneTasks = tasks.filter((t) => doneTaskIds.has(t.id));
+
+    const doneHabits = tasks.filter((t) => t.task_type === "habit" && doneTaskIds.has(t.id));
+    const doneOneoffs = tasks.filter((t) => t.task_type === "oneoff" && doneTaskIds.has(t.id));
     const doneActions = actions.filter((a) => doneActionIds.has(a.id));
     const calc = calcFulfillmentNow();
 
@@ -1139,8 +1162,20 @@ export default function App() {
     return (
       <>
         <Card>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <small style={{ opacity: 0.7 }}>日付</small>
+              <input
+                type="date"
+                value={day}
+                max={todayJST()}  // 未来日ロックしたいなら残す（不要なら消してOK）
+                onChange={(e) => setDay(e.target.value)}
+              />
+            </div>
+          </div>
+        </Card>
+        <Card>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-            <h2 style={{ marginTop: 0 }}>振り返り（{day}）</h2>
             <div>
               充実度: <b>{computed.fulfillment.toFixed(2)}</b>
             </div>
@@ -1155,7 +1190,7 @@ export default function App() {
                 max={5}
                 value={satisfaction}
                 onChange={(e) => setSatisfaction(Number(e.target.value))}
-                style={{ width: "100%" }}
+                style={{ width: "100%", boxSizing: "border-box" }}
               />
             </label>
 
@@ -1175,16 +1210,35 @@ export default function App() {
         </Card>
 
         <Card>
-          <h3 style={{ marginTop: 0 }}>今日やったタスク</h3>
-          {doneTasks.length === 0 ? (
+          <h3 style={{ marginTop: 0 }}>今日やった習慣</h3>
+          {doneHabits.length === 0 ? (
             <p>まだありません</p>
           ) : (
             <ul style={{ paddingLeft: 18 }}>
-              {doneTasks.map((t) => (
+              {doneHabits.map((t) => (
                 <li key={t.id}>
                   {t.title}{" "}
                   <small style={{ opacity: 0.7 }}>
-                    must {t.must_score} / want {t.want_score} ({t.task_type})
+                    must {t.must_score} / want {t.want_score}
+                  </small>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+
+        <Card>
+          <h3 style={{ marginTop: 0 }}>今日やったタスク</h3>
+          {doneOneoffs.length === 0 ? (
+            <p>まだありません</p>
+          ) : (
+            <ul style={{ paddingLeft: 18 }}>
+              {doneOneoffs.map((t) => (
+                <li key={t.id}>
+                  {t.title}{" "}
+                  <small style={{ opacity: 0.7 }}>
+                    must {t.must_score} / want {t.want_score}
+                    {t.due_date ? ` / due ${t.due_date}` : ""}
                   </small>
                 </li>
               ))}
@@ -1213,6 +1267,30 @@ export default function App() {
     );
   }
 
+  function RegisterView() {
+    return (
+      <>
+        <Card>
+          <h2 style={{ marginTop: 0 }}>登録</h2>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => setRegisterTab("habit")} disabled={registerTab === "habit"}>
+              習慣
+            </button>
+            <button onClick={() => setRegisterTab("oneoff")} disabled={registerTab === "oneoff"}>
+              タスク
+            </button>
+            <button onClick={() => setRegisterTab("action")} disabled={registerTab === "action"}>
+              行動
+            </button>
+          </div>
+        </Card>
+
+        {registerTab === "habit" && <TasksView fixedType="habit" title="習慣" />}
+        {registerTab === "oneoff" && <TasksView fixedType="oneoff" title="タスク" />}
+        {registerTab === "action" && <ActionsView />}
+      </>
+    );
+  }
 
   function WeekView() {
     const [rows, setRows] = useState<any[]>([]);
@@ -1318,7 +1396,7 @@ export default function App() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              style={{ width: "100%" }}
+              style={{ width: "100%", boxSizing: "border-box" }}
               autoComplete="email"
             />
           </label>
@@ -1329,7 +1407,7 @@ export default function App() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              style={{ width: "100%" }}
+              style={{ width: "100%", boxSizing: "border-box" }}
               autoComplete={mode === "signUp" ? "new-password" : "current-password"}
             />
           </label>
@@ -1343,25 +1421,28 @@ export default function App() {
   }
 
   return (
-    <div style={{ maxWidth: 720, margin: "40px auto", fontFamily: "sans-serif" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-        <h1 style={{ margin: 0 }}>Life OS</h1>
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <small style={{ opacity: 0.7 }}>{userEmail}</small>
-          <button onClick={signOut}>ログアウト</button>
+    <div style={layoutStyle}>
+      <div style={containerStyle}>
+        <div style={{ maxWidth: 720, margin: "40px auto", fontFamily: "sans-serif" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+            <h1 style={{ margin: 0 }}>Life OS</h1>
+            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+              <small style={{ opacity: 0.7 }}>{userEmail}</small>
+              <button onClick={signOut}>ログアウト</button>
+            </div>
+          </div>
+
+          <hr />
+          <Tabs />
+
+          {msg && <p>{msg}</p>}
+
+          {tab === "today" && <TodayView />}
+          {tab === "register" && <RegisterView />}
+          {tab === "review" && <ReviewView />}
+          {tab === "week" && <WeekView />}
         </div>
       </div>
-
-      <hr />
-      <Tabs />
-
-      {msg && <p>{msg}</p>}
-
-      {tab === "today" && <TodayView />}
-      {tab === "review" && <ReviewView />}
-      {tab === "week" && <WeekView />}
-      {tab === "tasks" && <TasksView />}
-      {tab === "actions" && <ActionsView />}
     </div>
   );
 }
