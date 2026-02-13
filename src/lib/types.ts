@@ -4,19 +4,19 @@ export type Task = {
   title: string;
   task_type: "habit" | "oneoff";
   due_date: string | null;
-  must_score: number;
-  want_score: number;
   is_active: boolean;
+  priority: number;
+  volume: number;
 };
 
 export type Action = {
   id: string;
   user_id: string;
-  title: string;
   category: string;
-  want_score: number;
-  must_score: number;
+  title: string;     // 互換で残してOK
+  kind: string | null;
   is_active: boolean;
+  created_at: string;
 };
 
 export type TaskEntry = {
@@ -32,6 +32,9 @@ export type ActionEntry = {
   user_id: string;
   day: string;
   action_id: string;
+  note: string | null;     // 詳細
+  volume: number | null;   // 1-10
+  created_at: string;
 };
 
 export type DailyLog = {

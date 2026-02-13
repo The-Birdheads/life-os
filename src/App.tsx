@@ -2,13 +2,344 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "./lib/supabase";
 import { todayJST } from "./lib/day";
 import type { Action, Task } from "./lib/types";
+import { useRef } from "react";
+import CategoryBadge from "./components/CategoryBadge";
+import PriorityBadge from "./components/PriorityBadge";
+import VolBar from "./components/VolBar";
+
 
 type Tab = "today" | "review" | "week" | "register";
 type Mode = "signIn" | "signUp";
 
-function num(v: any, fallback = 0) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : fallback;
+function Card({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12, marginBottom: 12 }}>
+      {children}
+    </div>
+  );
+}
+
+function addDaysJST(day: string, delta: number) {
+  // day: "YYYY-MM-DD" を JST 00:00 として扱う（タイムゾーンずれ防止）
+  const d = new Date(`${day}T00:00:00+09:00`);
+  d.setDate(d.getDate() + delta);
+
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
+
+function DateNav({
+  day,
+  setDay,
+  label,
+}: {
+  day: string;
+  setDay: (d: string) => void;
+  label?: string;
+}) {
+  const maxDay = todayJST();
+  const canNext = day < maxDay;
+
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        gap: 10,
+        width: "100%",
+      }}
+    >
+      {label ? <b>{label}</b> : null}
+
+      <button
+        type="button"
+        onClick={() => setDay(addDaysJST(day, -1))}
+        aria-label="前日"
+      >
+        ◀
+      </button>
+
+      {/* クリック用の見た目 */}
+      <button
+        type="button"
+        onClick={() => {
+          const el = inputRef.current;
+          if (!el) return;
+          // 対応ブラウザでは picker を直接開ける
+          // @ts-ignore
+          if (typeof el.showPicker === "function") el.showPicker();
+          else el.click();
+        }}
+        style={{
+          padding: "6px 10px",
+          borderRadius: 8,
+          background: "#f3f4f6",
+          border: "1px solid #e5e7eb",
+          cursor: "pointer",
+        }}
+        aria-label="日付を選択"
+      >
+        {day}
+      </button>
+
+      {/* 実体のdate inputは見えない場所に置く（hover干渉しない） */}
+      <input
+        ref={inputRef}
+        type="date"
+        value={day}
+        max={maxDay}
+        onChange={(e) => setDay(e.target.value)}
+        style={{
+          position: "fixed",
+          left: -9999,
+          top: -9999,
+          opacity: 0,
+          pointerEvents: "none",
+        }}
+        tabIndex={-1}
+      />
+
+      <button
+        type="button"
+        onClick={() => setDay(addDaysJST(day, +1))}
+        disabled={!canNext}
+        aria-label="翌日"
+      >
+        ▶
+      </button>
+    </div>
+  );
+}
+
+type ReviewViewProps = {
+  userId: string | null;
+  day: string;
+  setDay: (d: string) => void;
+
+  tasks: Task[];
+  doneTaskIds: Set<string>;
+  actions: Action[];
+  todayActionEntries: any[];
+
+  note: string;
+  setNote: (s: string) => void;
+  fulfillment: number;
+  setFulfillment: (n: number) => void;
+
+  setMsg: (s: string) => void;
+  supabase: any;
+};
+
+function ReviewView({
+  userId,
+  day,
+  setDay,
+  tasks,
+  doneTaskIds,
+  actions,
+  todayActionEntries,
+  note,
+  setNote,
+  fulfillment,
+  setFulfillment,
+  setMsg,
+  supabase,
+}: ReviewViewProps) {
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const reqIdRef = useRef(0);
+
+  useEffect(() => {
+    if (!userId) return;
+
+    const reqId = ++reqIdRef.current;
+    setReviewLoading(true);
+
+    (async () => {
+      const { data, error } = await supabase
+        .from("daily_logs")
+        .select("note, fulfillment")
+        .eq("user_id", userId)
+        .eq("day", day)
+        .maybeSingle();
+
+      // ✅ 古いリクエスト結果は捨てる（高速で日付移動した時の競合対策）
+      if (reqId !== reqIdRef.current) return;
+
+      if (error) {
+        setMsg(error.message);
+        setReviewLoading(false);
+        return;
+      }
+
+      setNote(data?.note ?? "");
+      setFulfillment(typeof data?.fulfillment === "number" ? data.fulfillment : 0);
+      setReviewLoading(false);
+    })();
+  }, [userId, day]);
+
+
+  // ✅ その日完了したもの（表示用）
+  const doneHabits = tasks.filter((t) => t.task_type === "habit" && doneTaskIds.has(t.id));
+  const doneOneoffs = tasks.filter((t) => t.task_type === "oneoff" && doneTaskIds.has(t.id));
+
+  // ✅ 行動は「その日のログ（todayActionEntries）」を表示（詳細・ボリュームが出せる）
+  const actionById = new Map(actions.map((a) => [a.id, a]));
+  const doneActionEntries = (todayActionEntries ?? []).filter((e: any) => {
+    const a = actionById.get(e.action_id);
+    if (!a) return false;
+    return a.is_active !== false; // 念のため
+  });
+
+  async function saveReview() {
+    if (!userId) return;
+
+    const fNum = Number(fulfillment);
+    const f =
+      Number.isFinite(fNum) && fNum >= 1 && fNum <= 100 ? Math.trunc(fNum) : null;
+
+    const { error } = await supabase.from("daily_logs").upsert(
+      {
+        user_id: userId,
+        day,
+        note: note.trim() ? note.trim() : null,
+        fulfillment: f, // ✅ ユーザー入力
+      },
+      { onConflict: "user_id,day" }
+    );
+
+    if (error) throw error;
+    setMsg("振り返りを保存しました。");
+  }
+
+  return (
+    <>
+      <Card>
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
+          <DateNav day={day} setDay={setDay} />
+        </div>
+      </Card>
+
+      <Card>
+        {reviewLoading && <small style={{ opacity: 0.7 }}>読み込み中…</small>}
+        <div style={{ display: "grid", gap: 10 }}>
+          <label>
+            充実度（1-100）
+            <div style={{ display: "grid", gap: 6 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                <b>{fulfillment || 0}</b>
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={fulfillment}
+                  onChange={(e) => setFulfillment(Number(e.target.value))}
+                  style={{ width: 90, boxSizing: "border-box" }}
+                />
+              </div>
+
+              <input
+                type="range"
+                min={1}
+                max={100}
+                step={1}
+                value={Math.min(100, Math.max(1, Number(fulfillment) || 1))}
+                onChange={(e) => setFulfillment(Number(e.target.value))}
+                style={{ width: "100%" }}
+              />
+
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, opacity: 0.7 }}>
+                <span>1</span>
+                <span>50</span>
+                <span>100</span>
+              </div>
+            </div>
+          </label>
+
+
+
+          <label>
+            振り返りメモ
+            <textarea
+              rows={5}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              style={{ width: "100%", boxSizing: "border-box" }}
+              placeholder="例：今日はタスク偏重だった。明日は回復系を1つ入れる。"
+            />
+          </label>
+
+          <button onClick={saveReview}>保存</button>
+        </div>
+      </Card>
+
+      <Card>
+        <h3 style={{ marginTop: 0 }}>その日やった習慣</h3>
+        {doneHabits.length === 0 ? (
+          <p>まだありません</p>
+        ) : (
+          <ul style={{ paddingLeft: 18 }}>
+            {doneHabits.map((t) => (
+              <li key={t.id}>
+                {t.title}{" "}
+                <small style={{ opacity: 0.7 }}>
+                  <PriorityBadge value={(t as any).priority} />{" "}
+                  <VolBar value={(t as any).volume} />
+                </small>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      <Card>
+        <h3 style={{ marginTop: 0 }}>その日やったタスク</h3>
+        {doneOneoffs.length === 0 ? (
+          <p>まだありません</p>
+        ) : (
+          <ul style={{ paddingLeft: 18 }}>
+            {doneOneoffs.map((t) => (
+              <li key={t.id}>
+                {t.title}{" "}
+                <small style={{ opacity: 0.7 }}>
+                  <PriorityBadge value={(t as any).priority} />{" "}
+                  <VolBar value={(t as any).volume} />
+                </small>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      <Card>
+        <h3 style={{ marginTop: 0 }}>その日やった行動</h3>
+        {doneActionEntries.length === 0 ? (
+          <p>まだありません</p>
+        ) : (
+          <ul style={{ paddingLeft: 18 }}>
+            {doneActionEntries.map((e: any) => {
+              const a = actionById.get(e.action_id);
+              return (
+                <li key={e.id}>
+                  {a ? (a.kind ?? a.title) : "（不明）"}{" "}
+                  <small style={{ opacity: 0.7 }}>
+                    <CategoryBadge category={a?.category} />{" "}
+                    <VolBar value={(e as any).volume} />
+                    {e.note ? ` / ${e.note}` : ""}
+                  </small>
+
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Card>
+    </>
+  );
 }
 
 export default function App() {
@@ -20,10 +351,24 @@ export default function App() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
 
   const [msg, setMsg] = useState<string>("");
+
+  useEffect(() => {
+    if (!msg) return;
+
+    const t = setTimeout(() => {
+      setMsg("");
+    }, 3000);
+
+    return () => clearTimeout(t);
+  }, [msg]);
+
   const [todayActionEntries, setTodayActionEntries] = useState<any[]>([]);
 
   // ------- UI -------
   const [tab, setTab] = useState<Tab>("today");
+  useEffect(() => {
+    setMsg("");
+  }, [tab]);
   const [day, setDay] = useState(() => todayJST());
   const layoutStyle: React.CSSProperties = {
     display: "flex",
@@ -38,13 +383,42 @@ export default function App() {
     boxSizing: "border-box",
   };
 
+  const toastWrapStyle: React.CSSProperties = {
+    position: "fixed",
+    top: 12,
+    left: 0,
+    right: 0,
+    display: "flex",
+    justifyContent: "center",
+    pointerEvents: "none", // 背後のUI操作を邪魔しない
+    zIndex: 9999,
+    padding: "0 12px",
+    boxSizing: "border-box",
+  };
+
+  const toastStyle: React.CSSProperties = {
+    pointerEvents: "auto",
+    maxWidth: 720,
+    width: "100%",
+    padding: "10px 12px",
+    borderRadius: 12,
+    border: "1px solid #e5e7eb",
+    background: "rgba(255,255,255,0.95)",
+    boxShadow: "0 6px 18px rgba(0,0,0,0.12)",
+    backdropFilter: "blur(6px)",
+    WebkitBackdropFilter: "blur(6px)",
+    fontSize: 14,
+  };
+
+
   // ------- Data -------
   const [tasks, setTasks] = useState<Task[]>([]);
   const [actions, setActions] = useState<Action[]>([]);
   const [doneTaskIds, setDoneTaskIds] = useState<Set<string>>(new Set());
   const [doneActionIds, setDoneActionIds] = useState<Set<string>>(new Set());
   const [doneTaskIdsAnyDay, setDoneTaskIdsAnyDay] = useState<Set<string>>(new Set());
-  const computed = useMemo(() => calcFulfillmentNow(), [tasks, actions, doneTaskIds, doneActionIds]);
+  const [note, setNote] = useState("");
+  const [fulfillment, setFulfillment] = useState<number>(0);
 
   // ------- Sub tab -------
   type RegisterTab = "habit" | "oneoff" | "action";
@@ -115,6 +489,7 @@ export default function App() {
   }
 
   async function loadTodayEntries() {
+    console.count("loadTodayEntries called");
     if (!userId) return;
 
     const { data: te, error: teErr } = await supabase
@@ -146,7 +521,7 @@ export default function App() {
 
     const { data: ae, error: aeErr } = await supabase
       .from("action_entries")
-      .select("id, action_id, note, satisfaction, created_at")
+      .select("id, action_id, note, volume, created_at")
       .eq("user_id", userId)
       .eq("day", day)
       .order("created_at", { ascending: true });
@@ -155,11 +530,10 @@ export default function App() {
 
     setTodayActionEntries(ae ?? []);
 
-    // 互換：今日やった行動IDセット（振り返り等で使える）
+    // （互換）doneActionIdsも作るならこれでOK
     const doneA = new Set<string>();
     (ae ?? []).forEach((r: any) => doneA.add(r.action_id));
     setDoneActionIds(doneA);
-
 
   }
 
@@ -182,6 +556,17 @@ export default function App() {
     (async () => {
       try {
         await loadBase();
+      } catch (e: any) {
+        setMsg(e?.message ?? "読み込みエラー");
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+    (async () => {
+      try {
         await loadTodayEntries();
       } catch (e: any) {
         setMsg(e?.message ?? "読み込みエラー");
@@ -190,35 +575,45 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, day]);
 
+
   // ------- Insert helpers -------
   async function addTask(form: {
     title: string;
     task_type: "habit" | "oneoff";
-    must_score: number;
-    want_score: number;
+    priority: number; // 1-5
+    volume: number;   // 1-5
     due_date: string | null;
   }) {
     if (!userId) return;
+
     const { error } = await supabase.from("tasks").insert({
       user_id: userId,
       title: form.title,
       task_type: form.task_type,
-      must_score: form.must_score,
-      want_score: form.want_score,
+
+      // ✅ 新パラメータ
+      priority: form.priority,
+      volume: form.volume,
+
+      // 期限はタスク(oneoff)のみ
       due_date: form.task_type === "oneoff" ? form.due_date : null,
+
+      // （任意・互換用）旧カラムを残してるなら、とりあえず埋めておくと安全
+      // must_score: form.priority,
+      // want_score: 0,
     });
+
     if (error) throw error;
     await loadBase();
   }
 
-  async function addAction(form: { title: string; category: string; want_score: number; must_score: number }) {
+
+  async function addAction(form: { kind: string; category: string; }) {
     if (!userId) return;
     const { error } = await supabase.from("actions").insert({
       user_id: userId,
-      title: form.title,
+      kind: form.kind,
       category: form.category,
-      want_score: form.want_score,
-      must_score: form.must_score,
     });
     if (error) throw error;
     await loadBase();
@@ -320,38 +715,56 @@ export default function App() {
     }
   }
 
-  function calcFulfillmentNow() {
-    console.log("DEBUG ids", {
-      sampleTaskId: tasks[0]?.id,
-      sampleTaskActive: tasks[0]?.is_active,
-      doneTaskIds: Array.from(doneTaskIds).slice(0, 3),
-    });
-    const taskTotal = tasks
-      .filter((t) => t.is_active && doneTaskIds.has(t.id))
-      .reduce((s, t) => s + num(t.must_score, 0), 0);
-
-    const actionById = new Map(actions.map((a) => [a.id, a]));
-
-    const actionTotal = todayActionEntries.reduce((sum: number, e: any) => {
-      const a = actionById.get(e.action_id);
-      if (!a) return sum;
-      if (a.is_active === false) return sum;
-
-      const sat = Number(e.satisfaction ?? 3); // 未入力なら3扱い
-      const weight = Math.min(5, Math.max(1, sat)) / 5;
-      return sum + num(a.want_score, 0) * weight;
-    }, 0);
-
-    const totalScore = taskTotal + actionTotal;
-    const taskRatio = totalScore === 0 ? 0 : taskTotal / totalScore;
-    const actionRatio = totalScore === 0 ? 0 : actionTotal / totalScore;
-    const balanceFactor = totalScore === 0 ? 0 : 1 - Math.abs(taskRatio - actionRatio);
-    const f =
-      totalScore === 0 ? 0 : totalScore * (0.5 + 0.5 * balanceFactor);
-
-
-    return { taskTotal, actionTotal, totalScore, taskRatio, actionRatio, balanceFactor, fulfillment: f };
+  function isoDay(d: Date) {
+    return d.toISOString().slice(0, 10);
   }
+  function addDaysISO(day: string, delta: number) {
+    const dt = new Date(day + "T00:00:00Z");
+    dt.setUTCDate(dt.getUTCDate() + delta);
+    return isoDay(dt);
+  }
+
+
+  function IconBtn({
+    children,
+    onClick,
+    title,
+    danger,
+  }: {
+    children: React.ReactNode;
+    onClick: () => void;
+    title: string;
+    danger?: boolean;
+  }) {
+    return (
+      <button
+        onClick={onClick}
+        title={title}
+        style={{
+          width: 34,
+          height: 34,
+          borderRadius: 8,
+          border: "1px solid #e5e7eb",
+          background: danger ? "#fff1f2" : "#fff",
+          cursor: "pointer",
+          fontSize: 16,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          transition: "0.15s",
+        }}
+        onMouseEnter={(e) =>
+          (e.currentTarget.style.background = danger ? "#ffe4e6" : "#f3f4f6")
+        }
+        onMouseLeave={(e) =>
+          (e.currentTarget.style.background = danger ? "#fff1f2" : "#fff")
+        }
+      >
+        {children}
+      </button>
+    );
+  }
+
 
 
   // ------- UI components -------
@@ -374,18 +787,12 @@ export default function App() {
     );
   }
 
-  function Card({ children }: { children: React.ReactNode }) {
-    return (
-      <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12, marginBottom: 12 }}>
-        {children}
-      </div>
-    );
-  }
 
   function ActionEntryForm({ activeActions }: { activeActions: any[] }) {
     const [actionId, setActionId] = useState<string>(activeActions[0]?.id ?? "");
     const [detail, setDetail] = useState<string>("");
-    const [satisfaction, setSatisfaction] = useState<number>(3);
+    const [volume, setVolume] = useState<number>(5);
+
 
     useEffect(() => {
       if (!actionId && activeActions[0]?.id) setActionId(activeActions[0].id);
@@ -405,13 +812,14 @@ export default function App() {
               day,
               action_id: actionId,
               note: detail.trim() ? detail.trim() : null,
-              satisfaction: Math.min(5, Math.max(1, Number(satisfaction))),
+              volume: Math.min(10, Math.max(1, Number(volume))),
             });
             if (error) throw error;
 
             setDetail("");
-            setSatisfaction(3);
+            setVolume(5);
             await loadTodayEntries();
+
           } catch (err: any) {
             setMsg(err?.message ?? "追加エラー");
           }
@@ -423,7 +831,7 @@ export default function App() {
           <select value={actionId} onChange={(e) => setActionId(e.target.value)} style={{ width: "100%" }}>
             {activeActions.map((a) => (
               <option key={a.id} value={a.id}>
-                {a.title}
+                {a.kind ?? a.title}
               </option>
             ))}
           </select>
@@ -435,14 +843,14 @@ export default function App() {
         </label>
 
         <label>
-          満足度（1-5）
+          ボリューム（1-10）
           <input
             type="number"
             min={1}
-            max={5}
-            value={satisfaction}
-            onChange={(e) => setSatisfaction(Number(e.target.value))}
-            style={{ width: "100%" }}
+            max={10}
+            value={volume}
+            onChange={(e) => setVolume(Number(e.target.value))}
+            style={{ width: "100%", boxSizing: "border-box" }}
           />
         </label>
 
@@ -468,13 +876,7 @@ export default function App() {
       <>
         <Card>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <b>日付</b>
-            <input
-              type="date"
-              value={day}
-              max={todayJST()}
-              onChange={(e) => setDay(e.target.value)}
-            />
+            <DateNav day={day} setDay={setDay} />
           </div>
         </Card>
         <Card>
@@ -496,7 +898,10 @@ export default function App() {
                       <span style={{ opacity: checked ? 1 : 0.4 }}>
                         {t.title}
                       </span>
-                      <small style={{ opacity: 0.7 }}>must {t.must_score} / want {t.want_score}</small>
+                      <small style={{ opacity: 0.7 }}>
+                        <PriorityBadge value={(t as any).priority} />{" "}
+                        <VolBar value={(t as any).volume} />
+                      </small>
                     </label>
                   </li>
                 );
@@ -525,8 +930,9 @@ export default function App() {
                         {t.title}
                       </span>
                       <small style={{ opacity: 0.7 }}>
-                        must {t.must_score} / want {t.want_score}
-                        {t.due_date ? ` / due ${t.due_date}` : ""}
+                        <PriorityBadge value={(t as any).priority} />{" "}
+                        <VolBar value={(t as any).volume} /><br />
+                        {t.due_date ? `期限: ${t.due_date}` : ""}
                       </small>
                     </label>
                   </li>
@@ -555,7 +961,9 @@ export default function App() {
                         <div>
                           <b>{a?.title ?? "（不明な行動）"}</b>{" "}
                           <small style={{ opacity: 0.7 }}>
-                            満足度 {e.satisfaction ?? "-"} / {e.note ? `詳細: ${e.note}` : "詳細なし"}
+                            <CategoryBadge category={a?.category} />{" "}
+                            <VolBar value={(e as any).volume} />
+                            {e.note ? ` / ${e.note}` : ""}
                           </small>
                         </div>
                         <button
@@ -592,11 +1000,19 @@ export default function App() {
   function TasksView({ fixedType, title }: { fixedType: "habit" | "oneoff"; title: string }) {
     const taskType = fixedType; // 固定
     const [newTitle, setNewTitle] = useState("");
-    const [mustScore, setMustScore] = useState(3);
-    const [wantScore, setWantScore] = useState(0);
+    const [priority, setPriority] = useState(3);
+    const [volume, setVolume] = useState(5);
     const [dueDate, setDueDate] = useState<string>("");
 
     const shownTasks = tasks.filter((t) => t.task_type === fixedType);
+
+    const visibleTasks = shownTasks.filter((t) => {
+      // 習慣は常に表示
+      if (t.task_type === "habit") return true;
+
+      // 突発タスクは「一度も完了してないものだけ表示」
+      return !doneTaskIdsAnyDay.has(t.id);
+    });
 
     function TaskRow({
       task,
@@ -607,15 +1023,15 @@ export default function App() {
     }) {
       const [editing, setEditing] = useState(false);
       const [title, setTitle] = useState(task.title);
-      const [mustScore, setMustScore] = useState<number>(task.must_score);
-      const [wantScore, setWantScore] = useState<number>(task.want_score);
+      const [priority, setPriority] = useState<number>((task as any).priority ?? 3);
+      const [volume, setVolume] = useState<number>((task as any).volume ?? 5);
       const [dueDate, setDueDate] = useState<string>(task.due_date ?? "");
 
       // 外部更新に追従（loadBaseでtasksが更新された時用）
       useEffect(() => {
         setTitle(task.title);
-        setMustScore(task.must_score);
-        setWantScore(task.want_score);
+        setPriority((task as any).priority ?? 3);
+        setVolume((task as any).volume ?? 5);
         setDueDate(task.due_date ?? "");
       }, [task]);
 
@@ -626,46 +1042,43 @@ export default function App() {
               <div>
                 <b>{task.title}</b>{" "}
                 <small style={{ opacity: 0.7 }}>
-                  ({task.task_type}) must {task.must_score} want {task.want_score}
-                  {task.due_date ? ` / due ${task.due_date}` : ""}
+                  ({task.task_type})
+                  <PriorityBadge value={(task as any).priority} />{" "}
+                  <VolBar value={(task as any).volume} /><br />
+                  {task.due_date ? `期限: ${task.due_date}` : ""}
                 </small>
               </div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button onClick={() => setEditing(true)}>編集</button>
+              <div style={{ display: "flex", gap: 6 }}>
+                <IconBtn title="編集" onClick={() => setEditing(true)}>✏️</IconBtn>
 
                 {task.is_active ? (
-                  <button
+                  <IconBtn
+                    title="アーカイブ"
                     onClick={async () => {
-                      if (!confirm("このタスクをアーカイブしますか？（今日の一覧から消えます）")) return;
+                      if (!confirm("このタスクをアーカイブしますか？")) return;
                       await archiveTask(task.id);
                     }}
                   >
-                    アーカイブ
-                  </button>
+                    📦
+                  </IconBtn>
                 ) : (
-                  <button
-                    onClick={async () => {
-                      await unarchiveTask(task.id);
-                    }}
-                  >
-                    復帰
-                  </button>
+                  <IconBtn title="復帰" onClick={() => unarchiveTask(task.id)}>
+                    ♻️
+                  </IconBtn>
                 )}
 
-                <button
+                <IconBtn
+                  title="完全削除"
+                  danger
                   onClick={async () => {
-                    if (
-                      !confirm(
-                        "完全削除しますか？過去の記録（task_entries）も消える可能性があります。"
-                      )
-                    )
-                      return;
+                    if (!confirm("完全削除しますか？")) return;
                     await deleteTaskForever(task.id);
                   }}
                 >
-                  完全削除
-                </button>
+                  🗑️
+                </IconBtn>
               </div>
+
 
             </div>
           </div>
@@ -677,31 +1090,44 @@ export default function App() {
           <div style={{ display: "grid", gap: 8 }}>
             <label>
               タイトル
-              <input value={newTitle} onChange={(e) => setTitle(e.target.value)} style={{ width: "100%", boxSizing: "border-box" }} placeholder={`${title}名を入力`} />
+              <input value={title} onChange={(e) => setTitle(e.target.value)} style={{ width: "100%", boxSizing: "border-box" }} placeholder={fixedType === "habit" ? "習慣名を入力" : "タスク名を入力"}
+              />
             </label>
             <label>
-              やるべき度（1-5）
+              優先度（1-5）: <b>{priority}</b>
               <input
-                type="number"
+                type="range"
                 min={1}
                 max={5}
-                value={mustScore}
-                onChange={(e) => setMustScore(Number(e.target.value))}
-                style={{ width: "100%", boxSizing: "border-box" }}
+                step={1}
+                value={priority}
+                onChange={(e) => setPriority(Number(e.target.value))}
+                style={{ width: "100%" }}
               />
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, opacity: 0.7 }}>
+                <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span>
+              </div>
             </label>
 
+
             <label>
-              やりたい度（0-5）
+              ボリューム（1-10）: <b>{volume}</b>
               <input
-                type="number"
-                min={0}
-                max={5}
-                value={wantScore}
-                onChange={(e) => setWantScore(Number(e.target.value))}
-                style={{ width: "100%", boxSizing: "border-box" }}
+                type="range"
+                min={1}
+                max={10}
+                step={1}
+                value={volume}
+                onChange={(e) => setVolume(Number(e.target.value))}
+                style={{ width: "100%" }}
               />
+
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, opacity: 0.7 }}>
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => <span key={n}>{n}</span>)}
+              </div>
             </label>
+
+
 
             {taskType === "oneoff" && (
               <label>
@@ -720,11 +1146,11 @@ export default function App() {
                 onClick={async () => {
                   await onSave({
                     title: title.trim() || task.title,
-                    task_type: fixedType,
-                    must_score: Math.min(5, Math.max(1, mustScore)),
-                    want_score: Math.min(5, Math.max(0, wantScore)),
-                    due_date: taskType === "oneoff" ? (dueDate ? dueDate : null) : null,
-                  });
+                    task_type: fixedType, // タブ固定ならこれが安全
+                    priority: Math.min(5, Math.max(1, priority)),
+                    volume: Math.min(10, Math.max(1, volume)),
+                    due_date: fixedType === "oneoff" ? (dueDate ? dueDate : null) : null,
+                  } as any);
                   setEditing(false);
                 }}
               >
@@ -734,8 +1160,8 @@ export default function App() {
                 onClick={() => {
                   // 変更を破棄して戻す
                   setTitle(task.title);
-                  setMustScore(task.must_score);
-                  setWantScore(task.want_score);
+                  setPriority((task as any).priority ?? 3);
+                  setVolume((task as any).volume ?? 5);
                   setDueDate(task.due_date ?? "");
                   setEditing(false);
                 }}
@@ -761,12 +1187,14 @@ export default function App() {
                 await addTask({
                   title: newTitle,
                   task_type: fixedType,
-                  must_score: mustScore,
-                  want_score: wantScore,
+                  priority: Math.min(5, Math.max(1, priority)),
+                  volume: Math.min(10, Math.max(1, volume)),
                   due_date: fixedType === "oneoff" ? (dueDate ? dueDate : null) : null,
                 });
                 setNewTitle("");
                 setDueDate("");
+                setPriority(3);
+                setVolume(5);
                 setMsg("タスクを追加しました。");
               } catch (err: any) {
                 setMsg(err?.message ?? "追加エラー");
@@ -776,32 +1204,44 @@ export default function App() {
           >
             <label>
               タイトル
-              <input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} style={{ width: "100%", boxSizing: "border-box" }} placeholder={`${title}名を入力`} />
+              <input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} style={{ width: "100%", boxSizing: "border-box" }} placeholder={fixedType === "habit" ? "習慣名を入力" : "タスク名を入力"}
+              />
             </label>
 
             <label>
-              やるべき度（1-5）
+              優先度（1-5）: <b>{priority}</b>
               <input
-                type="number"
+                type="range"
                 min={1}
                 max={5}
-                value={mustScore}
-                onChange={(e) => setMustScore(num(e.target.value, 3))}
+                step={1}
+                value={priority}
+                onChange={(e) => setPriority(Number(e.target.value))}
                 style={{ width: "100%" }}
               />
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, opacity: 0.7 }}>
+                <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span>
+              </div>
             </label>
 
             <label>
-              やりたい度（0-5）
+              ボリューム（1-10）: <b>{volume}</b>
               <input
-                type="number"
-                min={0}
-                max={5}
-                value={wantScore}
-                onChange={(e) => setWantScore(num(e.target.value, 0))}
-                style={{ width: "100%", boxSizing: "border-box" }}
+                type="range"
+                min={1}
+                max={10}
+                step={1}
+                value={volume}
+                onChange={(e) => setVolume(Number(e.target.value))}
+                style={{ width: "100%" }}
               />
+
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, opacity: 0.7 }}>
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => <span key={n}>{n}</span>)}
+              </div>
             </label>
+
+
 
             {taskType === "oneoff" && (
               <label>
@@ -817,13 +1257,13 @@ export default function App() {
         </Card>
 
         <Card>
-          <h3 style={{ marginTop: 0 }}>登録済みタスク（編集）</h3>
+          <h3 style={{ marginTop: 0 }}>登録済み{title}（編集）</h3>
 
           {tasks.length === 0 ? (
             <p>まだありません</p>
           ) : (
             <div style={{ display: "grid", gap: 10 }}>
-              {shownTasks.map((t) => (
+              {visibleTasks.map((t) => (
                 <TaskRow
                   key={t.id}
                   task={t}
@@ -852,10 +1292,9 @@ export default function App() {
   }
 
   function ActionsView() {
-    const [title, setTitle] = useState("");
+    // ✅ title は「種類(kind)」入力として使う（変数名はそのままでもOK）
+    const [kind, setKind] = useState("");
     const [category, setCategory] = useState("other");
-    const [wantScore, setWantScore] = useState(3);
-    const [mustScore, setMustScore] = useState(0);
 
     function ActionRow({
       actionItem,
@@ -865,16 +1304,17 @@ export default function App() {
       onSave: (patch: Partial<Action>) => Promise<void>;
     }) {
       const [editing, setEditing] = useState(false);
-      const [title, setTitle] = useState(actionItem.title);
+
+      // ✅ 既存データは kind 優先、なければ title を種類として扱う
+      const initialKind = (actionItem as any).kind ?? actionItem.title;
+
+      const [kind, setKind] = useState<string>(initialKind);
       const [category, setCategory] = useState(actionItem.category);
-      const [wantScore, setWantScore] = useState<number>(actionItem.want_score);
-      const [mustScore, setMustScore] = useState<number>(actionItem.must_score);
 
       useEffect(() => {
-        setTitle(actionItem.title);
+        const k = (actionItem as any).kind ?? actionItem.title;
+        setKind(k);
         setCategory(actionItem.category);
-        setWantScore(actionItem.want_score);
-        setMustScore(actionItem.must_score);
       }, [actionItem]);
 
       if (!editing) {
@@ -882,48 +1322,42 @@ export default function App() {
           <div style={{ border: "1px solid #eee", borderRadius: 8, padding: 10 }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
               <div>
-                <b>{actionItem.title}</b>{" "}
-                <small style={{ opacity: 0.7 }}>
-                  (cat {actionItem.category}) want {actionItem.want_score} must {actionItem.must_score}
-                </small>
+                <b>{(actionItem as any).kind ?? actionItem.title}</b>{" "}
+                <small style={{ opacity: 0.7 }}>(cat {actionItem.category})</small>
               </div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button onClick={() => setEditing(true)}>編集</button>
+
+              <div style={{ display: "flex", gap: 6 }}>
+                <IconBtn title="編集" onClick={() => setEditing(true)}>
+                  ✏️
+                </IconBtn>
 
                 {actionItem.is_active ? (
-                  <button
+                  <IconBtn
+                    title="アーカイブ"
                     onClick={async () => {
-                      if (!confirm("この行動をアーカイブしますか？（今日の一覧から消えます）")) return;
+                      if (!confirm("この行動をアーカイブしますか？")) return;
                       await archiveAction(actionItem.id);
                     }}
                   >
-                    アーカイブ
-                  </button>
+                    📦
+                  </IconBtn>
                 ) : (
-                  <button
-                    onClick={async () => {
-                      await unarchiveAction(actionItem.id);
-                    }}
-                  >
-                    復帰
-                  </button>
+                  <IconBtn title="復帰" onClick={() => unarchiveAction(actionItem.id)}>
+                    ♻️
+                  </IconBtn>
                 )}
 
-                <button
+                <IconBtn
+                  title="完全削除"
+                  danger
                   onClick={async () => {
-                    if (
-                      !confirm(
-                        "完全削除しますか？過去の記録（action_entries）も消える可能性があります。"
-                      )
-                    )
-                      return;
+                    if (!confirm("完全削除しますか？")) return;
                     await deleteActionForever(actionItem.id);
                   }}
                 >
-                  完全削除
-                </button>
+                  🗑️
+                </IconBtn>
               </div>
-
             </div>
           </div>
         );
@@ -933,64 +1367,52 @@ export default function App() {
         <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 10 }}>
           <div style={{ display: "grid", gap: 8 }}>
             <label>
-              タイトル
-              <input value={title} onChange={(e) => setTitle(e.target.value)} style={{ width: "100%", boxSizing: "border-box" }} />
-            </label>
-
-            <label>
-              カテゴリ
-              <select value={category} onChange={(e) => setCategory(e.target.value)} style={{ width: "100%" }}>
-                <option value="hobby">趣味</option>
-                <option value="recovery">回復</option>
-                <option value="growth">成長</option>
-                <option value="other">その他</option>
-              </select>
-            </label>
-
-            <label>
-              やりたい度（1-5）
+              種類
               <input
-                type="number"
-                min={1}
-                max={5}
-                value={wantScore}
-                onChange={(e) => setWantScore(Number(e.target.value))}
+                value={kind}
+                onChange={(e) => setKind(e.target.value)}
                 style={{ width: "100%", boxSizing: "border-box" }}
               />
             </label>
 
             <label>
-              やるべき度（0-3）
-              <input
-                type="number"
-                min={0}
-                max={3}
-                value={mustScore}
-                onChange={(e) => setMustScore(Number(e.target.value))}
-                style={{ width: "100%" }}
-              />
+              カテゴリ
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                style={{ width: "100%", boxSizing: "border-box" }}
+              >
+                <option value="hobby">趣味</option>
+                <option value="recovery">回復</option>
+                <option value="growth">成長</option>
+                <option value="lifework">生活</option>
+                <option value="other">その他</option>
+              </select>
             </label>
 
             <div style={{ display: "flex", gap: 8 }}>
               <button
                 onClick={async () => {
+                  const finalKind = (kind.trim() || initialKind).trim();
                   await onSave({
-                    title: title.trim() || actionItem.title,
                     category,
-                    want_score: Math.min(5, Math.max(1, wantScore)),
-                    must_score: Math.min(3, Math.max(0, mustScore)),
-                  });
+                    // ✅ 新仕様
+                    kind: finalKind as any,
+                    // ✅ 互換（title参照してる箇所が残っても壊れない）
+                    title: finalKind,
+                    // want_score / must_score は送らない
+                  } as any);
                   setEditing(false);
                 }}
+                disabled={!kind.trim()}
               >
                 保存
               </button>
+
               <button
                 onClick={() => {
-                  setTitle(actionItem.title);
+                  setKind(initialKind);
                   setCategory(actionItem.category);
-                  setWantScore(actionItem.want_score);
-                  setMustScore(actionItem.must_score);
                   setEditing(false);
                 }}
               >
@@ -1002,18 +1424,27 @@ export default function App() {
       );
     }
 
-
+    // ここから下：追加フォーム・一覧（あなたの既存コードに合わせて）
     return (
       <>
         <Card>
-          <h2 style={{ marginTop: 0 }}>行動追加</h2>
+          <h2 style={{ marginTop: 0 }}>行動（種類）追加</h2>
+
           <form
             onSubmit={async (e) => {
               e.preventDefault();
               setMsg("");
               try {
-                await addAction({ title, category, want_score: wantScore, must_score: mustScore });
-                setTitle("");
+                const finalKind = kind.trim();
+                if (!finalKind) return;
+
+                await addAction({
+                  kind: finalKind,
+                  category,
+                } as any);
+
+                setKind("");
+                setCategory("other");
                 setMsg("行動を追加しました。");
               } catch (err: any) {
                 setMsg(err?.message ?? "追加エラー");
@@ -1023,44 +1454,30 @@ export default function App() {
           >
             <label>
               種類
-              <input value={title} onChange={(e) => setTitle(e.target.value)} style={{ width: "100%", boxSizing: "border-box" }} placeholder={`行動の種類を入力`} />
+              <input
+                value={kind}
+                onChange={(e) => setKind(e.target.value)}
+                style={{ width: "100%", boxSizing: "border-box" }}
+                placeholder="行動の種類を入力"
+              />
             </label>
 
             <label>
               カテゴリ
-              <select value={category} onChange={(e) => setCategory(e.target.value)} style={{ width: "100%" }}>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                style={{ width: "100%", boxSizing: "border-box" }}
+              >
                 <option value="hobby">趣味</option>
                 <option value="recovery">回復</option>
                 <option value="growth">成長</option>
+                <option value="lifework">生活</option>
                 <option value="other">その他</option>
               </select>
             </label>
 
-            <label>
-              やりたい度（1-5）
-              <input
-                type="number"
-                min={1}
-                max={5}
-                value={wantScore}
-                onChange={(e) => setWantScore(num(e.target.value, 3))}
-                style={{ width: "100%", boxSizing: "border-box" }}
-              />
-            </label>
-
-            <label>
-              やるべき度（0-3）
-              <input
-                type="number"
-                min={0}
-                max={3}
-                value={mustScore}
-                onChange={(e) => setMustScore(num(e.target.value, 0))}
-                style={{ width: "100%", boxSizing: "border-box" }}
-              />
-            </label>
-
-            <button type="submit" disabled={!title.trim()}>
+            <button type="submit" disabled={!kind.trim()}>
               追加
             </button>
           </form>
@@ -1080,7 +1497,12 @@ export default function App() {
                   onSave={async (patch) => {
                     try {
                       setMsg("");
-                      await updateAction(a.id, patch as any);
+                      // ✅ kind変更時はtitleも同期（互換）
+                      const k = (patch as any).kind;
+                      const finalPatch =
+                        typeof k === "string" ? ({ ...(patch as any), title: k } as any) : patch;
+
+                      await updateAction(a.id, finalPatch as any);
                       setMsg("行動を更新しました。");
                     } catch (e: any) {
                       setMsg(e?.message ?? "更新エラー");
@@ -1091,181 +1513,10 @@ export default function App() {
             </div>
           )}
         </Card>
-
       </>
     );
   }
 
-  function ReviewView() {
-    const [note, setNote] = useState("");
-    const [satisfaction, setSatisfaction] = useState<number>(3);
-
-    // 今日のログ（note/satisfaction）を読み込み
-    useEffect(() => {
-      if (!userId) return;
-
-      // 日付切替時に一旦初期化（前日の表示が残らないように）
-      setNote("");
-      setSatisfaction(3);
-
-      (async () => {
-        const { data, error } = await supabase
-          .from("daily_logs")
-          .select("note,satisfaction")
-          .eq("user_id", userId)
-          .eq("day", day)
-          .maybeSingle();
-
-        if (error) {
-          setMsg(error.message);
-          return;
-        }
-
-        setNote(data?.note ?? "");
-        setSatisfaction(data?.satisfaction ?? 3);
-      })();
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [userId, day]);
-
-
-    const doneHabits = tasks.filter((t) => t.task_type === "habit" && doneTaskIds.has(t.id));
-    const doneOneoffs = tasks.filter((t) => t.task_type === "oneoff" && doneTaskIds.has(t.id));
-    const doneActions = actions.filter((a) => doneActionIds.has(a.id));
-    const calc = calcFulfillmentNow();
-
-    async function saveReview() {
-      if (!userId) return;
-
-      // 常に最新の計算値で daily_logs を upsert
-      const { error } = await supabase.from("daily_logs").upsert(
-        {
-          user_id: userId,
-          day,
-          note: note.trim() ? note.trim() : null,
-          satisfaction: satisfaction >= 1 && satisfaction <= 5 ? satisfaction : null,
-
-          task_total: calc.taskTotal,
-          action_total: calc.actionTotal,
-          total_score: calc.totalScore,
-          task_ratio: calc.taskRatio,
-          action_ratio: calc.actionRatio,
-          balance_factor: calc.balanceFactor,
-          fulfillment: calc.fulfillment,
-        },
-        { onConflict: "user_id,day" }
-      );
-
-      if (error) throw error;
-      setMsg("振り返りを保存しました。");
-    }
-
-    return (
-      <>
-        <Card>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <small style={{ opacity: 0.7 }}>日付</small>
-              <input
-                type="date"
-                value={day}
-                max={todayJST()}  // 未来日ロックしたいなら残す（不要なら消してOK）
-                onChange={(e) => setDay(e.target.value)}
-              />
-            </div>
-          </div>
-        </Card>
-        <Card>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-            <div>
-              充実度: <b>{computed.fulfillment.toFixed(2)}</b>
-            </div>
-          </div>
-
-          <div style={{ display: "grid", gap: 10 }}>
-            <label>
-              納得度（1-5）
-              <input
-                type="number"
-                min={1}
-                max={5}
-                value={satisfaction}
-                onChange={(e) => setSatisfaction(Number(e.target.value))}
-                style={{ width: "100%", boxSizing: "border-box" }}
-              />
-            </label>
-
-            <label>
-              振り返りメモ
-              <textarea
-                rows={5}
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                style={{ width: "100%" }}
-                placeholder="例：今日はタスク偏重だった。明日は回復系を1つ入れる。"
-              />
-            </label>
-
-            <button onClick={saveReview}>保存</button>
-          </div>
-        </Card>
-
-        <Card>
-          <h3 style={{ marginTop: 0 }}>今日やった習慣</h3>
-          {doneHabits.length === 0 ? (
-            <p>まだありません</p>
-          ) : (
-            <ul style={{ paddingLeft: 18 }}>
-              {doneHabits.map((t) => (
-                <li key={t.id}>
-                  {t.title}{" "}
-                  <small style={{ opacity: 0.7 }}>
-                    must {t.must_score} / want {t.want_score}
-                  </small>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-
-        <Card>
-          <h3 style={{ marginTop: 0 }}>今日やったタスク</h3>
-          {doneOneoffs.length === 0 ? (
-            <p>まだありません</p>
-          ) : (
-            <ul style={{ paddingLeft: 18 }}>
-              {doneOneoffs.map((t) => (
-                <li key={t.id}>
-                  {t.title}{" "}
-                  <small style={{ opacity: 0.7 }}>
-                    must {t.must_score} / want {t.want_score}
-                    {t.due_date ? ` / due ${t.due_date}` : ""}
-                  </small>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-
-        <Card>
-          <h3 style={{ marginTop: 0 }}>今日やった行動</h3>
-          {doneActions.length === 0 ? (
-            <p>まだありません</p>
-          ) : (
-            <ul style={{ paddingLeft: 18 }}>
-              {doneActions.map((a) => (
-                <li key={a.id}>
-                  {a.title}{" "}
-                  <small style={{ opacity: 0.7 }}>
-                    want {a.want_score} / cat {a.category}
-                  </small>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-      </>
-    );
-  }
 
   function RegisterView() {
     return (
@@ -1292,135 +1543,272 @@ export default function App() {
     );
   }
 
-  function WeekView() {
-    const [rows, setRows] = useState<any[]>([]);
-    const days = useMemo(() => lastNDays(7), []);
+  function WeekView({
+    day,
+    setDay,
+    setTab,
+  }: {
+    day: string;
+    setDay: (d: string) => void;
+    setTab: (t: "today" | "register" | "review" | "week") => void;
+  }) {
+
+    const [rows, setRows] = useState<
+      {
+        day: string;
+        habitDone: number;
+        habitTotal: number;
+        taskDone: number;
+        actionDone: number;
+        fulfillment: number | null;
+      }[]
+    >([]);
+    const [weekLoading, setWeekLoading] = useState(false);
+
+    // ✅ 選択日(day)までの直近7日
+    const startDay = useMemo(() => addDaysISO(day, -6), [day]);
+    const endDay = day;
+    const days = useMemo(
+      () => Array.from({ length: 7 }, (_, i) => addDaysISO(startDay, i)),
+      [startDay]
+    );
+
+    const habitTotal = useMemo(
+      () => tasks.filter((t) => t.task_type === "habit" && t.is_active).length,
+      [tasks]
+    );
 
     useEffect(() => {
       if (!userId) return;
+
       (async () => {
+        setWeekLoading(true);
         try {
-          const { data, error } = await supabase
-            .from("daily_logs")
-            .select("day, fulfillment, task_total, action_total, satisfaction")
-            .eq("user_id", userId)
-            .in("day", days)
-            .order("day", { ascending: true });
+          const [{ data: te, error: teErr }, { data: ae, error: aeErr }, { data: dl, error: dlErr }] =
+            await Promise.all([
+              supabase
+                .from("task_entries")
+                .select("day, task_id, status")
+                .eq("user_id", userId)
+                .gte("day", startDay)
+                .lte("day", endDay),
 
-          if (error) throw error;
+              supabase
+                .from("action_entries")
+                .select("day, id")
+                .eq("user_id", userId)
+                .gte("day", startDay)
+                .lte("day", endDay),
 
-          // 欠けてる日を0埋め
-          const map = new Map<string, any>();
-          (data ?? []).forEach((r: any) => map.set(r.day, r));
-          const filled = days.map((d) => {
-            const r = map.get(d);
-            return {
-              day: d,
-              fulfillment: r?.fulfillment ?? 0,
-              task_total: r?.task_total ?? 0,
-              action_total: r?.action_total ?? 0,
-              satisfaction: r?.satisfaction ?? null,
-            };
+              supabase
+                .from("daily_logs")
+                .select("day, fulfillment")
+                .eq("user_id", userId)
+                .gte("day", startDay)
+                .lte("day", endDay),
+            ]);
+
+          if (teErr) throw teErr;
+          if (aeErr) throw aeErr;
+          if (dlErr) throw dlErr;
+
+          const taskById = new Map(tasks.map((t) => [t.id, t]));
+
+          const habitDoneMap = new Map<string, number>();
+          const oneoffDoneMap = new Map<string, number>();
+          const actionCountMap = new Map<string, number>();
+          const fulfillmentMap = new Map<string, number | null>();
+
+          (te ?? []).forEach((r: any) => {
+            if (r.status !== "done") return;
+            const t = taskById.get(r.task_id);
+            if (!t) return;
+
+            if (t.task_type === "habit") {
+              habitDoneMap.set(r.day, (habitDoneMap.get(r.day) ?? 0) + 1);
+            } else if (t.task_type === "oneoff") {
+              oneoffDoneMap.set(r.day, (oneoffDoneMap.get(r.day) ?? 0) + 1);
+            }
           });
-          setRows(filled);
+
+          (ae ?? []).forEach((r: any) => {
+            actionCountMap.set(r.day, (actionCountMap.get(r.day) ?? 0) + 1);
+          });
+
+          (dl ?? []).forEach((r: any) => {
+            fulfillmentMap.set(r.day, typeof r.fulfillment === "number" ? r.fulfillment : null);
+          });
+
+          const nextRows = days.map((d) => ({
+            day: d,
+            habitDone: habitDoneMap.get(d) ?? 0,
+            habitTotal,
+            taskDone: oneoffDoneMap.get(d) ?? 0,
+            actionDone: actionCountMap.get(d) ?? 0,
+            fulfillment: fulfillmentMap.get(d) ?? null,
+          }));
+
+          setRows(nextRows);
         } catch (e: any) {
-          setMsg(e?.message ?? "週次読み込みエラー");
+          setMsg(e?.message ?? "週の読み込みエラー");
+        } finally {
+          setWeekLoading(false);
         }
       })();
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [userId]);
+    }, [userId, startDay, endDay, days, tasks, habitTotal]);
 
-    const avg = rows.length
-      ? rows.reduce((s, r) => s + Number(r.fulfillment || 0), 0) / rows.length
-      : 0;
+    const avg = useMemo(() => {
+      const vals = rows
+        .map((r) => r.fulfillment)
+        .filter((v): v is number => typeof v === "number");
+      if (vals.length === 0) return 0;
+      return vals.reduce((s, v) => s + v, 0) / vals.length;
+    }, [rows]);
 
     return (
       <>
         <Card>
-          <h2 style={{ marginTop: 0 }}>週次（直近7日）</h2>
-          <div>平均 充実度: <b>{avg.toFixed(2)}</b></div>
-          <p style={{ opacity: 0.7, marginBottom: 0 }}>
-            PDCAの見どころ：充実度の上下、タスク偏重/行動偏重、充実度と納得度のズレ
-          </p>
+          {/* ✅ 週タブでも日付ナビ */}
+          <div style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
+            <DateNav day={day} setDay={setDay} label="" />
+          </div>
+
+          <h2 style={{ marginTop: 12 }}>{startDay} 〜 {endDay} の7日間</h2>
+          <div>
+            平均 充実度: <b>{avg.toFixed(1)}</b>
+            {weekLoading ? <small style={{ marginLeft: 8, opacity: 0.7 }}>読み込み中…</small> : null}
+          </div>
         </Card>
 
         <Card>
           <h3 style={{ marginTop: 0 }}>日別</h3>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr>
-                <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", paddingBottom: 6 }}>日付</th>
-                <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", paddingBottom: 6 }}>充実度</th>
-                <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", paddingBottom: 6 }}>タスク</th>
-                <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", paddingBottom: 6 }}>行動</th>
-                <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", paddingBottom: 6 }}>納得度</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.day}>
-                  <td style={{ padding: "8px 0" }}>{r.day}</td>
-                  <td style={{ padding: "8px 0", textAlign: "right" }}>{Number(r.fulfillment).toFixed(2)}</td>
-                  <td style={{ padding: "8px 0", textAlign: "right" }}>{r.task_total}</td>
-                  <td style={{ padding: "8px 0", textAlign: "right" }}>{r.action_total}</td>
-                  <td style={{ padding: "8px 0", textAlign: "right" }}>{r.satisfaction ?? "-"}</td>
+
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", minWidth: 520, borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: "8px 6px" }}>日付</th>
+                  <th style={{ textAlign: "right", borderBottom: "1px solid #eee", padding: "8px 6px" }}>習慣</th>
+                  <th style={{ textAlign: "right", borderBottom: "1px solid #eee", padding: "8px 6px" }}>タスク</th>
+                  <th style={{ textAlign: "right", borderBottom: "1px solid #eee", padding: "8px 6px" }}>行動</th>
+                  <th style={{ textAlign: "right", borderBottom: "1px solid #eee", padding: "8px 6px" }}>充実度</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.day}>
+                    <td
+                      style={{
+                        padding: "8px 6px",
+                        borderBottom: "1px solid #f3f4f6",
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDay(r.day);
+                          setTab("review");
+                        }}
+                        style={{
+                          padding: 0,
+                          margin: 0,
+                          border: "none",
+                          background: "transparent",
+                          cursor: "pointer",
+                          textDecoration: "underline",
+                          font: "inherit",
+                          color: "inherit",
+                        }}
+                        aria-label={`${r.day} の振り返りを開く`}
+                      >
+                        {r.day}
+                      </button>
+                    </td>
+
+                    <td style={{ padding: "8px 6px", borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>
+                      {r.habitDone} / {r.habitTotal}
+                    </td>
+                    <td style={{ padding: "8px 6px", borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>
+                      {r.taskDone}
+                    </td>
+                    <td style={{ padding: "8px 6px", borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>
+                      {r.actionDone}
+                    </td>
+                    <td style={{ padding: "8px 6px", borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>
+                      {r.fulfillment == null ? "-" : r.fulfillment}
+                    </td>
+                  </tr>
+                ))}
+                {rows.length === 0 && !weekLoading ? (
+                  <tr>
+                    <td colSpan={5} style={{ padding: 12, opacity: 0.7 }}>
+                      データがありません
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
         </Card>
       </>
     );
   }
 
 
+
+
   // ------- Render -------
   if (!userId) {
     return (
-      <div style={{ maxWidth: 520, margin: "40px auto", fontFamily: "sans-serif" }}>
-        <h1>Life OS</h1>
+      <div style={layoutStyle}>
+        <div style={containerStyle}>
+          <div style={{ maxWidth: 520, margin: "40px auto", fontFamily: "sans-serif" }}>
+            <h1>Life OS</h1>
 
-        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-          <button onClick={() => setMode("signIn")} disabled={mode === "signIn"}>
-            ログイン
-          </button>
-          <button onClick={() => setMode("signUp")} disabled={mode === "signUp"}>
-            新規登録
-          </button>
+            <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+              <button onClick={() => setMode("signIn")} disabled={mode === "signIn"}>
+                ログイン
+              </button>
+              <button onClick={() => setMode("signUp")} disabled={mode === "signUp"}>
+                新規登録
+              </button>
+            </div>
+
+            <form onSubmit={onSubmit} style={{ display: "grid", gap: 12 }}>
+              <label>
+                メール
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  style={{ width: "100%", boxSizing: "border-box" }}
+                  autoComplete="email"
+                />
+              </label>
+
+              <label>
+                パスワード
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  style={{ width: "100%", boxSizing: "border-box" }}
+                  autoComplete={mode === "signUp" ? "new-password" : "current-password"}
+                />
+              </label>
+
+              <button type="submit">{mode === "signUp" ? "登録する" : "ログインする"}</button>
+
+            </form>
+          </div>
         </div>
-
-        <form onSubmit={onSubmit} style={{ display: "grid", gap: 12 }}>
-          <label>
-            メール
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              style={{ width: "100%", boxSizing: "border-box" }}
-              autoComplete="email"
-            />
-          </label>
-
-          <label>
-            パスワード
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              style={{ width: "100%", boxSizing: "border-box" }}
-              autoComplete={mode === "signUp" ? "new-password" : "current-password"}
-            />
-          </label>
-
-          <button type="submit">{mode === "signUp" ? "登録する" : "ログインする"}</button>
-
-          {msg && <p>{msg}</p>}
-        </form>
       </div>
     );
   }
 
   return (
+
     <div style={layoutStyle}>
       <div style={containerStyle}>
         <div style={{ maxWidth: 720, margin: "40px auto", fontFamily: "sans-serif" }}>
@@ -1433,14 +1821,35 @@ export default function App() {
           </div>
 
           <hr />
-          <Tabs />
 
-          {msg && <p>{msg}</p>}
+          {msg && (
+            <div style={toastWrapStyle} aria-live="polite" aria-atomic="true">
+              <div style={toastStyle}>{msg}</div>
+            </div>
+          )}
+          <Tabs />
 
           {tab === "today" && <TodayView />}
           {tab === "register" && <RegisterView />}
-          {tab === "review" && <ReviewView />}
-          {tab === "week" && <WeekView />}
+          {tab === "review" && (
+            <ReviewView
+              userId={userId}
+              day={day}
+              setDay={setDay}
+              tasks={tasks}
+              doneTaskIds={doneTaskIds}
+              actions={actions}
+              todayActionEntries={todayActionEntries}
+              note={note}
+              setNote={setNote}
+              fulfillment={fulfillment}
+              setFulfillment={setFulfillment}
+              setMsg={setMsg}
+              supabase={supabase}
+            />
+          )}
+          {tab === "week" && <WeekView day={day} setDay={setDay} setTab={setTab} />}
+
         </div>
       </div>
     </div>
