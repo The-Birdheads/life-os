@@ -441,6 +441,25 @@ export default function App() {
     await supabase.auth.signOut();
   }
 
+  async function signInWithGoogle() {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        // ログイン後に戻したい場所（例：トップ）
+        redirectTo: window.location.origin,
+      },
+    });
+
+    if (error) throw error;
+  }
+
+ // async function linkGoogle() {
+ //   const { data, error } = await supabase.auth.linkIdentity({ provider: "google" });
+ //   if (error) throw error;
+    // ブラウザ実行なら通常はリダイレクトして戻ってきます
+ // }
+
+
   // ------- Load base data -------
   async function loadBase() {
     if (!userId) return;
@@ -1873,6 +1892,9 @@ export default function App() {
               </button>
               <button onClick={() => setMode("signUp")} disabled={mode === "signUp"}>
                 新規登録
+              </button>
+              <button type="button" onClick={signInWithGoogle}>
+                Googleでログイン
               </button>
             </div>
 
