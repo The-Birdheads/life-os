@@ -415,7 +415,6 @@ export default function App() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [actions, setActions] = useState<Action[]>([]);
   const [doneTaskIds, setDoneTaskIds] = useState<Set<string>>(new Set());
-  const [doneActionIds, setDoneActionIds] = useState<Set<string>>(new Set());
   const [doneTaskIdsAnyDay, setDoneTaskIdsAnyDay] = useState<Set<string>>(new Set());
   const [note, setNote] = useState("");
   const [fulfillment, setFulfillment] = useState<number>(0);
@@ -530,25 +529,6 @@ export default function App() {
 
     setTodayActionEntries(ae ?? []);
 
-    // （互換）doneActionIdsも作るならこれでOK
-    const doneA = new Set<string>();
-    (ae ?? []).forEach((r: any) => doneA.add(r.action_id));
-    setDoneActionIds(doneA);
-
-  }
-
-  function lastNDays(n: number): string[] {
-    const out: string[] = [];
-    const base = new Date(day + "T00:00:00");
-    for (let i = n - 1; i >= 0; i--) {
-      const d = new Date(base);
-      d.setDate(d.getDate() - i);
-      const yyyy = d.getFullYear();
-      const mm = String(d.getMonth() + 1).padStart(2, "0");
-      const dd = String(d.getDate()).padStart(2, "0");
-      out.push(`${yyyy}-${mm}-${dd}`);
-    }
-    return out;
   }
 
   useEffect(() => {

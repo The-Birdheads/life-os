@@ -1,3 +1,5 @@
+import type { CSSProperties } from "react";
+
 type Props = {
   category?: string | null;
 };
@@ -13,7 +15,7 @@ export default function CategoryBadge({ category }: Props) {
     other: "その他",
   };
 
-  const styleMap: Record<string, React.CSSProperties> = {
+  const styleMap: Record<string, CSSProperties> = {
     hobby: { background: "#FFE4E6", color: "#9F1239" },
     recovery: { background: "#DBEAFE", color: "#1D4ED8" },
     growth: { background: "#DCFCE7", color: "#166534" },
