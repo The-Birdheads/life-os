@@ -42,8 +42,6 @@ function DateNav({
   const maxDay = todayJST();
   const canNext = day < maxDay;
 
-  const inputRef = useRef<HTMLInputElement | null>(null);
-
   return (
     <div
       style={{
@@ -64,44 +62,21 @@ function DateNav({
         ◀
       </button>
 
-      {/* クリック用の見た目 */}
-      <button
-        type="button"
-        onClick={() => {
-          const el = inputRef.current;
-          if (!el) return;
-          // 対応ブラウザでは picker を直接開ける
-          // @ts-ignore
-          if (typeof el.showPicker === "function") el.showPicker();
-          else el.click();
-        }}
+      <input
+        type="date"
+        value={day}
+        max={maxDay}
+        onChange={(e) => setDay(e.target.value)}
+        aria-label="日付を選択"
         style={{
           padding: "6px 10px",
           borderRadius: 8,
           background: "#f3f4f6",
           border: "1px solid #e5e7eb",
+          fontWeight: 700,
           cursor: "pointer",
+          fontFamily: "inherit",
         }}
-        aria-label="日付を選択"
-      >
-        {day}
-      </button>
-
-      {/* 実体のdate inputは見えない場所に置く（hover干渉しない） */}
-      <input
-        ref={inputRef}
-        type="date"
-        value={day}
-        max={maxDay}
-        onChange={(e) => setDay(e.target.value)}
-        style={{
-          position: "fixed",
-          left: -9999,
-          top: -9999,
-          opacity: 0,
-          pointerEvents: "none",
-        }}
-        tabIndex={-1}
       />
 
       <button
@@ -379,9 +354,11 @@ export default function App() {
   const containerStyle: React.CSSProperties = {
     width: "100%",
     maxWidth: 720,
-    padding: "16px 12px 40px",
+    margin: "0 auto",
+    padding: "0 12px",
     boxSizing: "border-box",
   };
+
 
   const toastWrapStyle: React.CSSProperties = {
     position: "fixed",
@@ -1022,7 +999,6 @@ export default function App() {
               <div>
                 <b>{task.title}</b>{" "}
                 <small style={{ opacity: 0.7 }}>
-                  ({task.task_type})
                   <PriorityBadge value={(task as any).priority} />{" "}
                   <VolBar value={(task as any).volume} /><br />
                   {task.due_date ? `期限: ${task.due_date}` : ""}
@@ -1303,7 +1279,7 @@ export default function App() {
             <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
               <div>
                 <b>{(actionItem as any).kind ?? actionItem.title}</b>{" "}
-                <small style={{ opacity: 0.7 }}>(cat {actionItem.category})</small>
+                <small style={{ opacity: 0.7 }}><CategoryBadge category={actionItem.category} /></small>
               </div>
 
               <div style={{ display: "flex", gap: 6 }}>
@@ -1464,7 +1440,7 @@ export default function App() {
         </Card>
 
         <Card>
-          <h3 style={{ marginTop: 0 }}>登録済み行動（編集）</h3>
+          <h3 style={{ marginTop: 0 }}>登録済みの行動の種類（編集）</h3>
 
           {actions.length === 0 ? (
             <p>まだありません</p>
