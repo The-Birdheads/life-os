@@ -549,8 +549,8 @@ export default function App() {
       task_type: form.task_type,
 
       // ✅ 新パラメータ
-      priority: form.priority,
-      volume: form.volume,
+      priority: Math.min(5, Math.max(1, form.priority)),
+      volume: Math.min(10, Math.max(1, form.volume)),
 
       // 期限はタスク(oneoff)のみ
       due_date: form.task_type === "oneoff" ? form.due_date : null,
@@ -800,16 +800,23 @@ export default function App() {
         </label>
 
         <label>
-          ボリューム（1-10）
+          ボリューム（1-10）: <b>{volume}</b>
           <input
-            type="number"
+            type="range"
             min={1}
             max={10}
+            step={1}
             value={volume}
             onChange={(e) => setVolume(Number(e.target.value))}
-            style={{ width: "100%", boxSizing: "border-box" }}
+            style={{ width: "100%" }}
           />
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, opacity: 0.7 }}>
+            <span>1</span>
+            <span>5</span>
+            <span>10</span>
+          </div>
         </label>
+
 
         <button type="submit" disabled={!actionId}>
           行動ログを追加
@@ -823,6 +830,175 @@ export default function App() {
     const habits = tasks.filter((t) => t.is_active && t.task_type === "habit");
     const activeActions = actions.filter((a) => a.is_active);
     const activeOneoffs = tasks.filter((t) => t.is_active && t.task_type === "oneoff");
+
+    async function updateActionEntry(
+      entryId: string,
+      patch: { note?: string | null; volume?: number | null; action_id?: string | null }
+    ) {
+      if (!userId) return;
+
+      const updateObj: any = {};
+      if (patch.note !== undefined) updateObj.note = patch.note;
+      if (patch.volume !== undefined) updateObj.volume = patch.volume;
+      if (patch.action_id !== undefined) updateObj.action_id = patch.action_id;
+
+      const { error } = await supabase
+        .from("action_entries")
+        .update(updateObj)
+        .eq("user_id", userId)
+        .eq("id", entryId);
+
+      if (error) throw error;
+      await loadTodayEntries();
+    }
+
+
+    function ActionEntryRow({ entry }: { entry: any }) {
+      const a = actions.find((x) => x.id === entry.action_id);
+
+      const [editing, setEditing] = useState(false);
+      const [note, setNote] = useState<string>(entry.note ?? "");
+      const [volume, setVolume] = useState<number>(Number(entry.volume ?? 5));
+      const [actionId, setActionId] = useState<string>(entry.action_id);
+
+      // day切替や再読み込みで entry が更新されたとき追従
+      useEffect(() => {
+        setActionId(entry.action_id);
+        setNote(entry.note ?? "");
+        setVolume(Number(entry.volume ?? 5));
+        setEditing(false);
+      }, [entry.id, entry.action_id, entry.note, entry.volume]);
+
+      if (!editing) {
+        return (
+          <li style={{ marginBottom: 8 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 600 }}>
+                  {a ? (a.kind ?? a.title) : "（不明）"}
+                  <small style={{ marginLeft: 8, opacity: 0.7 }}><VolBar value={entry.volume} /></small>
+                </div>
+                {entry.note ? <div style={{ opacity: 0.8, fontSize: 12 }}>{entry.note}</div> : null}
+              </div>
+
+              <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                <IconBtn title="編集" onClick={() => setEditing(true)}>✏️</IconBtn>
+
+                <IconBtn
+                  title="削除"
+                  danger
+                  onClick={async () => {
+                    if (!userId) return;
+                    if (!confirm("この行動ログを削除しますか？")) return;
+                    const { error } = await supabase
+                      .from("action_entries")
+                      .delete()
+                      .eq("user_id", userId)
+                      .eq("id", entry.id);
+                    if (error) {
+                      setMsg(error.message);
+                      return;
+                    }
+                    await loadTodayEntries();
+                    setMsg("行動ログを削除しました。");
+                  }}
+                >
+                  🗑️
+                </IconBtn>
+              </div>
+            </div>
+          </li>
+        );
+      }
+
+      // 編集モード
+      return (
+        <li style={{ marginBottom: 8 }}>
+          <div style={{ border: "1px solid #e5e7eb", borderRadius: 10, padding: 10 }}>
+            <div style={{ fontWeight: 600, marginBottom: 8 }}>
+              {a ? (a.kind ?? a.title) : "（不明）"}
+            </div>
+
+            <div style={{ display: "grid", gap: 10 }}>
+              <label>
+                行動の種類
+                <select
+                  value={actionId}
+                  onChange={(e) => setActionId(e.target.value)}
+                  style={{ width: "100%", boxSizing: "border-box" }}
+                >
+                  {activeActions.map((x: any) => (
+                    <option key={x.id} value={x.id}>
+                      {x.kind ?? x.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                詳細
+                <input
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  style={{ width: "100%", boxSizing: "border-box" }}
+                  placeholder="自由入力"
+                />
+              </label>
+
+              <label>
+                ボリューム（1-10）: <b>{volume}</b>
+                <input
+                  type="range"
+                  min={1}
+                  max={10}
+                  step={1}
+                  value={volume}
+                  onChange={(e) => setVolume(Number(e.target.value))}
+                  style={{ width: "100%" }}
+                />
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, opacity: 0.7 }}>
+                  <span>1</span><span>5</span><span>10</span>
+                </div>
+              </label>
+
+              <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                <IconBtn
+                  title="保存"
+                  onClick={async () => {
+                    try {
+                      setMsg("");
+                      await updateActionEntry(entry.id, {
+                        action_id: actionId,
+                        note: note.trim() ? note.trim() : null,
+                        volume: Math.min(10, Math.max(1, Number(volume))),
+                      });
+                      setMsg("行動ログを更新しました。");
+                    } catch (e: any) {
+                      setMsg(e?.message ?? "更新エラー");
+                    }
+                  }}
+                >
+                  💾
+                </IconBtn>
+
+                <IconBtn
+                  title="キャンセル"
+                  onClick={() => {
+                    setNote(entry.note ?? "");
+                    setVolume(Number(entry.volume ?? 5));
+                    setActionId(entry.action_id);
+                    setEditing(false);
+                  }}
+                >
+                  ✖️
+                </IconBtn>
+              </div>
+            </div>
+          </div>
+        </li>
+      );
+    }
+
+
 
     // ✅ 非表示ルール：過去完了済み かつ 今日完了ではない → 隠す
     const visibleOneoffs = activeOneoffs.filter(
@@ -906,45 +1082,14 @@ export default function App() {
 
           <div style={{ marginTop: 12 }}>
             <h4 style={{ margin: "12px 0 6px" }}>今日の行動ログ</h4>
+
             {todayActionEntries.length === 0 ? (
               <p>まだありません</p>
             ) : (
               <ul style={{ paddingLeft: 18 }}>
-                {todayActionEntries.map((e: any) => {
-                  const a = actions.find((x) => x.id === e.action_id);
-                  return (
-                    <li key={e.id} style={{ marginBottom: 8 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                        <div>
-                          <b>{a?.title ?? "（不明な行動）"}</b>{" "}
-                          <small style={{ opacity: 0.7 }}>
-                            <CategoryBadge category={a?.category} />{" "}
-                            <VolBar value={(e as any).volume} />
-                            {e.note ? ` / ${e.note}` : ""}
-                          </small>
-                        </div>
-                        <button
-                          onClick={async () => {
-                            if (!userId) return;
-                            if (!confirm("この行動ログを削除しますか？")) return;
-                            const { error } = await supabase
-                              .from("action_entries")
-                              .delete()
-                              .eq("user_id", userId)
-                              .eq("id", e.id);
-                            if (error) {
-                              setMsg(error.message);
-                              return;
-                            }
-                            await loadTodayEntries();
-                          }}
-                        >
-                          削除
-                        </button>
-                      </div>
-                    </li>
-                  );
-                })}
+                {(todayActionEntries ?? []).map((e: any) => (
+                  <ActionEntryRow key={e.id} entry={e} />
+                ))}
               </ul>
             )}
           </div>
