@@ -10,6 +10,8 @@ import Card from "./components/ui/Card";
 import IconBtn from "./components/ui/IconBtn";
 import DateNav from "./components/ui/DateNav";
 import Toast from "./components/ui/Toast";
+import Tabs from "./components/ui/Tabs";
+
 
 
 type Tab = "today" | "review" | "week" | "register";
@@ -645,27 +647,6 @@ export default function App() {
     dt.setUTCDate(dt.getUTCDate() + delta);
     return isoDay(dt);
   }
-
-  // ------- UI components -------
-  function Tabs() {
-    return (
-      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-        <button onClick={() => setTab("today")} disabled={tab === "today"}>
-          記録
-        </button>
-        <button onClick={() => setTab("register")} disabled={tab === "register"}>
-          登録
-        </button>
-        <button onClick={() => setTab("review")} disabled={tab === "review"}>
-          振り返り
-        </button>
-        <button onClick={() => setTab("week")} disabled={tab === "week"}>
-          週
-        </button>
-      </div>
-    );
-  }
-
 
   function ActionEntryForm({ activeActions }: { activeActions: any[] }) {
     const [actionId, setActionId] = useState<string>(activeActions[0]?.id ?? "");
@@ -1846,7 +1827,8 @@ export default function App() {
           <hr />
 
           <Toast msg={msg} wrapStyle={toastWrapStyle} toastStyle={toastStyle} />
-          <Tabs />
+          <Tabs tab={tab} setTab={setTab} />
+
 
           {tab === "today" && <TodayView />}
           {tab === "register" && <RegisterView />}
