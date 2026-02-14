@@ -9,8 +9,7 @@ import VolBar from "./components/VolBar";
 import Card from "./components/ui/Card";
 import IconBtn from "./components/ui/IconBtn";
 import DateNav from "./components/ui/DateNav";
-
-
+import Toast from "./components/ui/Toast";
 
 
 type Tab = "today" | "review" | "week" | "register";
@@ -1846,11 +1845,7 @@ export default function App() {
 
           <hr />
 
-          {msg && (
-            <div style={toastWrapStyle} aria-live="polite" aria-atomic="true">
-              <div style={toastStyle}>{msg}</div>
-            </div>
-          )}
+          <Toast msg={msg} wrapStyle={toastWrapStyle} toastStyle={toastStyle} />
           <Tabs />
 
           {tab === "today" && <TodayView />}
