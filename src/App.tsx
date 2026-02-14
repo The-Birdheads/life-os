@@ -11,9 +11,25 @@ import VolBar from "./components/VolBar";
 type Tab = "today" | "review" | "week" | "register";
 type Mode = "signIn" | "signUp";
 
+const theme = {
+  bg: "var(--bg)",
+  text: "var(--text)",
+  card: "var(--card)",
+  border: "var(--border)",
+  toastBg: "var(--toast-bg)",
+  toastText: "var(--toast-text)",
+};
+
+  const cardStyle = {
+  background: theme.card,
+  border: `1px solid ${theme.border}`,
+  borderRadius: 12,
+  padding: 14,
+};
+
 function Card({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12, marginBottom: 12 }}>
+    <div style={cardStyle}>
       {children}
     </div>
   );
@@ -349,6 +365,9 @@ export default function App() {
     display: "flex",
     justifyContent: "center",
     width: "100%",
+    background: theme.bg,
+    color: theme.text,
+    minHeight: "100vh",
   };
 
   const containerStyle: React.CSSProperties = {
@@ -373,6 +392,7 @@ export default function App() {
     boxSizing: "border-box",
   };
 
+
   const toastStyle: React.CSSProperties = {
     pointerEvents: "auto",
     maxWidth: 720,
@@ -380,7 +400,8 @@ export default function App() {
     padding: "10px 12px",
     borderRadius: 12,
     border: "1px solid #e5e7eb",
-    background: "rgba(255,255,255,0.95)",
+    background: theme.toastBg,
+    color: theme.toastText,
     boxShadow: "0 6px 18px rgba(0,0,0,0.12)",
     backdropFilter: "blur(6px)",
     WebkitBackdropFilter: "blur(6px)",
@@ -453,11 +474,11 @@ export default function App() {
     if (error) throw error;
   }
 
- // async function linkGoogle() {
- //   const { data, error } = await supabase.auth.linkIdentity({ provider: "google" });
- //   if (error) throw error;
-    // ブラウザ実行なら通常はリダイレクトして戻ってきます
- // }
+  // async function linkGoogle() {
+  //   const { data, error } = await supabase.auth.linkIdentity({ provider: "google" });
+  //   if (error) throw error;
+  // ブラウザ実行なら通常はリダイレクトして戻ってきます
+  // }
 
 
   // ------- Load base data -------
@@ -1036,18 +1057,18 @@ export default function App() {
           {habits.length === 0 ? (
             <p>まだありません（タスクタブで追加）</p>
           ) : (
-            <ul style={{ paddingLeft: 18 }}>
+            <ul style={{ listStyle: "none", paddingLeft: 0, margin: 0 }}>
               {habits.map((t) => {
                 const checked = doneTaskIds.has(t.id);
                 return (
                   <li key={t.id} style={{ marginBottom: 6 }}>
-                    <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <label style={{ display: "flex", gap: 8, alignItems: "flex-start", flexWrap: "wrap" }}>
                       <input
                         type="checkbox"
                         checked={checked}
                         onChange={(e) => toggleTaskDone(t.id, e.target.checked)}
                       />
-                      <span style={{ opacity: checked ? 1 : 0.4 }}>
+                      <span style={{ opacity: checked ? 1 : 0.4, minWidth: 0 }}>
                         {t.title}
                       </span>
                       <small style={{ opacity: 0.7 }}>
@@ -1067,18 +1088,18 @@ export default function App() {
           {visibleOneoffs.length === 0 ? (
             <p>タスクがありません（タスクタブで追加）</p>
           ) : (
-            <ul style={{ paddingLeft: 18 }}>
+            <ul style={{ listStyle: "none", paddingLeft: 0, margin: 0 }}>
               {visibleOneoffs.map((t) => {
                 const checked = doneTaskIds.has(t.id);
                 return (
                   <li key={t.id} style={{ marginBottom: 6 }}>
-                    <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <label style={{ display: "flex", gap: 8, alignItems: "flex-start", flexWrap: "wrap" }}>
                       <input
                         type="checkbox"
                         checked={checked}
                         onChange={(e) => toggleTaskDone(t.id, e.target.checked)}
                       />
-                      <span style={{ opacity: checked ? 1 : 0.4 }}>
+                      <span style={{ opacity: checked ? 1 : 0.4, minWidth: 0 }}>
                         {t.title}
                       </span>
                       <small style={{ opacity: 0.7 }}>
