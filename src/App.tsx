@@ -6,6 +6,11 @@ import { useRef } from "react";
 import CategoryBadge from "./components/CategoryBadge";
 import PriorityBadge from "./components/PriorityBadge";
 import VolBar from "./components/VolBar";
+import Card from "./components/ui/Card";
+import IconBtn from "./components/ui/IconBtn";
+import DateNav from "./components/ui/DateNav";
+
+
 
 
 type Tab = "today" | "review" | "week" | "register";
@@ -27,85 +32,6 @@ const theme = {
   padding: 14,
 };
 
-function Card({ children }: { children: React.ReactNode }) {
-  return (
-    <div style={cardStyle}>
-      {children}
-    </div>
-  );
-}
-
-function addDaysJST(day: string, delta: number) {
-  // day: "YYYY-MM-DD" を JST 00:00 として扱う（タイムゾーンずれ防止）
-  const d = new Date(`${day}T00:00:00+09:00`);
-  d.setDate(d.getDate() + delta);
-
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${dd}`;
-}
-
-function DateNav({
-  day,
-  setDay,
-  label,
-}: {
-  day: string;
-  setDay: (d: string) => void;
-  label?: string;
-}) {
-  const maxDay = todayJST();
-  const canNext = day < maxDay;
-
-  return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
-        gap: 10,
-        width: "100%",
-      }}
-    >
-      {label ? <b>{label}</b> : null}
-
-      <button
-        type="button"
-        onClick={() => setDay(addDaysJST(day, -1))}
-        aria-label="前日"
-      >
-        ◀
-      </button>
-
-      <input
-        type="date"
-        value={day}
-        max={maxDay}
-        onChange={(e) => setDay(e.target.value)}
-        aria-label="日付を選択"
-        style={{
-          padding: "6px 10px",
-          borderRadius: 8,
-          background: "#f3f4f6",
-          border: "1px solid #e5e7eb",
-          fontWeight: 700,
-          cursor: "pointer",
-          fontFamily: "inherit",
-        }}
-      />
-
-      <button
-        type="button"
-        onClick={() => setDay(addDaysJST(day, +1))}
-        disabled={!canNext}
-        aria-label="翌日"
-      >
-        ▶
-      </button>
-    </div>
-  );
-}
 
 type ReviewViewProps = {
   userId: string | null;
@@ -209,13 +135,13 @@ function ReviewView({
 
   return (
     <>
-      <Card>
+      <Card style={cardStyle}>
         <div style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
           <DateNav day={day} setDay={setDay} />
         </div>
       </Card>
 
-      <Card>
+      <Card style={cardStyle}>
         {reviewLoading && <small style={{ opacity: 0.7 }}>読み込み中…</small>}
         <div style={{ display: "grid", gap: 10 }}>
           <label>
@@ -268,7 +194,7 @@ function ReviewView({
         </div>
       </Card>
 
-      <Card>
+      <Card style={cardStyle}>
         <h3 style={{ marginTop: 0 }}>その日やった習慣</h3>
         {doneHabits.length === 0 ? (
           <p>まだありません</p>
@@ -287,7 +213,7 @@ function ReviewView({
         )}
       </Card>
 
-      <Card>
+      <Card style={cardStyle}>
         <h3 style={{ marginTop: 0 }}>その日やったタスク</h3>
         {doneOneoffs.length === 0 ? (
           <p>まだありません</p>
@@ -306,7 +232,7 @@ function ReviewView({
         )}
       </Card>
 
-      <Card>
+      <Card style={cardStyle}>
         <h3 style={{ marginTop: 0 }}>その日やった行動</h3>
         {doneActionEntries.length === 0 ? (
           <p>まだありません</p>
@@ -721,49 +647,6 @@ export default function App() {
     return isoDay(dt);
   }
 
-
-  function IconBtn({
-    children,
-    onClick,
-    title,
-    danger,
-  }: {
-    children: React.ReactNode;
-    onClick: () => void;
-    title: string;
-    danger?: boolean;
-  }) {
-    return (
-      <button
-        onClick={onClick}
-        title={title}
-        style={{
-          width: 34,
-          height: 34,
-          borderRadius: 8,
-          border: "1px solid #e5e7eb",
-          background: danger ? "#fff1f2" : "#fff",
-          cursor: "pointer",
-          fontSize: 16,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          transition: "0.15s",
-        }}
-        onMouseEnter={(e) =>
-          (e.currentTarget.style.background = danger ? "#ffe4e6" : "#f3f4f6")
-        }
-        onMouseLeave={(e) =>
-          (e.currentTarget.style.background = danger ? "#fff1f2" : "#fff")
-        }
-      >
-        {children}
-      </button>
-    );
-  }
-
-
-
   // ------- UI components -------
   function Tabs() {
     return (
@@ -1047,12 +930,12 @@ export default function App() {
 
     return (
       <>
-        <Card>
+        <Card style={cardStyle}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <DateNav day={day} setDay={setDay} />
           </div>
         </Card>
-        <Card>
+        <Card style={cardStyle}>
           <h3 style={{ marginTop: 0 }}>習慣</h3>
           {habits.length === 0 ? (
             <p>まだありません（タスクタブで追加）</p>
@@ -1083,7 +966,7 @@ export default function App() {
           )}
         </Card>
 
-        <Card>
+        <Card style={cardStyle}>
           <h3 style={{ marginTop: 0 }}>タスク</h3>
           {visibleOneoffs.length === 0 ? (
             <p>タスクがありません（タスクタブで追加）</p>
@@ -1115,7 +998,7 @@ export default function App() {
           )}
         </Card>
 
-        <Card>
+        <Card style={cardStyle}>
           <h3 style={{ marginTop: 0 }}>行動（都度入力）</h3>
 
           <ActionEntryForm activeActions={activeActions} />
@@ -1318,7 +1201,7 @@ export default function App() {
 
     return (
       <>
-        <Card>
+        <Card style={cardStyle}>
           <h2 style={{ marginTop: 0 }}>{title}追加</h2>
           <form
             onSubmit={async (e) => {
@@ -1397,7 +1280,7 @@ export default function App() {
           </form>
         </Card>
 
-        <Card>
+        <Card style={cardStyle}>
           <h3 style={{ marginTop: 0 }}>登録済み{title}（編集）</h3>
 
           {tasks.length === 0 ? (
@@ -1568,7 +1451,7 @@ export default function App() {
     // ここから下：追加フォーム・一覧（あなたの既存コードに合わせて）
     return (
       <>
-        <Card>
+        <Card style={cardStyle}>
           <h2 style={{ marginTop: 0 }}>行動（種類）追加</h2>
 
           <form
@@ -1624,7 +1507,7 @@ export default function App() {
           </form>
         </Card>
 
-        <Card>
+        <Card style={cardStyle}>
           <h3 style={{ marginTop: 0 }}>登録済みの行動の種類（編集）</h3>
 
           {actions.length === 0 ? (
@@ -1662,7 +1545,7 @@ export default function App() {
   function RegisterView() {
     return (
       <>
-        <Card>
+        <Card style={cardStyle}>
           <h2 style={{ marginTop: 0 }}>登録</h2>
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={() => setRegisterTab("habit")} disabled={registerTab === "habit"}>
@@ -1808,7 +1691,7 @@ export default function App() {
 
     return (
       <>
-        <Card>
+        <Card style={cardStyle}>
           {/* ✅ 週タブでも日付ナビ */}
           <div style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
             <DateNav day={day} setDay={setDay} label="" />
@@ -1821,7 +1704,7 @@ export default function App() {
           </div>
         </Card>
 
-        <Card>
+        <Card style={cardStyle}>
           <h3 style={{ marginTop: 0 }}>日別</h3>
 
           <div style={{ overflowX: "auto" }}>
@@ -1895,9 +1778,6 @@ export default function App() {
       </>
     );
   }
-
-
-
 
   // ------- Render -------
   if (!userId) {

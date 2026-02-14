@@ -20,6 +20,17 @@
   --toast-text: #ffffff;
 }
 
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f172a;
+    --text: #f1f5f9;
+    --card: #1e293b;
+    --border: #334155;
+    --toast-bg: #f1f5f9;
+    --toast-text: #0f172a;
+  }
+}
+
 a {
   font-weight: 500;
   color: #646cff;
