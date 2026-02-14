@@ -21,7 +21,7 @@ export default function PriorityBadge({ value, showLabel = true }: Props) {
 
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-      {showLabel ? <span style={{ opacity: 0.7 }}>優先度:</span> : null}
+      {showLabel ? <span style={{ fontSize: 12 }}>優先度:</span> : null}
       <span
         aria-label={`priority ${v}`}
         style={{

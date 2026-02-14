@@ -103,6 +103,36 @@ export default function RegisterView({
     await loadBase();
   }
 
+  const rowCard: React.CSSProperties = {
+    border: "1px solid var(--border)",
+    borderRadius: 12,
+    padding: "10px 12px",
+    background: "var(--card)",
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 10,
+    alignItems: "center", // ✅ 右ボタンを上下中央
+  };
+
+  const metaLine: React.CSSProperties = {
+    opacity: 0.75,
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    paddingLeft: 4, // ✅ 「1文字スペース」的な余白
+  };
+
+  const titleLine: React.CSSProperties = {
+    fontWeight: 700,
+    lineHeight: 1.3,
+    wordBreak: "break-word",
+  };
+
+  const smallLabel: React.CSSProperties = {
+    fontSize: 12,
+  };
+
+
   // ------- 内部コンポーネント -------
 
   function TasksView({ fixedType, title }: { fixedType: "habit" | "oneoff"; title: string }) {
@@ -135,53 +165,64 @@ export default function RegisterView({
 
       if (!editing) {
         return (
-          <div style={{ border: "1px solid #eee", borderRadius: 8, padding: 10 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-              <div>
-                <b>{task.title}</b>{" "}
-                <small style={{ opacity: 0.7 }}>
-                  <PriorityBadge value={(task as any).priority} /> <VolBar value={(task as any).volume} />
-                  <br />
-                  {task.due_date ? `期限: ${task.due_date}` : ""}
-                </small>
+          <div style={rowCard}>
+            {/* 左：3行（タイトル / 優先度+ボリューム / 期限） */}
+            <div style={{ minWidth: 0, display: "grid", gap: 4 }}>
+              {/* 1行目：タイトル */}
+              <div style={titleLine}>{task.title}</div>
+
+              {/* 2行目：優先度 + ボリューム */}
+              <div style={metaLine}>
+                <PriorityBadge value={(task as any).priority} />
+                <VolBar value={(task as any).volume} />
               </div>
 
-              <div style={{ display: "flex", gap: 6 }}>
-                <IconBtn title="編集" onClick={() => setEditing(true)}>
-                  ✏️
-                </IconBtn>
+              {/* 3行目：期限（タスクのみ） */}
+              {task.due_date ? (
+                <div style={{ ...metaLine, opacity: 0.7 }}>
+                  <span style={smallLabel}>期限：</span>
+                  <span style={smallLabel}>{task.due_date}</span>
+                </div>
+              ) : null}
+            </div>
 
-                {task.is_active ? (
-                  <IconBtn
-                    title="アーカイブ"
-                    onClick={async () => {
-                      if (!confirm("このタスクをアーカイブしますか？")) return;
-                      await archiveTask(task.id);
-                    }}
-                  >
-                    📦
-                  </IconBtn>
-                ) : (
-                  <IconBtn title="復帰" onClick={() => unarchiveTask(task.id)}>
-                    ♻️
-                  </IconBtn>
-                )}
+            {/* 右：ボタン（左右位置そのまま・上下中央） */}
+            <div style={{ display: "flex", gap: 6, flexShrink: 0, alignItems: "center" }}>
+              <IconBtn title="編集" onClick={() => setEditing(true)}>
+                ✏️
+              </IconBtn>
 
+              {task.is_active ? (
                 <IconBtn
-                  title="完全削除"
-                  danger
+                  title="アーカイブ"
                   onClick={async () => {
-                    if (!confirm("完全削除しますか？")) return;
-                    await deleteTaskForever(task.id);
+                    if (!confirm("このタスクをアーカイブしますか？")) return;
+                    await archiveTask(task.id);
                   }}
                 >
-                  🗑️
+                  📦
                 </IconBtn>
-              </div>
+              ) : (
+                <IconBtn title="復帰" onClick={() => unarchiveTask(task.id)}>
+                  ♻️
+                </IconBtn>
+              )}
+
+              <IconBtn
+                title="完全削除"
+                danger
+                onClick={async () => {
+                  if (!confirm("完全削除しますか？")) return;
+                  await deleteTaskForever(task.id);
+                }}
+              >
+                🗑️
+              </IconBtn>
             </div>
           </div>
         );
       }
+
 
       return (
         <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 10 }}>
@@ -224,7 +265,7 @@ export default function RegisterView({
                 style={{ width: "100%" }}
               />
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, opacity: 0.7 }}>
-                {[1,2,3,4,5,6,7,8,9,10].map((n) => <span key={n}>{n}</span>)}
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => <span key={n}>{n}</span>)}
               </div>
             </label>
 
@@ -337,7 +378,7 @@ export default function RegisterView({
                 style={{ width: "100%" }}
               />
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, opacity: 0.7 }}>
-                {[1,2,3,4,5,6,7,8,9,10].map((n) => <span key={n}>{n}</span>)}
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => <span key={n}>{n}</span>)}
               </div>
             </label>
 
@@ -408,47 +449,56 @@ export default function RegisterView({
 
       if (!editing) {
         return (
-          <div style={{ border: "1px solid #eee", borderRadius: 8, padding: 10 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-              <div>
-                <b>{(actionItem as any).kind ?? actionItem.title}</b>{" "}
-                <small style={{ opacity: 0.7 }}>
+          <div style={rowCard}>
+            {/* 左：1行目（行動名 + カテゴリ） */}
+            <div style={{ minWidth: 0, display: "grid", gap: 4 }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", minWidth: 0 }}>
+                <div style={{ ...titleLine, minWidth: 0 }}>
+                  {(actionItem as any).kind ?? actionItem.title}
+                </div>
+                <div style={{ flexShrink: 0, opacity: 0.85 }}>
                   <CategoryBadge category={actionItem.category} />
-                </small>
+                </div>
               </div>
+            </div>
 
-              <div style={{ display: "flex", gap: 6 }}>
-                <IconBtn title="編集" onClick={() => setEditing(true)}>✏️</IconBtn>
+            {/* 右：ボタン（上下中央） */}
+            <div style={{ display: "flex", gap: 6, flexShrink: 0, alignItems: "center" }}>
+              <IconBtn title="編集" onClick={() => setEditing(true)}>
+                ✏️
+              </IconBtn>
 
-                {actionItem.is_active ? (
-                  <IconBtn
-                    title="アーカイブ"
-                    onClick={async () => {
-                      if (!confirm("この行動をアーカイブしますか？")) return;
-                      await archiveAction(actionItem.id);
-                    }}
-                  >
-                    📦
-                  </IconBtn>
-                ) : (
-                  <IconBtn title="復帰" onClick={() => unarchiveAction(actionItem.id)}>♻️</IconBtn>
-                )}
-
+              {actionItem.is_active ? (
                 <IconBtn
-                  title="完全削除"
-                  danger
+                  title="アーカイブ"
                   onClick={async () => {
-                    if (!confirm("完全削除しますか？")) return;
-                    await deleteActionForever(actionItem.id);
+                    if (!confirm("この行動をアーカイブしますか？")) return;
+                    await archiveAction(actionItem.id);
                   }}
                 >
-                  🗑️
+                  📦
                 </IconBtn>
-              </div>
+              ) : (
+                <IconBtn title="復帰" onClick={() => unarchiveAction(actionItem.id)}>
+                  ♻️
+                </IconBtn>
+              )}
+
+              <IconBtn
+                title="完全削除"
+                danger
+                onClick={async () => {
+                  if (!confirm("完全削除しますか？")) return;
+                  await deleteActionForever(actionItem.id);
+                }}
+              >
+                🗑️
+              </IconBtn>
             </div>
           </div>
         );
       }
+
 
       return (
         <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 10 }}>

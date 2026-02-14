@@ -90,3 +90,17 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
+
+.only-mobile { display: none; }
+.only-desktop { display: inline; }
+
+@media (max-width: 520px) {
+  .only-mobile { display: inline; }
+  .only-desktop { display: none; }
+}
+
+input,
+textarea,
+select {
+  font-size: max(16px, 1rem);
+}

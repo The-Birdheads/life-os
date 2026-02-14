@@ -88,6 +88,18 @@ export default function ReviewView({
     if (!a) return false;
     return a.is_active !== false;
   });
+  const sumVolume = (arr: any[], getV: (x: any) => any) =>
+    arr.reduce((acc, x) => acc + (Number(getV(x)) || 0), 0);
+
+  const habitsCount = doneHabits.length;
+  const habitsVol = sumVolume(doneHabits, (t) => (t as any).volume);
+
+  const tasksCount = doneOneoffs.length;
+  const tasksVol = sumVolume(doneOneoffs, (t) => (t as any).volume);
+
+  const actionsCount = doneActionEntries.length;
+  const actionsVol = sumVolume(doneActionEntries, (e) => (e as any).volume);
+
 
   async function saveReview() {
     if (!userId) return;
@@ -108,6 +120,79 @@ export default function ReviewView({
     if (error) throw error;
     setMsg("振り返りを保存しました。");
   }
+
+  // --- UI parts style (Today/Registerと揃える) ---
+  const listWrap: React.CSSProperties = {
+    display: "grid",
+    gap: 6, // ← 10 → 6 にして間隔を狭める
+  };
+
+  const itemCard: React.CSSProperties = {
+    border: "1px solid rgba(0,0,0,0.12)", // ← 枠線を明確に（白背景向け）
+    borderRadius: 12,
+    padding: 10, // ← 12 → 10 で少し詰める
+    background: "rgba(255,255,255,0.02)", // ← 好みで（不要なら消してOK）
+  };
+
+
+  const itemRow: React.CSSProperties = {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 10,
+    alignItems: "center",
+  };
+
+  const itemTitle: React.CSSProperties = {
+    fontWeight: 700,
+    minWidth: 0,
+  };
+
+  const metaLine: React.CSSProperties = {
+    marginTop: 6,
+    display: "flex",
+    gap: 8,
+    alignItems: "center",
+    flexWrap: "wrap",
+    opacity: 0.85,
+  };
+
+  const smallLabel: React.CSSProperties = {
+    fontSize: 12,
+    opacity: 0.7,
+  };
+
+  const sectionCardBody: React.CSSProperties = {
+    display: "grid",
+    gap: 10, // 見出しとリストの間
+  };
+
+  const sectionHead: React.CSSProperties = {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "baseline",
+    gap: 10,
+    // ✅ 見出しは“行”にする。枠線/背景/角丸は付けない
+    padding: "0 2px",
+  };
+
+  const sectionStats: React.CSSProperties = {
+    display: "flex",
+    gap: 8,
+    fontSize: 12,
+    opacity: 0.75,
+    whiteSpace: "nowrap",
+  };
+
+
+  const statPill: React.CSSProperties = {
+    border: "1px solid rgba(0,0,0,0.12)",
+    borderRadius: 999,
+    padding: "2px 8px",
+    fontSize: 12,
+    opacity: 0.8,
+  };
+
+
 
   return (
     <>
@@ -169,61 +254,126 @@ export default function ReviewView({
       </Card>
 
       <Card style={cardStyle}>
-        <h3 style={{ marginTop: 0 }}>その日やった習慣</h3>
-        {doneHabits.length === 0 ? (
-          <p>まだありません</p>
-        ) : (
-          <ul style={{ paddingLeft: 18 }}>
-            {doneHabits.map((t) => (
-              <li key={t.id}>
-                {t.title}{" "}
-                <small style={{ opacity: 0.7 }}>
-                  <PriorityBadge value={(t as any).priority} /> <VolBar value={(t as any).volume} />
-                </small>
-              </li>
-            ))}
-          </ul>
-        )}
+        <div style={sectionCardBody}>
+          <div style={sectionHead}>
+            <h3 style={{ margin: 0 }}>その日こなした習慣</h3>
+            <div style={sectionStats}>
+              <span style={statPill}>合計数: {habitsCount}</span>
+              <span style={statPill}>合計ボリューム: {habitsVol}</span>
+            </div>
+          </div>
+
+          {doneHabits.length === 0 ? (
+            <p>まだありません</p>
+          ) : (
+            <div style={listWrap}>
+              {doneHabits.map((t) => (
+                <div key={t.id} style={itemCard}>
+                  <div style={itemRow}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={itemTitle}>{t.title}</div>
+                      <div style={metaLine}>
+                        <PriorityBadge value={(t as any).priority} />
+                        <VolBar value={(t as any).volume} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </Card>
 
       <Card style={cardStyle}>
-        <h3 style={{ marginTop: 0 }}>その日やったタスク</h3>
-        {doneOneoffs.length === 0 ? (
-          <p>まだありません</p>
-        ) : (
-          <ul style={{ paddingLeft: 18 }}>
-            {doneOneoffs.map((t) => (
-              <li key={t.id}>
-                {t.title}{" "}
-                <small style={{ opacity: 0.7 }}>
-                  <PriorityBadge value={(t as any).priority} /> <VolBar value={(t as any).volume} />
-                </small>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
+        <div style={sectionCardBody}>
+          <div style={sectionHead}>
+            <h3 style={{ marginTop: 0 }}>その日こなしたタスク</h3>
+            <div style={sectionStats}>
+              <span style={statPill}>合計数: {tasksCount}</span>
+              <span style={statPill}>合計ボリューム: {tasksVol}</span>
+            </div>
+          </div>
+          {doneOneoffs.length === 0 ? (
+            <p>まだありません</p>
+          ) : (
+            <div style={listWrap}>
+              {doneOneoffs.map((t) => (
+                <div key={t.id} style={itemCard}>
+                  <div style={itemRow}>
+                    <div style={{ minWidth: 0 }}>
+                      {/* 1行目：タスク名 */}
+                      <div style={itemTitle}>{t.title}</div>
 
+                      {/* 2行目：優先度＆ボリューム */}
+                      <div style={metaLine}>
+                        <PriorityBadge value={(t as any).priority} />
+                        <VolBar value={(t as any).volume} />
+                      </div>
+
+                      {/* 3行目：期限（ある場合だけ） */}
+                      {t.due_date ? (
+                        <div style={{ ...metaLine, marginTop: 4 }}>
+                          <span style={smallLabel}>期限：</span>
+                          <span style={smallLabel}>{t.due_date}</span>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </Card>
       <Card style={cardStyle}>
-        <h3 style={{ marginTop: 0 }}>その日やった行動</h3>
-        {doneActionEntries.length === 0 ? (
-          <p>まだありません</p>
-        ) : (
-          <ul style={{ paddingLeft: 18 }}>
-            {doneActionEntries.map((e: any) => {
-              const a = actionById.get(e.action_id);
-              return (
-                <li key={e.id}>
-                  {a ? (a.kind ?? a.title) : "（不明）"}{" "}
-                  <small style={{ opacity: 0.7 }}>
-                    <CategoryBadge category={a?.category} /> <VolBar value={(e as any).volume} />
-                    {e.note ? ` / ${e.note}` : ""}
-                  </small>
-                </li>
-              );
-            })}
-          </ul>
-        )}
+        <div style={sectionCardBody}>
+          <div style={sectionHead}>
+            <h3 style={{ marginTop: 0 }}>その日やった行動</h3>
+            <div style={sectionStats}>
+              <span style={statPill}>合計数: {actionsCount}</span>
+              <span style={statPill}>合計ボリューム: {actionsVol}</span>
+            </div>
+          </div>
+          {doneActionEntries.length === 0 ? (
+            <p>まだありません</p>
+          ) : (
+            <div style={listWrap}>
+              {doneActionEntries.map((e: any) => {
+                const a = actionById.get(e.action_id);
+                const title = a ? (a.kind ?? a.title) : "（不明）";
+
+                return (
+                  <div key={e.id} style={itemCard}>
+                    {/* 1行目：行動名 + カテゴリ */}
+                    <div style={itemRow}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={itemTitle}>
+                          {title}{" "}
+                          <span style={{ marginLeft: 8 }}>
+                            <CategoryBadge category={a?.category} />
+                          </span>
+                        </div>
+
+                        {/* 2行目：詳細（あれば） */}
+                        {e.note ? (
+                          <div style={{ ...smallLabel, marginTop: 6, opacity: 0.85 }}>
+                            {e.note}
+                          </div>
+                        ) : null}
+
+                        {/* 3行目：ボリューム */}
+                        <div style={metaLine}>
+                          <VolBar value={(e as any).volume} />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </Card>
     </>
   );
