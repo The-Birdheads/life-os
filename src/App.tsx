@@ -13,7 +13,6 @@ import Toast from "./components/ui/Toast";
 import Tabs from "./components/ui/Tabs";
 
 
-
 type Tab = "today" | "review" | "week" | "register";
 type Mode = "signIn" | "signUp";
 

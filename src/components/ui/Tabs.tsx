@@ -1,5 +1,3 @@
-import React from "react";
-
 type Tab = "today" | "review" | "week" | "register";
 
 type Props = {
