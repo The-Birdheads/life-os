@@ -2,19 +2,16 @@ import { useEffect, useState } from "react";
 import { supabase } from "./lib/supabase";
 import { todayJST } from "./lib/day";
 import type { Action, Task } from "./lib/types";
-import CategoryBadge from "./components/CategoryBadge";
-import PriorityBadge from "./components/PriorityBadge";
-import VolBar from "./components/VolBar";
+import CategoryBadge from "./components/badges/CategoryBadge";
+import PriorityBadge from "./components/badges/PriorityBadge";
+import VolBar from "./components/badges/VolBar";
 import Card from "./components/ui/Card";
 import IconBtn from "./components/ui/IconBtn";
 import DateNav from "./components/ui/DateNav";
-import AuthView from "./components/views/AuthView";
-import AppShell from "./components/views/AppShell";
-import WeekView from "./components/views/WeekView";
-import ReviewView from "./components/views/ReviewView";
-
-
-
+import AuthView from "./views/AuthView";
+import AppShell from "./views/AppShell";
+import WeekView from "./views/WeekView";
+import ReviewView from "./views/ReviewView";
 
 
 type Tab = "today" | "review" | "week" | "register";

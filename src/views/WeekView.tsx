@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Task } from "../../lib/types";
-import Card from "../ui/Card";
-import DateNav from "../ui/DateNav";
+import type { Task } from "../lib/types";
+import Card from "../components/ui/Card";
+import DateNav from "../components/ui/DateNav";
 
 
 type Tab = "today" | "review" | "week" | "register";

@@ -1,12 +1,12 @@
 import { useEffect, useState, useRef } from "react";
-import type { Action, Task } from "../../lib/types";
+import type { Action, Task } from "../lib/types";
 
-import Card from "../ui/Card";
-import DateNav from "../ui/DateNav";
+import Card from "../components/ui/Card";
+import DateNav from "../components/ui/DateNav";
 
-import CategoryBadge from "../CategoryBadge";
-import PriorityBadge from "../PriorityBadge";
-import VolBar from "../VolBar";
+import CategoryBadge from "../components/badges/CategoryBadge";
+import PriorityBadge from "../components/badges/PriorityBadge";
+import VolBar from "../components/badges/VolBar";
 
 type Props = {
   userId: string | null;
