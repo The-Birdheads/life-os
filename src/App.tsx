@@ -12,6 +12,8 @@ import DateNav from "./components/ui/DateNav";
 import Toast from "./components/ui/Toast";
 import Tabs from "./components/ui/Tabs";
 import AuthView from "./components/views/AuthView";
+import AppShell from "./components/views/AppShell";
+
 
 
 
@@ -1761,7 +1763,7 @@ export default function App() {
   }
 
   // ------- Render -------
-  if (!userId) {
+  if (!userId) { //ログイン前
     return (
       <AuthView
         mode={mode}
@@ -1777,49 +1779,40 @@ export default function App() {
       />
     );
   }
-
+  // ログイン後
   return (
+  <AppShell
+    userEmail={userEmail}
+    onSignOut={signOut}
+    msg={msg}
+    tab={tab}
+    setTab={setTab}
+    layoutStyle={layoutStyle}
+    containerStyle={containerStyle}
+    toastWrapStyle={toastWrapStyle}
+    toastStyle={toastStyle}
+  >
+    {tab === "today" && <TodayView />}
+    {tab === "register" && <RegisterView />}
+    {tab === "review" && (
+      <ReviewView
+        userId={userId}
+        day={day}
+        setDay={setDay}
+        tasks={tasks}
+        doneTaskIds={doneTaskIds}
+        actions={actions}
+        todayActionEntries={todayActionEntries}
+        note={note}
+        setNote={setNote}
+        fulfillment={fulfillment}
+        setFulfillment={setFulfillment}
+        setMsg={setMsg}
+        supabase={supabase}
+      />
+    )}
+    {tab === "week" && <WeekView day={day} setDay={setDay} setTab={setTab} />}
+  </AppShell>
+);
 
-    <div style={layoutStyle}>
-      <div style={containerStyle}>
-        <div style={{ maxWidth: 720, margin: "40px auto", fontFamily: "sans-serif" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-            <h1 style={{ margin: 0 }}>Life OS</h1>
-            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              <small style={{ opacity: 0.7 }}>{userEmail}</small>
-              <button onClick={signOut}>ログアウト</button>
-            </div>
-          </div>
-
-          <hr />
-
-          <Toast msg={msg} wrapStyle={toastWrapStyle} toastStyle={toastStyle} />
-          <Tabs tab={tab} setTab={setTab} />
-
-
-          {tab === "today" && <TodayView />}
-          {tab === "register" && <RegisterView />}
-          {tab === "review" && (
-            <ReviewView
-              userId={userId}
-              day={day}
-              setDay={setDay}
-              tasks={tasks}
-              doneTaskIds={doneTaskIds}
-              actions={actions}
-              todayActionEntries={todayActionEntries}
-              note={note}
-              setNote={setNote}
-              fulfillment={fulfillment}
-              setFulfillment={setFulfillment}
-              setMsg={setMsg}
-              supabase={supabase}
-            />
-          )}
-          {tab === "week" && <WeekView day={day} setDay={setDay} setTab={setTab} />}
-
-        </div>
-      </div>
-    </div>
-  );
 }
