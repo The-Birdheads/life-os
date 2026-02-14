@@ -8,6 +8,8 @@ import WeekView from "./views/WeekView";
 import ReviewView from "./views/ReviewView";
 import RegisterView from "./views/RegisterView";
 import TodayView from "./views/TodayView";
+import { fetchTodayEntries } from "./lib/api/today";
+
 
 
 
@@ -200,48 +202,19 @@ export default function App() {
   }
 
   async function loadTodayEntries() {
-    console.count("loadTodayEntries called");
-    if (!userId) return;
+  if (!userId) return;
 
-    const { data: te, error: teErr } = await supabase
-      .from("task_entries")
-      .select("task_id,status")
-      .eq("user_id", userId)
-      .eq("day", day);
+  const res = await fetchTodayEntries({
+    supabase,
+    userId,
+    day,
+  });
 
-    if (teErr) throw teErr;
+  setDoneTaskIds(res.doneTaskIds);
+  setDoneTaskIdsAnyDay(res.doneTaskIdsAnyDay);
+  setTodayActionEntries(res.todayActionEntries);
+}
 
-    const doneT = new Set<string>();
-    (te ?? []).forEach((r: any) => {
-      if (r.status === "done") doneT.add(r.task_id);
-    });
-    setDoneTaskIds(doneT);
-
-    // ✅ 過去いつでも done の task_id を取得（突発タスクの非表示判定に使う）
-    const { data: teAll, error: teAllErr } = await supabase
-      .from("task_entries")
-      .select("task_id, status")
-      .eq("user_id", userId)
-      .eq("status", "done");
-
-    if (teAllErr) throw teAllErr;
-
-    const doneAll = new Set<string>();
-    (teAll ?? []).forEach((r: any) => doneAll.add(r.task_id));
-    setDoneTaskIdsAnyDay(doneAll);
-
-    const { data: ae, error: aeErr } = await supabase
-      .from("action_entries")
-      .select("id, action_id, note, volume, created_at")
-      .eq("user_id", userId)
-      .eq("day", day)
-      .order("created_at", { ascending: true });
-
-    if (aeErr) throw aeErr;
-
-    setTodayActionEntries(ae ?? []);
-
-  }
 
   useEffect(() => {
     if (!userId) return;
