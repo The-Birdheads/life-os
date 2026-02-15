@@ -20,11 +20,18 @@ type Props = {
 function isoDay(d: Date) {
     return d.toISOString().slice(0, 10);
 }
+
 function addDaysISO(day: string, delta: number) {
     const dt = new Date(day + "T00:00:00Z");
     dt.setUTCDate(dt.getUTCDate() + delta);
     return isoDay(dt);
 }
+
+function shortMD(iso: string) {
+    // "2026-02-14" -> "02/14"
+    return iso.slice(5).replace("-", "/");
+}
+
 
 export default function WeekView({
     userId,
@@ -148,6 +155,18 @@ export default function WeekView({
         return vals.reduce((s, v) => s + v, 0) / vals.length;
     }, [rows]);
 
+    const isMobile =
+        typeof window !== "undefined" &&
+        window.matchMedia("(max-width: 430px)").matches;
+
+    const cellPad = isMobile ? "6px 4px" : "8px 6px";
+    const cellFontSize = isMobile ? 12 : 14;
+
+    function dayLabel(iso: string) {
+        return isMobile ? shortMD(iso) : iso;
+    }
+
+
     return (
         <>
             <Card style={cardStyle}>
@@ -162,27 +181,40 @@ export default function WeekView({
                     {weekLoading ? <small style={{ marginLeft: 8, opacity: 0.7 }}>読み込み中…</small> : null}
                 </div>
 
-                <div style={{ overflowX: "auto" }}>
-                    <table style={{ width: "100%", minWidth: 520, borderCollapse: "collapse" }}>
+                <div style={{ width: "100%" }}>
+                    <table
+                        style={{
+                            width: "100%",
+                            tableLayout: "fixed",
+                            borderCollapse: "collapse",
+                        }}
+                    >
+                        <colgroup>
+                            {/* ✅ 画面幅に合わせて均等割り（目安） */}
+                            <col style={{ width: "34%" }} />
+                            <col style={{ width: "16.5%" }} />
+                            <col style={{ width: "16.5%" }} />
+                            <col style={{ width: "16.5%" }} />
+                            <col style={{ width: "16.5%" }} />
+                        </colgroup>
+
                         <thead>
                             <tr>
-                                <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: "8px 6px" }}>日付</th>
-                                <th style={{ textAlign: "right", borderBottom: "1px solid #eee", padding: "8px 6px" }}>習慣</th>
-                                <th style={{ textAlign: "right", borderBottom: "1px solid #eee", padding: "8px 6px" }}>タスク</th>
-                                <th style={{ textAlign: "right", borderBottom: "1px solid #eee", padding: "8px 6px" }}>行動</th>
-                                <th style={{ textAlign: "right", borderBottom: "1px solid #eee", padding: "8px 6px" }}>充実度</th>
+                                <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: cellPad }}>日付</th>
+                                <th style={{ textAlign: "right", borderBottom: "1px solid #eee", padding: cellPad }}>習慣</th>
+                                <th style={{ textAlign: "right", borderBottom: "1px solid #eee", padding: cellPad }}>タスク</th>
+                                <th style={{ textAlign: "right", borderBottom: "1px solid #eee", padding: cellPad }}>行動</th>
+                                <th style={{ textAlign: "right", borderBottom: "1px solid #eee", padding: cellPad }}>充実度</th>
                             </tr>
                         </thead>
 
                         <tbody>
                             {rows.map((r) => (
                                 <tr key={r.day}>
-                                    <td
-                                        style={{
-                                            padding: "8px 6px",
-                                            borderBottom: "1px solid #f3f4f6",
-                                        }}
-                                    >
+                                    <td style={{ padding: cellPad, 
+                                        borderBottom: "1px solid #f3f4f6", 
+                                        fontSize: cellFontSize, 
+                                        overflow: "hidden" }}>
                                         <button
                                             type="button"
                                             onClick={() => {
@@ -198,23 +230,38 @@ export default function WeekView({
                                                 textDecoration: "underline",
                                                 font: "inherit",
                                                 color: "inherit",
+                                                display: "block",     // ✅ 追加
+                                                width: "100%",        // ✅ 追加
+                                                textAlign: "left",    // ✅ 追加（好み）
+                                                overflow: "hidden",   // ✅ 念のため
                                             }}
                                             aria-label={`${r.day} の振り返りを開く`}
                                         >
-                                            {r.day}
+                                            <span
+                                                style={{
+                                                    display: "block",
+                                                    maxWidth: "100%",
+                                                    overflow: "hidden",
+                                                    textOverflow: "ellipsis",
+                                                    whiteSpace: "nowrap",
+                                                }}
+                                                title={r.day}
+                                            >
+                                                {dayLabel(r.day)}
+                                            </span>
                                         </button>
                                     </td>
 
-                                    <td style={{ padding: "8px 6px", borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>
+                                    <td style={{ padding: cellPad, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>
                                         {r.habitDone} / {r.habitTotal}
                                     </td>
-                                    <td style={{ padding: "8px 6px", borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>
+                                    <td style={{ padding: cellPad, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>
                                         {r.taskDone}
                                     </td>
-                                    <td style={{ padding: "8px 6px", borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>
+                                    <td style={{ padding: cellPad, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>
                                         {r.actionDone}
                                     </td>
-                                    <td style={{ padding: "8px 6px", borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>
+                                    <td style={{ padding: cellPad, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>
                                         {r.fulfillment == null ? "-" : r.fulfillment}
                                     </td>
                                 </tr>
