@@ -8,6 +8,7 @@ import IconBtn from "../components/ui/IconBtn";
 import CategoryBadge from "../components/badges/CategoryBadge";
 import PriorityBadge from "../components/badges/PriorityBadge";
 import VolBar from "../components/badges/VolBar";
+import PrimaryBtn from "../components/ui/PrimaryBtn";
 
 type Props = {
     userId: string;
@@ -142,6 +143,29 @@ export default function TodayView({
         await loadTodayEntries();
     }
 
+    function compareTask(a: Task, b: Task, doneSet: Set<string>) {
+        // ① 未チェック → チェック済
+        const aChecked = doneSet.has(a.id) ? 1 : 0;
+        const bChecked = doneSet.has(b.id) ? 1 : 0;
+        if (aChecked !== bChecked) return aChecked - bChecked;
+
+        // ② 優先度 高 → 低
+        if (a.priority !== b.priority) return b.priority - a.priority;
+
+        // ③ ボリューム 低 → 高
+        if (a.volume !== b.volume) return a.volume - b.volume;
+
+        // ④ id 新 → 古（id降順）
+        // 文字列比較でOK。要件が「id順」なのでこれで実装する
+        if (a.id !== b.id) return b.id.localeCompare(a.id);
+
+        return 0;
+    }
+
+    const sortedHabits = [...habits].sort((a, b) => compareTask(a, b, doneTaskIds));
+    const sortedOneoffs = [...visibleOneoffs].sort((a, b) => compareTask(a, b, doneTaskIds));
+
+
     function ActionEntryForm({ activeActions }: { activeActions: any[] }) {
         const [actionId, setActionId] = useState<string>(activeActions[0]?.id ?? "");
         const [detail, setDetail] = useState<string>("");
@@ -215,9 +239,9 @@ export default function TodayView({
                     </div>
                 </label>
 
-                <button type="submit" disabled={!actionId}>
+                <PrimaryBtn type="submit" disabled={!actionId}>
                     行動ログを追加
-                </button>
+                </PrimaryBtn>
             </form>
         );
     }
@@ -425,7 +449,7 @@ export default function TodayView({
                     <p>まだありません（タスクタブで追加）</p>
                 ) : (
                     <ul style={{ listStyle: "none", paddingLeft: 0, margin: 0 }}>
-                        {habits.map((t) => {
+                        {sortedHabits.map((t) => {
                             const checked = doneTaskIds.has(t.id);
                             return (
                                 <li key={t.id} style={{ marginBottom: 10 }}>
@@ -462,7 +486,7 @@ export default function TodayView({
                     <p>タスクがありません（タスクタブで追加）</p>
                 ) : (
                     <ul style={{ listStyle: "none", paddingLeft: 0, margin: 0 }}>
-                        {visibleOneoffs.map((t) => {
+                        {sortedOneoffs.map((t) => {
                             const checked = doneTaskIds.has(t.id);
                             return (
                                 <li key={t.id} style={{ marginBottom: 10 }}>

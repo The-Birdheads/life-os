@@ -7,6 +7,7 @@ import DateNav from "../components/ui/DateNav";
 import CategoryBadge from "../components/badges/CategoryBadge";
 import PriorityBadge from "../components/badges/PriorityBadge";
 import VolBar from "../components/badges/VolBar";
+import PrimaryBtn from "../components/ui/PrimaryBtn";
 
 type Props = {
   userId: string | null;
@@ -249,7 +250,7 @@ export default function ReviewView({
             />
           </label>
 
-          <button onClick={saveReview}>保存</button>
+          <PrimaryBtn onClick={saveReview}>保存</PrimaryBtn>
         </div>
       </Card>
 

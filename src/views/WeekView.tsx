@@ -191,11 +191,11 @@ export default function WeekView({
                     >
                         <colgroup>
                             {/* ✅ 画面幅に合わせて均等割り（目安） */}
-                            <col style={{ width: "34%" }} />
-                            <col style={{ width: "16.5%" }} />
-                            <col style={{ width: "16.5%" }} />
-                            <col style={{ width: "16.5%" }} />
-                            <col style={{ width: "16.5%" }} />
+                            <col style={{ width: "22%" }} />
+                            <col style={{ width: "18.5%" }} />
+                            <col style={{ width: "18.5%" }} />
+                            <col style={{ width: "18.5%" }} />
+                            <col style={{ width: "22.5%" }} />
                         </colgroup>
 
                         <thead>

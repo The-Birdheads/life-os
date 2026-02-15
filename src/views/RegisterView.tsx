@@ -7,6 +7,10 @@ import IconBtn from "../components/ui/IconBtn";
 import CategoryBadge from "../components/badges/CategoryBadge";
 import PriorityBadge from "../components/badges/PriorityBadge";
 import VolBar from "../components/badges/VolBar";
+import PrimaryBtn from "../components/ui/PrimaryBtn";
+import SecondaryBtn from "../components/ui/SecondaryBtn";
+
+
 
 type RegisterTab = "habit" | "oneoff" | "action";
 
@@ -282,7 +286,7 @@ export default function RegisterView({
             )}
 
             <div style={{ display: "flex", gap: 8 }}>
-              <button
+              <PrimaryBtn
                 onClick={async () => {
                   await onSave({
                     title: title.trim() || task.title,
@@ -295,8 +299,8 @@ export default function RegisterView({
                 }}
               >
                 保存
-              </button>
-              <button
+              </PrimaryBtn>
+              <SecondaryBtn
                 onClick={() => {
                   setTitle(task.title);
                   setPriority((task as any).priority ?? 3);
@@ -306,7 +310,7 @@ export default function RegisterView({
                 }}
               >
                 キャンセル
-              </button>
+              </SecondaryBtn>
             </div>
           </div>
         </div>
@@ -393,10 +397,9 @@ export default function RegisterView({
                 />
               </label>
             )}
-
-            <button type="submit" disabled={!newTitle.trim()}>
+            <PrimaryBtn type="submit" disabled={!newTitle.trim()} fullWidth>
               追加
-            </button>
+            </PrimaryBtn>
           </form>
         </Card>
 
@@ -520,7 +523,7 @@ export default function RegisterView({
             </label>
 
             <div style={{ display: "flex", gap: 8 }}>
-              <button
+              <PrimaryBtn
                 onClick={async () => {
                   const finalKind = (kind.trim() || initialKind).trim();
                   await onSave({ category, kind: finalKind as any, title: finalKind } as any);
@@ -529,9 +532,9 @@ export default function RegisterView({
                 disabled={!kind.trim()}
               >
                 保存
-              </button>
+              </PrimaryBtn>
 
-              <button
+              <SecondaryBtn
                 onClick={() => {
                   setKind(initialKind);
                   setCategory(actionItem.category);
@@ -539,7 +542,7 @@ export default function RegisterView({
                 }}
               >
                 キャンセル
-              </button>
+              </SecondaryBtn>
             </div>
           </div>
         </div>
@@ -590,9 +593,9 @@ export default function RegisterView({
               </select>
             </label>
 
-            <button type="submit" disabled={!kind.trim()}>
+            <PrimaryBtn type="submit" disabled={!kind.trim()} fullWidth>
               追加
-            </button>
+            </PrimaryBtn>
           </form>
         </Card>
 
