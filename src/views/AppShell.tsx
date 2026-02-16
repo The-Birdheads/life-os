@@ -109,8 +109,8 @@ export default function AppShell({
                 aria-expanded={menuOpen}
                 style={{
                   appearance: "none",
-                  border: "1px solid rgba(0,0,0,0.2)",
-                  background: "transparent",
+                  border: `1px solid ${theme.border}`,
+                  background: theme.menuBg,
                   borderRadius: 10,
                   padding: "8px 10px",
                   display: "inline-flex",
@@ -222,7 +222,8 @@ export default function AppShell({
           style={{
             position: "fixed",
             inset: 0,
-            background: "rgba(0,0,0,0.45)",
+            background: theme.card,
+            color: theme.text,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -258,7 +259,7 @@ export default function AppShell({
                 borderBottom: "1px solid rgba(0,0,0,0.08)",
                 position: "sticky",
                 top: 0,
-                background: "white",
+                background: theme.card,
               }}
             >
               <div style={{ minWidth: 0 }}>
@@ -274,8 +275,8 @@ export default function AppShell({
                 onClick={() => setReleaseOpen(false)}
                 style={{
                   appearance: "none",
-                  border: "1px solid rgba(0,0,0,0.18)",
-                  background: "transparent",
+                  border: `1px solid ${theme.border}`,
+                  background: theme.card,
                   borderRadius: 10,
                   padding: "6px 10px",
                   fontWeight: 800,
@@ -291,7 +292,7 @@ export default function AppShell({
                 <div
                   key={`${rn.date}-${rn.version}`}
                   style={{
-                    border: "1px solid rgba(0,0,0,0.10)",
+                    border: `1px solid ${theme.border}`,
                     borderRadius: 12,
                     padding: 12,
                     marginBottom: 10,
