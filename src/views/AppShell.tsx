@@ -4,6 +4,10 @@ import { APP_VERSION, RELEASE_NOTES } from "../lib/releaseNotes";
 import Toast from "../components/ui/Toast";
 import Tabs from "../components/ui/Tabs";
 
+import PrimaryBtn from "../components/ui/PrimaryBtn";
+import { theme } from "../lib/ui/styles";
+
+
 type Tab = "today" | "review" | "week" | "register";
 
 type Props = {
@@ -133,15 +137,16 @@ export default function AppShell({
                     top: "calc(100% + 8px)",
                     width: "min(86vw, 340px)",
                     borderRadius: 12,
-                    border: "1px solid rgba(0,0,0,0.15)",
-                    background: "white",
+                    border: `1px solid ${theme.menuBorder}`,
+                    background: theme.menuBg,
+                    color: theme.menuText,
                     boxShadow: "0 10px 30px rgba(0,0,0,0.18)",
                     padding: 10,
                     zIndex: 50,
                   }}
                 >
                   {/* Release notes */}
-                  <button
+                  <PrimaryBtn
                     type="button"
                     onClick={() => {
                       setMenuOpen(false);
@@ -151,17 +156,17 @@ export default function AppShell({
                       width: "100%",
                       borderRadius: 10,
                       padding: "10px 12px",
-                      border: "1px solid rgba(0,0,0,0.2)",
+                      border: `1px solid ${theme.border}`,
                       background: "transparent",
                       fontWeight: 700,
                       marginBottom: 10,
                     }}
                   >
                     リリースノート
-                  </button>
+                  </PrimaryBtn>
 
                   {/* Sign out */}
-                  <button
+                  <PrimaryBtn
                     type="button"
                     onClick={async () => {
                       setMenuOpen(false);
@@ -177,7 +182,7 @@ export default function AppShell({
                     }}
                   >
                     ログアウト
-                  </button>
+                  </PrimaryBtn>
 
                   {/* Version */}
                   <div style={{ fontSize: 12, opacity: 0.75, marginTop: 10, marginBottom: 6 }}>バージョン</div>
@@ -253,8 +258,9 @@ export default function AppShell({
               maxHeight: "80vh",
               overflow: "auto",
               borderRadius: 14,
-              border: "1px solid rgba(0,0,0,0.18)",
-              background: "white",
+              background: theme.card,
+              border: `1px solid ${theme.border}`,
+              color: theme.text,
               boxShadow: "0 14px 50px rgba(0,0,0,0.30)",
             }}
           >
