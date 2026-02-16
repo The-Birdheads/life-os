@@ -525,15 +525,24 @@ export default function RegisterView({
             <div style={{ display: "flex", gap: 8 }}>
               <PrimaryBtn
                 onClick={async () => {
-                  const finalKind = (kind.trim() || initialKind).trim();
-                  await onSave({ category, kind: finalKind as any, title: finalKind } as any);
+                  const safeKind = (kind ?? "").trim() || (initialKind ?? "").trim();
+
+                  if (!safeKind) {
+                    setMsg("行動名を入力してください");
+                    return;
+                  }
+
+                  await onSave({
+                    category: category ?? "other",
+                    kind: safeKind,
+                    title: safeKind,
+                  } as any);
+
                   setEditing(false);
                 }}
-                disabled={!kind.trim()}
               >
                 保存
               </PrimaryBtn>
-
               <SecondaryBtn
                 onClick={() => {
                   setKind(initialKind);
