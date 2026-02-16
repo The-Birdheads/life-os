@@ -9,29 +9,39 @@ import ReviewView from "./views/ReviewView";
 import RegisterView from "./views/RegisterView";
 import TodayView from "./views/TodayView";
 import { fetchTodayEntries } from "./lib/api/today";
-
-
-
+import { fetchBase } from "./lib/api/base";
+import {
+  cardStyle,
+  layoutStyle,
+  containerStyle,
+  toastWrapStyle,
+  toastStyle,
+} from "./lib/ui/style";
 
 type Tab = "today" | "review" | "week" | "register";
 type Mode = "signIn" | "signUp";
 
-const theme = {
-  bg: "var(--bg)",
-  text: "var(--text)",
-  card: "var(--card)",
-  border: "var(--border)",
-  toastBg: "var(--toast-bg)",
-  toastText: "var(--toast-text)",
-};
+// ---- 日付ユーティリティ（差分最小：lib/day.ts は触らない）----
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
+}
 
-const cardStyle = {
-  background: theme.card,
-  border: `1px solid ${theme.border}`,
-  borderRadius: 12,
-  padding: 14,
-};
+// day が "YYYY-MM-DD" の想定
+function addDaysISO(dayISO: string, delta: number) {
+  const d = new Date(`${dayISO}T00:00:00+09:00`); // JST固定で計算
+  d.setDate(d.getDate() + delta);
+  const y = d.getFullYear();
+  const m = pad2(d.getMonth() + 1);
+  const dd = pad2(d.getDate());
+  return `${y}-${m}-${dd}`;
+}
 
+function toHeaderDateLabel(dayISO: string) {
+  // "YYYY / MM / DD" 表示
+  const [y, m, d] = dayISO.split("-");
+  if (!y || !m || !d) return dayISO;
+  return `${y} / ${m} / ${d}`;
+}
 
 export default function App() {
   // ------- Auth -------
@@ -40,7 +50,6 @@ export default function App() {
   const [password, setPassword] = useState("");
   const [userId, setUserId] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
-
   const [msg, setMsg] = useState<string>("");
 
   useEffect(() => {
@@ -60,54 +69,8 @@ export default function App() {
   useEffect(() => {
     setMsg("");
   }, [tab]);
+
   const [day, setDay] = useState(() => todayJST());
-  const layoutStyle: React.CSSProperties = {
-    display: "flex",
-    justifyContent: "center",
-    width: "100%",
-    background: theme.bg,
-    color: theme.text,
-    minHeight: "100vh",
-  };
-
-  const containerStyle: React.CSSProperties = {
-    width: "100%",
-    maxWidth: 720,
-    margin: "0 auto",
-    padding: "0 12px",
-    boxSizing: "border-box",
-  };
-
-
-  const toastWrapStyle: React.CSSProperties = {
-    position: "fixed",
-    top: 12,
-    left: 0,
-    right: 0,
-    display: "flex",
-    justifyContent: "center",
-    pointerEvents: "none", // 背後のUI操作を邪魔しない
-    zIndex: 9999,
-    padding: "0 12px",
-    boxSizing: "border-box",
-  };
-
-
-  const toastStyle: React.CSSProperties = {
-    pointerEvents: "auto",
-    maxWidth: 720,
-    width: "100%",
-    padding: "10px 12px",
-    borderRadius: 12,
-    border: "1px solid #e5e7eb",
-    background: theme.toastBg,
-    color: theme.toastText,
-    boxShadow: "0 6px 18px rgba(0,0,0,0.12)",
-    backdropFilter: "blur(6px)",
-    WebkitBackdropFilter: "blur(6px)",
-    fontSize: 14,
-  };
-
 
   // ------- Data -------
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -116,7 +79,6 @@ export default function App() {
   const [doneTaskIdsAnyDay, setDoneTaskIdsAnyDay] = useState<Set<string>>(new Set());
   const [note, setNote] = useState("");
   const [fulfillment, setFulfillment] = useState<number>(0);
-
 
   // ------- Auth init -------
   useEffect(() => {
@@ -163,7 +125,6 @@ export default function App() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        // ログイン後に戻したい場所（例：トップ）
         redirectTo: window.location.origin,
       },
     });
@@ -171,50 +132,32 @@ export default function App() {
     if (error) throw error;
   }
 
-  // async function linkGoogle() {
-  //   const { data, error } = await supabase.auth.linkIdentity({ provider: "google" });
-  //   if (error) throw error;
-  // ブラウザ実行なら通常はリダイレクトして戻ってきます
-  // }
-
-
   // ------- Load base data -------
   async function loadBase() {
     if (!userId) return;
 
-    const { data: t, error: tErr } = await supabase
-      .from("tasks")
-      .select("*")
-      .eq("user_id", userId)
-      .order("due_date", { ascending: true, nullsFirst: false })
+    const res = await fetchBase({
+      supabase,
+      userId,
+    });
 
-    if (tErr) throw tErr;
-    setTasks((t ?? []) as any);
-
-    const { data: a, error: aErr } = await supabase
-      .from("actions")
-      .select("*")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: true })
-
-    if (aErr) throw aErr;
-    setActions((a ?? []) as any);
+    setTasks(res.tasks);
+    setActions(res.actions);
   }
 
   async function loadTodayEntries() {
-  if (!userId) return;
+    if (!userId) return;
 
-  const res = await fetchTodayEntries({
-    supabase,
-    userId,
-    day,
-  });
+    const res = await fetchTodayEntries({
+      supabase,
+      userId,
+      day,
+    });
 
-  setDoneTaskIds(res.doneTaskIds);
-  setDoneTaskIdsAnyDay(res.doneTaskIdsAnyDay);
-  setTodayActionEntries(res.todayActionEntries);
-}
-
+    setDoneTaskIds(res.doneTaskIds);
+    setDoneTaskIdsAnyDay(res.doneTaskIdsAnyDay);
+    setTodayActionEntries(res.todayActionEntries);
+  }
 
   useEffect(() => {
     if (!userId) return;
@@ -240,15 +183,8 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, day]);
 
-
-  // ------- Insert helpers -------
-
-
-
-
-
   // ------- Render -------
-  if (!userId) { //ログイン前
+  if (!userId) {
     return (
       <AuthView
         mode={mode}
@@ -264,7 +200,10 @@ export default function App() {
       />
     );
   }
-  // ログイン後
+
+  // ✅ ヘッダに渡す日付表示（register 以外）
+  const headerDateLabel = tab !== "register" ? toHeaderDateLabel(day) : undefined;
+
   return (
     <AppShell
       userEmail={userEmail}
@@ -276,6 +215,22 @@ export default function App() {
       containerStyle={containerStyle}
       toastWrapStyle={toastWrapStyle}
       toastStyle={toastStyle}
+      // ✅ 追加：固定ヘッダ用
+      headerDateLabel={headerDateLabel}
+      onPrevDay={
+        tab !== "register"
+          ? () => {
+              setDay((d) => addDaysISO(d, -1));
+            }
+          : undefined
+      }
+      onNextDay={
+        tab !== "register"
+          ? () => {
+              setDay((d) => addDaysISO(d, 1));
+            }
+          : undefined
+      }
     >
       {tab === "today" && (
         <TodayView
@@ -294,6 +249,7 @@ export default function App() {
           loadTodayEntries={loadTodayEntries}
         />
       )}
+
       {tab === "register" && (
         <RegisterView
           userId={userId}
@@ -306,6 +262,7 @@ export default function App() {
           loadBase={loadBase}
         />
       )}
+
       {tab === "review" && (
         <ReviewView
           userId={userId}
@@ -324,6 +281,7 @@ export default function App() {
           cardStyle={cardStyle}
         />
       )}
+
       {tab === "week" && (
         <WeekView
           userId={userId}
@@ -336,8 +294,6 @@ export default function App() {
           cardStyle={cardStyle}
         />
       )}
-
     </AppShell>
   );
-
 }
