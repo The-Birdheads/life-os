@@ -5,7 +5,7 @@ import Toast from "../components/ui/Toast";
 import Tabs from "../components/ui/Tabs";
 
 import PrimaryBtn from "../components/ui/PrimaryBtn";
-import { theme } from "../lib/ui/styles";
+import { theme } from "../lib/ui/style";
 
 
 type Tab = "today" | "review" | "week" | "register";
