@@ -222,7 +222,7 @@ export default function AppShell({
           style={{
             position: "fixed",
             inset: 0,
-            background: theme.card,
+            background: "rgba(0,0,0,0.45)",
             color: theme.text,
             display: "flex",
             alignItems: "center",
