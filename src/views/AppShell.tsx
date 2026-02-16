@@ -152,15 +152,6 @@ export default function AppShell({
                       setMenuOpen(false);
                       setReleaseOpen(true);
                     }}
-                    style={{
-                      width: "100%",
-                      borderRadius: 10,
-                      padding: "10px 12px",
-                      border: `1px solid ${theme.border}`,
-                      background: "transparent",
-                      fontWeight: 700,
-                      marginBottom: 10,
-                    }}
                   >
                     リリースノート
                   </PrimaryBtn>
@@ -171,14 +162,6 @@ export default function AppShell({
                     onClick={async () => {
                       setMenuOpen(false);
                       await onSignOut();
-                    }}
-                    style={{
-                      width: "100%",
-                      borderRadius: 10,
-                      padding: "10px 12px",
-                      border: "1px solid rgba(0,0,0,0.2)",
-                      background: "transparent",
-                      fontWeight: 700,
                     }}
                   >
                     ログアウト
