@@ -5,6 +5,7 @@ export type Task = {
   task_type: "habit" | "oneoff";
   due_date: string | null;
   is_active: boolean;
+  is_hidden: boolean;
   priority: number;
   volume: number;
 };
@@ -16,6 +17,7 @@ export type Action = {
   title: string;     // 互換で残してOK
   kind: string | null;
   is_active: boolean;
+  is_hidden: boolean;
   created_at: string;
 };
 

@@ -18,9 +18,9 @@ type Props = {
     tasks: Task[];
     actions: Action[];
 
-    doneTaskIds: Set<string>;
+    doneTaskIds: Set<string>; // 今日done
     setDoneTaskIds: React.Dispatch<React.SetStateAction<Set<string>>>;
-    doneTaskIdsAnyDay: Set<string>;
+    doneTaskIdsAnyDay: Set<string>; // 過去どこかでdone
 
     todayActionEntries: any[];
     setMsg: (s: string) => void;
@@ -46,14 +46,53 @@ export default function TodayView({
     cardStyle,
     loadTodayEntries,
 }: Props) {
-    const habits = tasks.filter((t) => t.is_active && t.task_type === "habit");
-    const activeActions = actions.filter((a) => a.is_active);
+    const activeHabits = tasks.filter((t) => t.is_active && t.task_type === "habit");
     const activeOneoffs = tasks.filter((t) => t.is_active && t.task_type === "oneoff");
+    const activeActions = actions.filter((a) => a.is_active && !a.is_hidden);
 
-    // ✅ 非表示ルール：過去完了済み かつ 今日完了ではない → 隠す
-    const visibleOneoffs = activeOneoffs.filter(
-        (t) => !doneTaskIdsAnyDay.has(t.id) || doneTaskIds.has(t.id)
-    );
+
+    /**
+     * ✅ 習慣（habit）の表示ルール
+     * - 表示中: 常に表示
+     * - 非表示: 今日完了 or 過去完了があれば「履歴として表示」
+     * - 非表示で一度も完了してない: 出さない
+     */
+    const shouldShowHabitInToday = (t: Task) => {
+        const hidden = !!(t as any).is_hidden;
+        if (!hidden) return true;
+
+        const doneToday = doneTaskIds.has(t.id);
+        const doneAnyDay = doneTaskIdsAnyDay.has(t.id);
+        return doneToday || doneAnyDay;
+    };
+
+    /**
+     * ✅ タスク（oneoff）の表示ルール（あなた指定）
+     * 表示中 + 当日以外に完了済：出ない
+     * 表示中のその他の場合：出る
+     * 非表示 + 当日完了済：出る
+     * 非表示のその他：出ない
+     */
+    const shouldShowOneoffInToday = (t: Task) => {
+        const hidden = !!(t as any).is_hidden;
+        const doneToday = doneTaskIds.has(t.id);
+        const doneAnyDay = doneTaskIdsAnyDay.has(t.id);
+
+        if (!hidden) {
+            // 表示中
+            if (!doneToday && doneAnyDay) return false; // 当日以外で完了済は出ない
+            return true; // その他は出る
+        }
+
+        // 非表示
+        return doneToday; // 当日完了のみ出す
+    };
+
+    // ✅ 記録タブで表示する習慣
+    const habits = activeHabits.filter(shouldShowHabitInToday);
+
+    // ✅ 記録タブで表示するタスク（oneoff）
+    const visibleOneoffs = activeOneoffs.filter(shouldShowOneoffInToday);
 
     async function toggleTaskDone(taskId: string, nextDone: boolean) {
         // ✅ 必ず“新しいSet”を作って返す（Reactが確実に再描画する）
@@ -123,7 +162,6 @@ export default function TodayView({
         fontSize: 12,
     };
 
-
     async function updateActionEntry(
         entryId: string,
         patch: { note?: string | null; volume?: number | null; action_id?: string | null }
@@ -156,7 +194,6 @@ export default function TodayView({
         if (a.volume !== b.volume) return a.volume - b.volume;
 
         // ④ id 新 → 古（id降順）
-        // 文字列比較でOK。要件が「id順」なのでこれで実装する
         if (a.id !== b.id) return b.id.localeCompare(a.id);
 
         return 0;
@@ -165,14 +202,20 @@ export default function TodayView({
     const sortedHabits = [...habits].sort((a, b) => compareTask(a, b, doneTaskIds));
     const sortedOneoffs = [...visibleOneoffs].sort((a, b) => compareTask(a, b, doneTaskIds));
 
-
     function ActionEntryForm({ activeActions }: { activeActions: any[] }) {
         const [actionId, setActionId] = useState<string>(activeActions[0]?.id ?? "");
         const [detail, setDetail] = useState<string>("");
         const [volume, setVolume] = useState<number>(5);
 
         useEffect(() => {
-            if (!actionId && activeActions[0]?.id) setActionId(activeActions[0].id);
+            if (!actionId) {
+                setActionId(activeActions[0]?.id ?? "");
+                return;
+            }
+            // actionIdが「非表示化でリストから消えた」場合、先頭に寄せる
+            if (activeActions.length > 0 && !activeActions.some((a) => a.id === actionId)) {
+                setActionId(activeActions[0].id);
+            }
             // eslint-disable-next-line react-hooks/exhaustive-deps
         }, [activeActions.length]);
 
@@ -214,11 +257,7 @@ export default function TodayView({
 
                 <label>
                     詳細（自由入力）
-                    <input
-                        value={detail}
-                        onChange={(e) => setDetail(e.target.value)}
-                        style={{ width: "100%", boxSizing: "border-box" }}
-                    />
+                    <input value={detail} onChange={(e) => setDetail(e.target.value)} style={{ width: "100%", boxSizing: "border-box" }} />
                 </label>
 
                 <label>
@@ -262,92 +301,62 @@ export default function TodayView({
         }, [entry.id, entry.action_id, entry.note, entry.volume]);
 
         if (!editing) {
-            if (!editing) {
-                return (
-                    <li>
-                        <div
-                            style={{
-                                border: "1px solid var(--border)",
-                                borderRadius: 12,
-                                padding: "10px 12px",
-                                background: "var(--card)",
-                                display: "flex",
-                                justifyContent: "space-between",
-                                gap: 10,
-                                alignItems: "center", // ✅ 右のボタンを上下中央に
-                            }}
-                        >
-                            {/* 左：3行 */}
-                            <div style={{ minWidth: 0, display: "grid", gap: 4 }}>
-                                {/* 1行目：行動名 + カテゴリ */}
-                                <div
-                                    style={{
-                                        display: "flex",
-                                        gap: 8,
-                                        alignItems: "center",
-                                        minWidth: 0,
-                                    }}
-                                >
-                                    <div
-                                        style={{
-                                            fontWeight: 700,
-                                            minWidth: 0,
-                                            wordBreak: "break-word",
-                                            lineHeight: 1.3,
-                                        }}
-                                    >
-                                        {a ? (a.kind ?? a.title) : "（不明）"}
-                                    </div>
-                                    <div style={{ flexShrink: 0, opacity: 0.85 }}>
-                                        <CategoryBadge category={a?.category} />
-                                    </div>
+            return (
+                <li>
+                    <div
+                        style={{
+                            border: "1px solid var(--border)",
+                            borderRadius: 12,
+                            padding: "10px 12px",
+                            background: "var(--card)",
+                            display: "flex",
+                            justifyContent: "space-between",
+                            gap: 10,
+                            alignItems: "center",
+                        }}
+                    >
+                        <div style={{ minWidth: 0, display: "grid", gap: 4 }}>
+                            <div style={{ display: "flex", gap: 8, alignItems: "center", minWidth: 0 }}>
+                                <div style={{ fontWeight: 700, minWidth: 0, wordBreak: "break-word", lineHeight: 1.3 }}>
+                                    {a ? (a.kind ?? a.title) : "（不明）"}
                                 </div>
-
-                                {/* 2行目：詳細（あれば） */}
-                                {entry.note ? (
-                                    <div style={{ opacity: 0.8, fontSize: 12, lineHeight: 1.3 }}>
-                                        {entry.note}
-                                    </div>
-                                ) : null}
-
-                                {/* 3行目：ボリューム */}
-                                <div style={{ opacity: 0.75, display: "flex", alignItems: "center", gap: 8 }}>
-                                    <VolBar value={entry.volume} />
+                                <div style={{ flexShrink: 0, opacity: 0.85 }}>
+                                    <CategoryBadge category={a?.category} />
                                 </div>
                             </div>
 
-                            {/* 右：編集/削除（左右位置そのまま・上下中央） */}
-                            <div style={{ display: "flex", gap: 6, flexShrink: 0, alignItems: "center" }}>
-                                <IconBtn title="編集" onClick={() => setEditing(true)}>
-                                    ✏️
-                                </IconBtn>
+                            {entry.note ? <div style={{ opacity: 0.8, fontSize: 12, lineHeight: 1.3 }}>{entry.note}</div> : null}
 
-                                <IconBtn
-                                    title="削除"
-                                    danger
-                                    onClick={async () => {
-                                        if (!confirm("この行動ログを削除しますか？")) return;
-                                        const { error } = await supabase
-                                            .from("action_entries")
-                                            .delete()
-                                            .eq("user_id", userId)
-                                            .eq("id", entry.id);
-                                        if (error) {
-                                            setMsg(error.message);
-                                            return;
-                                        }
-                                        await loadTodayEntries();
-                                        setMsg("行動ログを削除しました。");
-                                    }}
-                                >
-                                    🗑️
-                                </IconBtn>
+                            <div style={{ opacity: 0.75, display: "flex", alignItems: "center", gap: 8 }}>
+                                <VolBar value={entry.volume} />
                             </div>
                         </div>
-                    </li>
-                );
-            }
 
+                        <div style={{ display: "flex", gap: 6, flexShrink: 0, alignItems: "center" }}>
+                            <IconBtn title="編集" onClick={() => setEditing(true)}>
+                                ✏️
+                            </IconBtn>
+
+                            <IconBtn
+                                title="削除"
+                                danger
+                                onClick={async () => {
+                                    if (!confirm("この行動ログを削除しますか？")) return;
+                                    const { error } = await supabase.from("action_entries").delete().eq("user_id", userId).eq("id", entry.id);
+                                    if (error) {
+                                        setMsg(error.message);
+                                        return;
+                                    }
+                                    await loadTodayEntries();
+                                    setMsg("行動ログを削除しました。");
+                                }}
+                            >
+                                🗑️
+                            </IconBtn>
+                        </div>
+                    </div>
+                </li>
+            );
         }
 
         return (
@@ -361,11 +370,16 @@ export default function TodayView({
                             <select
                                 value={actionId}
                                 onChange={(e) => setActionId(e.target.value)}
-                                style={{ width: "100%", boxSizing: "border-box" }}
+                                style={{ width: "100%" }}
+                                disabled={activeActions.length === 0}
                             >
-                                {activeActions.map((x: any) => (
-                                    <option key={x.id} value={x.id}>
-                                        {x.kind ?? x.title}
+                                {activeActions.length === 0 ? (
+                                    <option value="">（表示中の行動がありません）</option>
+                                ) : null}
+
+                                {activeActions.map((a) => (
+                                    <option key={a.id} value={a.id}>
+                                        {a.kind ?? a.title}
                                     </option>
                                 ))}
                             </select>
@@ -373,12 +387,7 @@ export default function TodayView({
 
                         <label>
                             詳細
-                            <input
-                                value={note}
-                                onChange={(e) => setNote(e.target.value)}
-                                style={{ width: "100%", boxSizing: "border-box" }}
-                                placeholder="自由入力"
-                            />
+                            <input value={note} onChange={(e) => setNote(e.target.value)} style={{ width: "100%", boxSizing: "border-box" }} placeholder="自由入力" />
                         </label>
 
                         <label>
@@ -393,7 +402,9 @@ export default function TodayView({
                                 style={{ width: "100%" }}
                             />
                             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, opacity: 0.7 }}>
-                                <span>1</span><span>5</span><span>10</span>
+                                <span>1</span>
+                                <span>5</span>
+                                <span>10</span>
                             </div>
                         </label>
 
@@ -445,17 +456,22 @@ export default function TodayView({
 
             <Card style={cardStyle}>
                 <h3 style={{ marginTop: 0 }}>習慣</h3>
-                {habits.length === 0 ? (
+                {sortedHabits.length === 0 ? (
                     <p>まだありません（タスクタブで追加）</p>
                 ) : (
                     <ul style={{ listStyle: "none", paddingLeft: 0, margin: 0 }}>
                         {sortedHabits.map((t) => {
+                            const isHidden = !!(t as any).is_hidden;
                             const checked = doneTaskIds.has(t.id);
+                            const isPastDone = doneTaskIdsAnyDay.has(t.id);
+
                             return (
                                 <li key={t.id} style={{ marginBottom: 10 }}>
-                                    <label style={{ ...rowLabelStyle, ...rowCard }}
-                                        onMouseEnter={e => e.currentTarget.style.transform = "scale(1.01)"}
-                                        onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}>
+                                    <label
+                                        style={{ ...rowLabelStyle, ...rowCard }}
+                                        onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.01)")}
+                                        onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
+                                    >
                                         <input
                                             type="checkbox"
                                             checked={checked}
@@ -469,10 +485,10 @@ export default function TodayView({
                                             <div style={metaLineStyle}>
                                                 <PriorityBadge value={(t as any).priority} />
                                                 <VolBar value={(t as any).volume} />
+                                                {isHidden && (checked || isPastDone) ? <small style={{ opacity: 0.6 }}>（非表示・履歴のため表示）</small> : null}
                                             </div>
                                         </div>
                                     </label>
-
                                 </li>
                             );
                         })}
@@ -482,17 +498,21 @@ export default function TodayView({
 
             <Card style={cardStyle}>
                 <h3 style={{ marginTop: 0 }}>タスク</h3>
-                {visibleOneoffs.length === 0 ? (
+                {sortedOneoffs.length === 0 ? (
                     <p>タスクがありません（タスクタブで追加）</p>
                 ) : (
                     <ul style={{ listStyle: "none", paddingLeft: 0, margin: 0 }}>
                         {sortedOneoffs.map((t) => {
                             const checked = doneTaskIds.has(t.id);
+                            const isHidden = !!(t as any).is_hidden;
+
                             return (
                                 <li key={t.id} style={{ marginBottom: 10 }}>
-                                    <label style={{ ...rowLabelStyle, ...rowCard }}
-                                        onMouseEnter={e => e.currentTarget.style.transform = "scale(1.01)"}
-                                        onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}>
+                                    <label
+                                        style={{ ...rowLabelStyle, ...rowCard }}
+                                        onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.01)")}
+                                        onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
+                                    >
                                         <input
                                             type="checkbox"
                                             checked={checked}
@@ -506,6 +526,8 @@ export default function TodayView({
                                             <div style={metaLineStyle}>
                                                 <PriorityBadge value={(t as any).priority} />
                                                 <VolBar value={(t as any).volume} />
+                                                {isHidden && checked ? <small style={{ opacity: 0.6 }}>（非表示・当日完了のため表示）</small> : null}
+                                                {/* タスクは「過去完了だけ」では表示されない仕様なので、注釈も checked のみにする */}
                                             </div>
 
                                             {t.due_date ? (

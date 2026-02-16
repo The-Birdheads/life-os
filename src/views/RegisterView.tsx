@@ -65,13 +65,6 @@ export default function RegisterView({
     await loadBase();
   }
 
-  async function archiveTask(taskId: string) {
-    await updateTask(taskId, { is_active: false } as any);
-  }
-  async function unarchiveTask(taskId: string) {
-    await updateTask(taskId, { is_active: true } as any);
-  }
-
   async function deleteTaskForever(taskId: string) {
     const { error } = await supabase.from("tasks").delete().eq("user_id", userId).eq("id", taskId);
     if (error) throw error;
@@ -92,13 +85,6 @@ export default function RegisterView({
     const { error } = await supabase.from("actions").update(patch).eq("user_id", userId).eq("id", actionId);
     if (error) throw error;
     await loadBase();
-  }
-
-  async function archiveAction(actionId: string) {
-    await updateAction(actionId, { is_active: false } as any);
-  }
-  async function unarchiveAction(actionId: string) {
-    await updateAction(actionId, { is_active: true } as any);
   }
 
   async function deleteActionForever(actionId: string) {
@@ -141,47 +127,62 @@ export default function RegisterView({
 
   function TasksView({ fixedType, title }: { fixedType: "habit" | "oneoff"; title: string }) {
     const taskType = fixedType;
+
     const [newTitle, setNewTitle] = useState("");
     const [priority, setPriority] = useState(3);
     const [volume, setVolume] = useState(5);
     const [dueDate, setDueDate] = useState<string>("");
 
+    // ✅ 表示中 / 非表示 サブタブ（習慣・タスクどちらも対応）
+    type SubTab = "shown" | "hidden";
+    const [subTab, setSubTab] = useState<SubTab>("shown");
+
+    // 対象タイプだけ
     const shownTasks = tasks.filter((t) => t.task_type === fixedType);
 
-    const visibleTasks = shownTasks.filter((t) => {
-      if (t.task_type === "habit") return true;
-      return !doneTaskIdsAnyDay.has(t.id);
+    // ✅ oneoffは「過去に完了済み」なら表示しない（ただし今日の完了は TodayView 側の doneTaskIds で制御なのでここは従来どおり）
+    // Register は「登録済み一覧」なので、doneTaskIdsAnyDay に入ってたら基本隠す（あなたの元ロジック踏襲）
+    const baseList = shownTasks.filter((t) => {
+      if (t.task_type === "oneoff") return !doneTaskIdsAnyDay.has(t.id);
+      return true;
+    });
+
+    // ✅ サブタブで表示切替（is_hidden）
+    const listForRender = baseList.filter((t) => {
+      const hidden = !!(t as any).is_hidden; // 型に未反映でも落ちないように
+      return subTab === "shown" ? !hidden : hidden;
     });
 
     function TaskRow({ task, onSave }: { task: Task; onSave: (patch: Partial<Task>) => Promise<void> }) {
       const [editing, setEditing] = useState(false);
+
       const [title, setTitle] = useState(task.title);
       const [priority, setPriority] = useState<number>((task as any).priority ?? 3);
       const [volume, setVolume] = useState<number>((task as any).volume ?? 5);
       const [dueDate, setDueDate] = useState<string>(task.due_date ?? "");
+
+      const isHidden = !!(task as any).is_hidden;
 
       useEffect(() => {
         setTitle(task.title);
         setPriority((task as any).priority ?? 3);
         setVolume((task as any).volume ?? 5);
         setDueDate(task.due_date ?? "");
-      }, [task]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, [task.id, task.title, (task as any).priority, (task as any).volume, task.due_date]);
 
       if (!editing) {
         return (
           <div style={rowCard}>
             {/* 左：3行（タイトル / 優先度+ボリューム / 期限） */}
             <div style={{ minWidth: 0, display: "grid", gap: 4 }}>
-              {/* 1行目：タイトル */}
               <div style={titleLine}>{task.title}</div>
 
-              {/* 2行目：優先度 + ボリューム */}
               <div style={metaLine}>
                 <PriorityBadge value={(task as any).priority} />
                 <VolBar value={(task as any).volume} />
               </div>
 
-              {/* 3行目：期限（タスクのみ） */}
               {task.due_date ? (
                 <div style={{ ...metaLine, opacity: 0.7 }}>
                   <span style={smallLabel}>期限：</span>
@@ -190,25 +191,30 @@ export default function RegisterView({
               ) : null}
             </div>
 
-            {/* 右：ボタン（左右位置そのまま・上下中央） */}
+            {/* 右：ボタン */}
             <div style={{ display: "flex", gap: 6, flexShrink: 0, alignItems: "center" }}>
               <IconBtn title="編集" onClick={() => setEditing(true)}>
                 ✏️
               </IconBtn>
 
-              {task.is_active ? (
+              {/* ✅ 表示/非表示トグル（習慣・タスク共通） */}
+              {isHidden ? (
                 <IconBtn
-                  title="アーカイブ"
+                  title="表示する"
                   onClick={async () => {
-                    if (!confirm("このタスクをアーカイブしますか？")) return;
-                    await archiveTask(task.id);
+                    await updateTask(task.id, { is_hidden: false } as any);
                   }}
                 >
-                  📦
+                  👁️
                 </IconBtn>
               ) : (
-                <IconBtn title="復帰" onClick={() => unarchiveTask(task.id)}>
-                  ♻️
+                <IconBtn
+                  title="非表示にする"
+                  onClick={async () => {
+                    await updateTask(task.id, { is_hidden: true } as any);
+                  }}
+                >
+                  🙈
                 </IconBtn>
               )}
 
@@ -226,7 +232,6 @@ export default function RegisterView({
           </div>
         );
       }
-
 
       return (
         <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 10 }}>
@@ -300,6 +305,7 @@ export default function RegisterView({
               >
                 保存
               </PrimaryBtn>
+
               <SecondaryBtn
                 onClick={() => {
                   setTitle(task.title);
@@ -319,6 +325,7 @@ export default function RegisterView({
 
     return (
       <>
+        {/* 追加カード */}
         <Card style={cardStyle}>
           <h2 style={{ marginTop: 0 }}>{title}追加</h2>
           <form
@@ -397,20 +404,34 @@ export default function RegisterView({
                 />
               </label>
             )}
+
             <PrimaryBtn type="submit" disabled={!newTitle.trim()} fullWidth>
               追加
             </PrimaryBtn>
           </form>
         </Card>
 
+        {/* 登録済み（編集） */}
         <Card style={cardStyle}>
           <h3 style={{ marginTop: 0 }}>登録済み{title}（編集）</h3>
 
-          {tasks.length === 0 ? (
-            <p>まだありません</p>
+          {/* ✅ 表示中/非表示 サブタブ（習慣・タスク共通） */}
+          <div style={{ display: "flex", gap: 8, margin: "8px 0 12px" }}>
+            <button onClick={() => setSubTab("shown")} disabled={subTab === "shown"}>
+              表示中
+            </button>
+            <button onClick={() => setSubTab("hidden")} disabled={subTab === "hidden"}>
+              非表示
+            </button>
+          </div>
+
+          {listForRender.length === 0 ? (
+            <p style={{ opacity: 0.7 }}>
+              {subTab === "shown" ? "表示中の項目はありません" : "非表示の項目はありません"}
+            </p>
           ) : (
             <div style={{ display: "grid", gap: 10 }}>
-              {visibleTasks.map((t) => (
+              {listForRender.map((t) => (
                 <TaskRow
                   key={t.id}
                   task={t}
@@ -433,7 +454,10 @@ export default function RegisterView({
     );
   }
 
+
   function ActionsView() {
+    type ActionSubTab = "shown" | "hidden";
+    const [actionSubTab, setActionSubTab] = useState<ActionSubTab>("shown");
     const [kind, setKind] = useState("");
     const [category, setCategory] = useState("other");
 
@@ -471,19 +495,26 @@ export default function RegisterView({
                 ✏️
               </IconBtn>
 
-              {actionItem.is_active ? (
+              {/* ✅ 表示/非表示トグル（アーカイブ廃止） */}
+              {actionItem.is_hidden ? (
                 <IconBtn
-                  title="アーカイブ"
+                  title="表示する"
                   onClick={async () => {
-                    if (!confirm("この行動をアーカイブしますか？")) return;
-                    await archiveAction(actionItem.id);
+                    await updateAction(actionItem.id, { is_hidden: false } as any);
+                    setMsg("行動を表示に戻しました。");
                   }}
                 >
-                  📦
+                  👁️
                 </IconBtn>
               ) : (
-                <IconBtn title="復帰" onClick={() => unarchiveAction(actionItem.id)}>
-                  ♻️
+                <IconBtn
+                  title="非表示にする"
+                  onClick={async () => {
+                    await updateAction(actionItem.id, { is_hidden: true } as any);
+                    setMsg("行動を非表示にしました。");
+                  }}
+                >
+                  🙈
                 </IconBtn>
               )}
 
@@ -558,6 +589,11 @@ export default function RegisterView({
       );
     }
 
+    const shownActions = actions.filter((a) => !a.is_hidden);
+    const hiddenActions = actions.filter((a) => a.is_hidden);
+
+    const listForRender = actionSubTab === "shown" ? shownActions : hiddenActions;
+
     return (
       <>
         <Card style={cardStyle}>
@@ -611,11 +647,24 @@ export default function RegisterView({
         <Card style={cardStyle}>
           <h3 style={{ marginTop: 0 }}>登録済みの行動の種類（編集）</h3>
 
-          {actions.length === 0 ? (
-            <p>まだありません</p>
+          {/* ✅ サブタブ */}
+          <div style={{ display: "flex", gap: 8, margin: "8px 0 12px" }}>
+            <button onClick={() => setActionSubTab("shown")} disabled={actionSubTab === "shown"}>
+              表示中
+            </button>
+            <button onClick={() => setActionSubTab("hidden")} disabled={actionSubTab === "hidden"}>
+              非表示
+            </button>
+          </div>
+
+          {/* ✅ タブで中身を切替 */}
+          {listForRender.length === 0 ? (
+            <p style={{ opacity: 0.7 }}>
+              {actionSubTab === "shown" ? "表示中の行動はありません" : "非表示の行動はありません"}
+            </p>
           ) : (
             <div style={{ display: "grid", gap: 10 }}>
-              {actions.map((a) => (
+              {listForRender.map((a) => (
                 <ActionRow
                   key={a.id}
                   actionItem={a}

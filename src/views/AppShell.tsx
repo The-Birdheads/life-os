@@ -1,3 +1,6 @@
+import { useEffect, useRef, useState } from "react";
+import { APP_VERSION, RELEASE_NOTES } from "../lib/releaseNotes";
+
 import Toast from "../components/ui/Toast";
 import Tabs from "../components/ui/Tabs";
 
@@ -32,17 +35,186 @@ export default function AppShell({
   toastStyle,
   children,
 }: Props) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  const [releaseOpen, setReleaseOpen] = useState(false);
+  const releaseRef = useRef<HTMLDivElement | null>(null);
+
+  // メニュー：クリック外で閉じる（スマホで使いやすい）
+  useEffect(() => {
+    if (!menuOpen) return;
+
+    const onDown = (e: MouseEvent) => {
+      const el = menuRef.current;
+      if (!el) return;
+      if (!el.contains(e.target as Node)) setMenuOpen(false);
+    };
+
+    window.addEventListener("mousedown", onDown);
+    return () => window.removeEventListener("mousedown", onDown);
+  }, [menuOpen]);
+
+  // リリースノート：Escで閉じる + クリック外で閉じる（オーバーレイ押下）
+  useEffect(() => {
+    if (!releaseOpen) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setReleaseOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [releaseOpen]);
+
   return (
     <div style={layoutStyle}>
       <div style={containerStyle}>
         <div style={{ maxWidth: 720, margin: "40px auto", fontFamily: "sans-serif" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-            <h1 style={{ margin: 0 }}>Life OS</h1>
-            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              <small style={{ opacity: 0.7 }}>{userEmail}</small>
-              <button onClick={onSignOut}>ログアウト</button>
+          {/* Header */}
+          <header
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              padding: "4px 0",
+            }}
+          >
+            {/* 左：タイトル（折り返し禁止＋はみ出し対策） */}
+            <div style={{ minWidth: 0 }}>
+              <h1
+                style={{
+                  margin: 0,
+                  fontSize: 22,
+                  lineHeight: 1.2,
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
+              >
+                Life OS
+              </h1>
             </div>
-          </div>
+
+            {/* 右：ハンバーガー + メニュー */}
+            <div ref={menuRef} style={{ position: "relative", flexShrink: 0 }}>
+              <button
+                type="button"
+                onClick={() => setMenuOpen((v) => !v)}
+                aria-label="メニュー"
+                aria-expanded={menuOpen}
+                style={{
+                  appearance: "none",
+                  border: "1px solid rgba(0,0,0,0.2)",
+                  background: "transparent",
+                  borderRadius: 10,
+                  padding: "8px 10px",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                {/* ハンバーガーアイコン（SVG） */}
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path
+                    d="M4 7h16M4 12h16M4 17h16"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </button>
+
+              {menuOpen && (
+                <div
+                  style={{
+                    position: "absolute",
+                    right: 0,
+                    top: "calc(100% + 8px)",
+                    width: "min(86vw, 340px)",
+                    borderRadius: 12,
+                    border: "1px solid rgba(0,0,0,0.15)",
+                    background: "white",
+                    boxShadow: "0 10px 30px rgba(0,0,0,0.18)",
+                    padding: 10,
+                    zIndex: 50,
+                  }}
+                >
+                  {/* Release notes */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setReleaseOpen(true);
+                    }}
+                    style={{
+                      width: "100%",
+                      borderRadius: 10,
+                      padding: "10px 12px",
+                      border: "1px solid rgba(0,0,0,0.2)",
+                      background: "transparent",
+                      fontWeight: 700,
+                      marginBottom: 10,
+                    }}
+                  >
+                    リリースノート
+                  </button>
+
+                  {/* Sign out */}
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setMenuOpen(false);
+                      await onSignOut();
+                    }}
+                    style={{
+                      width: "100%",
+                      borderRadius: 10,
+                      padding: "10px 12px",
+                      border: "1px solid rgba(0,0,0,0.2)",
+                      background: "transparent",
+                      fontWeight: 700,
+                    }}
+                  >
+                    ログアウト
+                  </button>
+
+                  {/* Version */}
+                  <div style={{ fontSize: 12, opacity: 0.75, marginTop: 10, marginBottom: 6 }}>バージョン</div>
+                  <div
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 700,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      marginBottom: 10,
+                    }}
+                  >
+                    v{APP_VERSION}
+                  </div>
+
+                  {/* User */}
+                  <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 6 }}>
+                    ログイン中のユーザ
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 600,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      marginBottom: 5,
+                    }}
+                    title={userEmail ?? ""}
+                  >
+                    {userEmail ?? "（不明）"}
+                  </div>
+                </div>
+              )}
+            </div>
+          </header>
 
           <hr />
 
@@ -52,6 +224,111 @@ export default function AppShell({
           {children}
         </div>
       </div>
+
+      {/* Release Notes Modal */}
+      {releaseOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="リリースノート"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+            zIndex: 100,
+          }}
+          onMouseDown={(e) => {
+            // オーバーレイ押下で閉じる（カード内クリックは無視）
+            if (e.target === e.currentTarget) setReleaseOpen(false);
+          }}
+        >
+          <div
+            ref={releaseRef}
+            style={{
+              width: "min(92vw, 720px)",
+              maxHeight: "80vh",
+              overflow: "auto",
+              borderRadius: 14,
+              border: "1px solid rgba(0,0,0,0.18)",
+              background: "white",
+              boxShadow: "0 14px 50px rgba(0,0,0,0.30)",
+            }}
+          >
+            {/* Modal header */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                padding: "14px 14px 10px 14px",
+                borderBottom: "1px solid rgba(0,0,0,0.08)",
+                position: "sticky",
+                top: 0,
+                background: "white",
+              }}
+            >
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 16, fontWeight: 800, lineHeight: 1.2 }}>リリースノート</div>
+                <div style={{ fontSize: 12, opacity: 0.7, marginTop: 2 }}>
+                  現在のバージョン：v{APP_VERSION}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                aria-label="閉じる"
+                onClick={() => setReleaseOpen(false)}
+                style={{
+                  appearance: "none",
+                  border: "1px solid rgba(0,0,0,0.18)",
+                  background: "transparent",
+                  borderRadius: 10,
+                  padding: "6px 10px",
+                  fontWeight: 800,
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Modal body */}
+            <div style={{ padding: 14 }}>
+              {RELEASE_NOTES.map((rn) => (
+                <div
+                  key={`${rn.date}-${rn.version}`}
+                  style={{
+                    border: "1px solid rgba(0,0,0,0.10)",
+                    borderRadius: 12,
+                    padding: 12,
+                    marginBottom: 10,
+                  }}
+                >
+                  <div style={{ display: "flex", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
+                    <div style={{ fontWeight: 900 }}>v{rn.version}</div>
+                    <div style={{ fontSize: 12, opacity: 0.7 }}>{rn.date}</div>
+                  </div>
+                  <ul style={{ margin: "10px 0 0 18px" }}>
+                    {rn.items.map((it, i) => (
+                      <li key={i} style={{ marginBottom: 6, lineHeight: 1.5 }}>
+                        {it}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+
+              <div style={{ fontSize: 12, opacity: 0.6 }}>
+                ヒント：Escキー（PC）/ 背景タップ（スマホ）でも閉じられます
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
