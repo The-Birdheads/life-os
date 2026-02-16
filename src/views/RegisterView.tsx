@@ -10,8 +10,6 @@ import VolBar from "../components/badges/VolBar";
 import PrimaryBtn from "../components/ui/PrimaryBtn";
 import SecondaryBtn from "../components/ui/SecondaryBtn";
 
-
-
 type RegisterTab = "habit" | "oneoff" | "action";
 
 type Props = {
@@ -37,6 +35,7 @@ export default function RegisterView({
   cardStyle,
   loadBase,
 }: Props) {
+  
   const [registerTab, setRegisterTab] = useState<RegisterTab>("habit");
 
   // ------- DB helpers (Register専用) -------

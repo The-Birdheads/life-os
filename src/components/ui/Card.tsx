@@ -6,5 +6,11 @@ type Props = {
 };
 
 export default function Card({ children, style }: Props) {
-  return <div style={style}>{children}</div>;
+  return <div style={{
+        display: "block",
+        width: "100%",
+        boxSizing: "border-box",
+        minWidth: 0,
+        ...style,
+      }}>{children}</div>;
 }

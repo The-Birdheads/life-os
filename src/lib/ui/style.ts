@@ -20,34 +20,38 @@ export const cardStyle: React.CSSProperties = {
 };
 
 export const layoutStyle: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "center",
   width: "100%",
   background: theme.bg,
   color: theme.text,
   minHeight: "100vh",
+
+  // ✅ 追加：横はみ出しが原因でも揺れない
+  overflowX: "hidden",
 };
 
 export const containerStyle: React.CSSProperties = {
-  width: "100%",
-  maxWidth: 720,
+  width: "min(100%, 720px)",
   margin: "0 auto",
   padding: "0 12px",
   boxSizing: "border-box",
+  minWidth: 0,
 };
 
 export const toastWrapStyle: React.CSSProperties = {
   position: "fixed",
   top: 12,
-  left: 0,
-  right: 0,
+  insetInline: 0,       // left/right の代わり（安定）
   display: "flex",
   justifyContent: "center",
   pointerEvents: "none",
   zIndex: 9999,
-  padding: "0 12px",
+  paddingInline: 12,    // padding の代わり（安定）
   boxSizing: "border-box",
+
+  // ✅ 追加：トースト起因の横はみ出しを確実に封じる
+  overflow: "hidden",
 };
+
 
 export const toastStyle: React.CSSProperties = {
   pointerEvents: "auto",

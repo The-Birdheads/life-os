@@ -104,3 +104,10 @@ textarea,
 select {
   font-size: max(16px, 1rem);
 }
+
+/* スクロールバーの有無でレイアウトが揺れないようにする */
+html {
+  scrollbar-gutter: stable;
+  overflow-y: scroll;
+}
+

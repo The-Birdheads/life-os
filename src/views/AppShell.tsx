@@ -45,6 +45,12 @@ export default function AppShell({
   const [releaseOpen, setReleaseOpen] = useState(false);
   const releaseRef = useRef<HTMLDivElement | null>(null);
 
+  const contentRailStyle: React.CSSProperties = {
+    width: "min(100%, 720px)",   // ✅ 常に同じレーン幅
+    margin: "0 auto",
+    boxSizing: "border-box",
+  };
+
   // メニュー：クリック外で閉じる（スマホで使いやすい）
   useEffect(() => {
     if (!menuOpen) return;
@@ -72,8 +78,11 @@ export default function AppShell({
 
   return (
     <div style={layoutStyle}>
-      <div style={{ ...containerStyle, overflowX: "hidden"}}>
-        <div style={{ maxWidth: 720, margin: "40px auto", fontFamily: "sans-serif" }}>
+      <div style={{ ...containerStyle, overflowX: "hidden" }}>
+        <div style={{
+          maxWidth: 720, width: "100%",
+          boxSizing: "border-box", margin: "40px auto", fontFamily: "sans-serif"
+        }}>
           {/* Header */}
           <header
             style={{
@@ -207,9 +216,11 @@ export default function AppShell({
           <hr />
 
           <Toast msg={msg} wrapStyle={toastWrapStyle} toastStyle={toastStyle} />
-          <Tabs tab={tab} setTab={setTab} />
 
-          {children}
+          <div style={contentRailStyle}>
+            <Tabs tab={tab} setTab={setTab} />
+            {children}
+          </div>
         </div>
       </div>
 
