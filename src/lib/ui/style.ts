@@ -6,7 +6,7 @@ export const theme = {
   toastBg: "var(--toast-bg)",
   toastText: "var(--toast-text)",
 
- // ▼追加
+  // ▼追加
   menuBg: "var(--card)",
   menuBorder: "var(--border)",
   menuText: "var(--text)",
@@ -20,21 +20,19 @@ export const cardStyle: React.CSSProperties = {
 };
 
 export const layoutStyle: React.CSSProperties = {
-  width: "100%",
   background: theme.bg,
   color: theme.text,
   minHeight: "100vh",
-
-  // ✅ 追加：横はみ出しが原因でも揺れない
-  overflowX: "hidden",
+  display: "flex",
+  justifyContent: "center",
 };
+
 
 export const containerStyle: React.CSSProperties = {
   width: "min(100%, 720px)",
   margin: "0 auto",
   padding: "0 12px",
   boxSizing: "border-box",
-  minWidth: 0,
 };
 
 export const toastWrapStyle: React.CSSProperties = {

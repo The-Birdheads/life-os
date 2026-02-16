@@ -7,7 +7,6 @@ import Tabs from "../components/ui/Tabs";
 import PrimaryBtn from "../components/ui/PrimaryBtn";
 import { theme } from "../lib/ui/style";
 
-
 type Tab = "today" | "review" | "week" | "register";
 
 type Props = {
@@ -45,13 +44,18 @@ export default function AppShell({
   const [releaseOpen, setReleaseOpen] = useState(false);
   const releaseRef = useRef<HTMLDivElement | null>(null);
 
+  // ✅ レーン幅をここ1箇所に統一（PC=720固定 / モバイル=100%）
   const contentRailStyle: React.CSSProperties = {
-    width: "min(100%, 720px)",   // ✅ 常に同じレーン幅
-    margin: "0 auto",
+    width: 720,
+    maxWidth: "100%",
+    margin: "40px auto",
+    paddingLeft: 12,
+    paddingRight: 12,
     boxSizing: "border-box",
+    fontFamily: "sans-serif",
   };
 
-  // メニュー：クリック外で閉じる（スマホで使いやすい）
+  // メニュー：クリック外で閉じる
   useEffect(() => {
     if (!menuOpen) return;
 
@@ -65,7 +69,7 @@ export default function AppShell({
     return () => window.removeEventListener("mousedown", onDown);
   }, [menuOpen]);
 
-  // リリースノート：Escで閉じる + クリック外で閉じる（オーバーレイ押下）
+  // リリースノート：Escで閉じる
   useEffect(() => {
     if (!releaseOpen) return;
 
@@ -79,10 +83,8 @@ export default function AppShell({
   return (
     <div style={layoutStyle}>
       <div style={{ ...containerStyle, overflowX: "hidden" }}>
-        <div style={{
-          maxWidth: 720, width: "100%",
-          boxSizing: "border-box", margin: "40px auto", fontFamily: "sans-serif"
-        }}>
+        {/* ✅ ここから全部同じ固定レーン */}
+        <div style={contentRailStyle}>
           {/* Header */}
           <header
             style={{
@@ -93,7 +95,6 @@ export default function AppShell({
               padding: "4px 0",
             }}
           >
-            {/* 左：タイトル（折り返し禁止＋はみ出し対策） */}
             <div style={{ minWidth: 0 }}>
               <h1
                 style={{
@@ -109,7 +110,6 @@ export default function AppShell({
               </h1>
             </div>
 
-            {/* 右：ハンバーガー + メニュー */}
             <div ref={menuRef} style={{ position: "relative", flexShrink: 0 }}>
               <button
                 type="button"
@@ -127,7 +127,6 @@ export default function AppShell({
                   justifyContent: "center",
                 }}
               >
-                {/* ハンバーガーアイコン（SVG） */}
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                   <path
                     d="M4 7h16M4 12h16M4 17h16"
@@ -154,30 +153,33 @@ export default function AppShell({
                     zIndex: 50,
                   }}
                 >
-                  {/* Release notes */}
                   <PrimaryBtn
                     type="button"
                     onClick={() => {
                       setMenuOpen(false);
                       setReleaseOpen(true);
                     }}
+                    fullWidth
                   >
                     リリースノート
                   </PrimaryBtn>
 
-                  {/* Sign out */}
+                  <div style={{ height: 8 }} />
+
                   <PrimaryBtn
                     type="button"
                     onClick={async () => {
                       setMenuOpen(false);
                       await onSignOut();
                     }}
+                    fullWidth
                   >
                     ログアウト
                   </PrimaryBtn>
 
-                  {/* Version */}
-                  <div style={{ fontSize: 12, opacity: 0.75, marginTop: 10, marginBottom: 6 }}>バージョン</div>
+                  <div style={{ fontSize: 12, opacity: 0.75, marginTop: 10, marginBottom: 6 }}>
+                    バージョン
+                  </div>
                   <div
                     style={{
                       fontSize: 13,
@@ -191,10 +193,7 @@ export default function AppShell({
                     v{APP_VERSION}
                   </div>
 
-                  {/* User */}
-                  <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 6 }}>
-                    ログイン中のユーザ
-                  </div>
+                  <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 6 }}>ログイン中のユーザ</div>
                   <div
                     style={{
                       fontSize: 13,
@@ -215,12 +214,11 @@ export default function AppShell({
 
           <hr />
 
+          {/* Toastはfixedだけど、表示上はこのレーン前提でOK */}
           <Toast msg={msg} wrapStyle={toastWrapStyle} toastStyle={toastStyle} />
 
-          <div style={contentRailStyle}>
-            <Tabs tab={tab} setTab={setTab} />
-            {children}
-          </div>
+          <Tabs tab={tab} setTab={setTab} />
+          {children}
         </div>
       </div>
 
@@ -242,7 +240,6 @@ export default function AppShell({
             zIndex: 100,
           }}
           onMouseDown={(e) => {
-            // オーバーレイ押下で閉じる（カード内クリックは無視）
             if (e.target === e.currentTarget) setReleaseOpen(false);
           }}
         >
@@ -259,7 +256,6 @@ export default function AppShell({
               boxShadow: "0 14px 50px rgba(0,0,0,0.30)",
             }}
           >
-            {/* Modal header */}
             <div
               style={{
                 display: "flex",
@@ -297,7 +293,6 @@ export default function AppShell({
               </button>
             </div>
 
-            {/* Modal body */}
             <div style={{ padding: 14 }}>
               {RELEASE_NOTES.map((rn) => (
                 <div
