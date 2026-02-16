@@ -72,7 +72,7 @@ export default function AppShell({
 
   return (
     <div style={layoutStyle}>
-      <div style={containerStyle}>
+      <div style={{ ...containerStyle, overflowX: "hidden"}}>
         <div style={{ maxWidth: 720, margin: "40px auto", fontFamily: "sans-serif" }}>
           {/* Header */}
           <header

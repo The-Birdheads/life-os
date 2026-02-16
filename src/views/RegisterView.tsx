@@ -102,6 +102,9 @@ export default function RegisterView({
     justifyContent: "space-between",
     gap: 10,
     alignItems: "center", // ✅ 右ボタンを上下中央
+
+    width: "100%",
+    boxSizing: "border-box",
   };
 
   const metaLine: React.CSSProperties = {
@@ -175,7 +178,7 @@ export default function RegisterView({
         return (
           <div style={rowCard}>
             {/* 左：3行（タイトル / 優先度+ボリューム / 期限） */}
-            <div style={{ minWidth: 0, display: "grid", gap: 4 }}>
+            <div style={{ flex: 1, minWidth: 0, display: "grid", gap: 4 }}>
               <div style={titleLine}>{task.title}</div>
 
               <div style={metaLine}>
@@ -478,7 +481,7 @@ export default function RegisterView({
         return (
           <div style={rowCard}>
             {/* 左：1行目（行動名 + カテゴリ） */}
-            <div style={{ minWidth: 0, display: "grid", gap: 4 }}>
+            <div style={{ flex: 1, minWidth: 0, display: "grid", gap: 4 }}>
               <div style={{ display: "flex", gap: 8, alignItems: "center", minWidth: 0 }}>
                 <div style={{ ...titleLine, minWidth: 0 }}>
                   {(actionItem as any).kind ?? actionItem.title}
@@ -692,14 +695,32 @@ export default function RegisterView({
     <>
       <Card style={cardStyle}>
         <h2 style={{ marginTop: 0 }}>登録</h2>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={() => setRegisterTab("habit")} disabled={registerTab === "habit"}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+            gap: 8,
+          }}
+        >
+          <button
+            onClick={() => setRegisterTab("habit")}
+            disabled={registerTab === "habit"}
+            style={{ width: "100%" }}
+          >
             習慣
           </button>
-          <button onClick={() => setRegisterTab("oneoff")} disabled={registerTab === "oneoff"}>
+          <button
+            onClick={() => setRegisterTab("oneoff")}
+            disabled={registerTab === "oneoff"}
+            style={{ width: "100%" }}
+          >
             タスク
           </button>
-          <button onClick={() => setRegisterTab("action")} disabled={registerTab === "action"}>
+          <button
+            onClick={() => setRegisterTab("action")}
+            disabled={registerTab === "action"}
+            style={{ width: "100%" }}
+          >
             行動
           </button>
         </div>
