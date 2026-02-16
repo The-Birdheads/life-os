@@ -7,9 +7,16 @@ export type ReleaseNote = {
 };
 
 // ここだけ編集すればOKにする（最上位）
-export const APP_VERSION = "0.8.2";
+export const APP_VERSION = "0.8.3";
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+    {
+        date: "2026-02-16",
+        version: "0.8.3",
+        items: [
+            "タブを下に固定表示",
+        ],
+    },
     {
         date: "2026-02-16",
         version: "0.8.2",

@@ -1,4 +1,4 @@
-
+import React from "react";
 
 type Tab = "today" | "register" | "review" | "week";
 
@@ -9,24 +9,19 @@ type Props = {
 
 const tabList: { key: Tab; label: string }[] = [
   { key: "today", label: "記録" },
-  { key: "register", label: "登録" },
+  { key: "register", label: "編集" },
   { key: "review", label: "振り返り" },
   { key: "week", label: "週" },
 ];
 
 export default function Tabs({ tab, setTab }: Props) {
   return (
-    <div
+    <nav
+      aria-label="メインナビゲーション"
       style={{
         display: "grid",
-
-        // ⭐ 重要：均等幅グリッド（絶対はみ出さない）
-        gridTemplateColumns: "repeat(4, minmax(0,1fr))",
-
+        gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
         gap: 8,
-        marginBottom: 16,
-
-        // ⭐ 念のため横はみ出し防止
         overflowX: "hidden",
       }}
     >
@@ -36,21 +31,26 @@ export default function Tabs({ tab, setTab }: Props) {
         return (
           <button
             key={t.key}
+            type="button"
             onClick={() => setTab(t.key)}
-            disabled={active}
+            aria-current={active ? "page" : undefined}
             style={{
-              width: "100%",              // ← 重要（幅固定）
-              minWidth: 0,                // ← 重要（縮小許可）
+              width: "100%",
+              minWidth: 0,
               padding: "10px 6px",
-              borderRadius: 10,
+              borderRadius: 12,
               border: "1px solid var(--border)",
               background: active ? "var(--card)" : "transparent",
-              color: active ? "var(--text)" : "#6b7280",
-              fontWeight: 700,
-              cursor: active ? "default" : "pointer",
-              whiteSpace: "nowrap",       // 折り返し防止
+
+              // ✅ ここを修正：ライト/ダーク両対応
+              color: "var(--text)",
+              opacity: active ? 1 : 0.72, // 未選択は薄くするだけ
+
+              fontWeight: 800,
+              cursor: "pointer",
+              whiteSpace: "nowrap",
               overflow: "hidden",
-              textOverflow: "ellipsis",   // 長文対応
+              textOverflow: "ellipsis",
               transition: "0.15s",
             }}
           >
@@ -58,6 +58,6 @@ export default function Tabs({ tab, setTab }: Props) {
           </button>
         );
       })}
-    </div>
+    </nav>
   );
 }

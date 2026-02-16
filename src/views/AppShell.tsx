@@ -33,7 +33,6 @@ export default function AppShell({
   tab,
   setTab,
   layoutStyle,
-  containerStyle,
   toastWrapStyle,
   toastStyle,
   children,
@@ -44,17 +43,21 @@ export default function AppShell({
   const [releaseOpen, setReleaseOpen] = useState(false);
   const releaseRef = useRef<HTMLDivElement | null>(null);
 
-  // ✅ レーン幅をここ1箇所に統一（PC=720固定 / モバイル=100%）
+  // ✅ 上部コンテンツのレーン（スマホ=100% / PC=最大720）
   const contentRailStyle: React.CSSProperties = {
-    width: "100%",        // ✅ iPhoneは画面幅に追従
-    maxWidth: 720,        // ✅ PCでは720で止める
-    margin: "40px auto",
+    width: "100%",
+    maxWidth: 720,
+    margin: "24px auto 0",
     paddingLeft: 12,
     paddingRight: 12,
     boxSizing: "border-box",
     fontFamily: "sans-serif",
-    minWidth: 0,          // ✅ 保険
+    minWidth: 0,
   };
+
+
+  // ✅ 下固定タブの高さ（見た目に合わせて調整OK）
+  const bottomNavHeight = 64;
 
   // メニュー：クリック外で閉じる
   useEffect(() => {
@@ -83,8 +86,8 @@ export default function AppShell({
 
   return (
     <div style={layoutStyle}>
-      <div style={{ ...containerStyle, overflowX: "hidden" }}>
-        {/* ✅ ここから全部同じ固定レーン */}
+      <div style={{ width: "100%", overflowX: "hidden" }}>
+        {/* ✅ 上部エリア（ヘッダ + 本文） */}
         <div style={contentRailStyle}>
           {/* Header */}
           <header
@@ -93,9 +96,10 @@ export default function AppShell({
               alignItems: "center",
               justifyContent: "space-between",
               gap: 12,
-              padding: "4px 0",
+              padding: "6px 0 10px",
             }}
           >
+            {/* 左：タイトル */}
             <div style={{ minWidth: 0 }}>
               <h1
                 style={{
@@ -111,6 +115,7 @@ export default function AppShell({
               </h1>
             </div>
 
+            {/* 右：ハンバーガー + メニュー */}
             <div ref={menuRef} style={{ position: "relative", flexShrink: 0 }}>
               <button
                 type="button"
@@ -121,6 +126,7 @@ export default function AppShell({
                   appearance: "none",
                   border: `1px solid ${theme.border}`,
                   background: theme.menuBg,
+                  color: theme.menuText,
                   borderRadius: 10,
                   padding: "8px 10px",
                   display: "inline-flex",
@@ -213,13 +219,50 @@ export default function AppShell({
             </div>
           </header>
 
-          <hr />
+          <hr style={{ margin: "0 0 12px" }} />
 
-          {/* Toastはfixedだけど、表示上はこのレーン前提でOK */}
+          {/* Toast */}
           <Toast msg={msg} wrapStyle={toastWrapStyle} toastStyle={toastStyle} />
 
-          <Tabs tab={tab} setTab={setTab} />
-          {children}
+          {/* ✅ メインコンテンツ：下固定タブに隠れないよう余白を追加 */}
+          <div
+            style={{
+              paddingBottom: `calc(${bottomNavHeight}px + env(safe-area-inset-bottom, 0px) + 12px)`,
+              boxSizing: "border-box",
+              minWidth: 0,
+            }}
+          >
+            {children}
+          </div>
+        </div>
+
+        {/* ✅ 下固定タブ（画面下に常時表示） */}
+        <div
+          style={{
+            position: "fixed",
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 60,
+
+            background: theme.bg,
+            borderTop: `1px solid ${theme.border}`,
+            boxShadow: "0 -10px 30px rgba(0,0,0,0.12)",
+
+            paddingBottom: "env(safe-area-inset-bottom, 0px)",
+          }}
+        >
+          <div
+            style={{
+              width: "100%",
+              maxWidth: 720,
+              margin: "0 auto",
+              padding: "8px 12px",
+              boxSizing: "border-box",
+            }}
+          >
+            <Tabs tab={tab} setTab={setTab} />
+          </div>
         </div>
       </div>
 
@@ -257,6 +300,7 @@ export default function AppShell({
               boxShadow: "0 14px 50px rgba(0,0,0,0.30)",
             }}
           >
+            {/* Modal header */}
             <div
               style={{
                 display: "flex",
@@ -288,12 +332,14 @@ export default function AppShell({
                   borderRadius: 10,
                   padding: "6px 10px",
                   fontWeight: 800,
+                  color: theme.text,
                 }}
               >
                 ×
               </button>
             </div>
 
+            {/* Modal body */}
             <div style={{ padding: 14 }}>
               {RELEASE_NOTES.map((rn) => (
                 <div
