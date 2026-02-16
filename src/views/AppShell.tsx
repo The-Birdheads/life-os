@@ -46,13 +46,14 @@ export default function AppShell({
 
   // ✅ レーン幅をここ1箇所に統一（PC=720固定 / モバイル=100%）
   const contentRailStyle: React.CSSProperties = {
-    width: 720,
-    maxWidth: "100%",
+    width: "100%",        // ✅ iPhoneは画面幅に追従
+    maxWidth: 720,        // ✅ PCでは720で止める
     margin: "40px auto",
     paddingLeft: 12,
     paddingRight: 12,
     boxSizing: "border-box",
     fontFamily: "sans-serif",
+    minWidth: 0,          // ✅ 保険
   };
 
   // メニュー：クリック外で閉じる
