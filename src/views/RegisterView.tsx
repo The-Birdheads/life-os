@@ -9,10 +9,23 @@ import PriorityBadge from "../components/badges/PriorityBadge";
 import VolBar from "../components/badges/VolBar";
 import PrimaryBtn from "../components/ui/PrimaryBtn";
 import SecondaryBtn from "../components/ui/SecondaryBtn";
+import SegmentedBar from "../components/ui/SegmentedBar";
 
 import { space } from "../lib/ui/spacing";
 
 type RegisterTab = "habit" | "oneoff" | "action";
+
+const registerItems = [
+  { key: "habit", label: "習慣" },
+  { key: "oneoff", label: "タスク" },
+  { key: "action", label: "行動" },
+] as const;
+
+type SubTab = "shown" | "hidden";
+const subTabItems = [
+  { key: "shown", label: "表示中" },
+  { key: "hidden", label: "非表示" },
+] as const;
 
 type Props = {
   userId: string;
@@ -37,7 +50,6 @@ export default function RegisterView({
   cardStyle,
   loadBase,
 }: Props) {
-  
   const [registerTab, setRegisterTab] = useState<RegisterTab>("habit");
 
   // ------- DB helpers (Register専用) -------
@@ -102,8 +114,7 @@ export default function RegisterView({
     display: "flex",
     justifyContent: "space-between",
     gap: 10,
-    alignItems: "center", // ✅ 右ボタンを上下中央
-
+    alignItems: "center",
     width: "100%",
     boxSizing: "border-box",
   };
@@ -113,7 +124,7 @@ export default function RegisterView({
     display: "flex",
     alignItems: "center",
     gap: 8,
-    paddingLeft: 4, // ✅ 「1文字スペース」的な余白
+    paddingLeft: 4,
   };
 
   const titleLine: React.CSSProperties = {
@@ -126,7 +137,6 @@ export default function RegisterView({
     fontSize: 12,
   };
 
-
   // ------- 内部コンポーネント -------
 
   function TasksView({ fixedType, title }: { fixedType: "habit" | "oneoff"; title: string }) {
@@ -137,15 +147,13 @@ export default function RegisterView({
     const [volume, setVolume] = useState(5);
     const [dueDate, setDueDate] = useState<string>("");
 
-    // ✅ 表示中 / 非表示 サブタブ（習慣・タスクどちらも対応）
-    type SubTab = "shown" | "hidden";
+    // ✅ 表示中 / 非表示 サブタブ（SegmentedBar化）
     const [subTab, setSubTab] = useState<SubTab>("shown");
 
     // 対象タイプだけ
     const shownTasks = tasks.filter((t) => t.task_type === fixedType);
 
-    // ✅ oneoffは「過去に完了済み」なら表示しない（ただし今日の完了は TodayView 側の doneTaskIds で制御なのでここは従来どおり）
-    // Register は「登録済み一覧」なので、doneTaskIdsAnyDay に入ってたら基本隠す（あなたの元ロジック踏襲）
+    // ✅ oneoffは「過去に完了済み」なら表示しない
     const baseList = shownTasks.filter((t) => {
       if (t.task_type === "oneoff") return !doneTaskIdsAnyDay.has(t.id);
       return true;
@@ -153,7 +161,7 @@ export default function RegisterView({
 
     // ✅ サブタブで表示切替（is_hidden）
     const listForRender = baseList.filter((t) => {
-      const hidden = !!(t as any).is_hidden; // 型に未反映でも落ちないように
+      const hidden = !!(t as any).is_hidden;
       return subTab === "shown" ? !hidden : hidden;
     });
 
@@ -201,7 +209,6 @@ export default function RegisterView({
                 ✏️
               </IconBtn>
 
-              {/* ✅ 表示/非表示トグル（習慣・タスク共通） */}
               {isHidden ? (
                 <IconBtn
                   title="表示する"
@@ -419,15 +426,15 @@ export default function RegisterView({
         <Card style={cardStyle}>
           <h3 style={{ marginTop: 0 }}>登録済み{title}（編集）</h3>
 
-          {/* ✅ 表示中/非表示 サブタブ（習慣・タスク共通） */}
-          <div style={{ display: "flex", gap: 8, margin: "8px 0 12px" }}>
-            <button onClick={() => setSubTab("shown")} disabled={subTab === "shown"}>
-              表示中
-            </button>
-            <button onClick={() => setSubTab("hidden")} disabled={subTab === "hidden"}>
-              非表示
-            </button>
-          </div>
+          {/* ✅ 表示中/非表示 サブタブ：SegmentedBar */}
+          <SegmentedBar
+            items={subTabItems as any}
+            value={subTab}
+            onChange={(v: any) => setSubTab(v as SubTab)}
+            ariaLabel={`${title}の表示切り替え`}
+          />
+
+          <div style={{ height: 12 }} />
 
           {listForRender.length === 0 ? (
             <p style={{ opacity: 0.7 }}>
@@ -458,7 +465,6 @@ export default function RegisterView({
     );
   }
 
-
   function ActionsView() {
     type ActionSubTab = "shown" | "hidden";
     const [actionSubTab, setActionSubTab] = useState<ActionSubTab>("shown");
@@ -481,7 +487,6 @@ export default function RegisterView({
       if (!editing) {
         return (
           <div style={rowCard}>
-            {/* 左：1行目（行動名 + カテゴリ） */}
             <div style={{ flex: 1, minWidth: 0, display: "grid", gap: 4 }}>
               <div style={{ display: "flex", gap: 8, alignItems: "center", minWidth: 0 }}>
                 <div style={{ ...titleLine, minWidth: 0 }}>
@@ -493,13 +498,11 @@ export default function RegisterView({
               </div>
             </div>
 
-            {/* 右：ボタン（上下中央） */}
             <div style={{ display: "flex", gap: 6, flexShrink: 0, alignItems: "center" }}>
               <IconBtn title="編集" onClick={() => setEditing(true)}>
                 ✏️
               </IconBtn>
 
-              {/* ✅ 表示/非表示トグル（アーカイブ廃止） */}
               {actionItem.is_hidden ? (
                 <IconBtn
                   title="表示する"
@@ -537,7 +540,6 @@ export default function RegisterView({
         );
       }
 
-
       return (
         <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 10 }}>
           <div style={{ display: "grid", gap: 8 }}>
@@ -561,7 +563,6 @@ export default function RegisterView({
               <PrimaryBtn
                 onClick={async () => {
                   const safeKind = (kind ?? "").trim() || (initialKind ?? "").trim();
-
                   if (!safeKind) {
                     setMsg("行動名を入力してください");
                     return;
@@ -578,6 +579,7 @@ export default function RegisterView({
               >
                 保存
               </PrimaryBtn>
+
               <SecondaryBtn
                 onClick={() => {
                   setKind(initialKind);
@@ -595,7 +597,6 @@ export default function RegisterView({
 
     const shownActions = actions.filter((a) => !a.is_hidden);
     const hiddenActions = actions.filter((a) => a.is_hidden);
-
     const listForRender = actionSubTab === "shown" ? shownActions : hiddenActions;
 
     return (
@@ -651,17 +652,16 @@ export default function RegisterView({
         <Card style={cardStyle}>
           <h3 style={{ marginTop: 0 }}>登録済みの行動の種類（編集）</h3>
 
-          {/* ✅ サブタブ */}
-          <div style={{ display: "flex", gap: 8, margin: "8px 0 12px" }}>
-            <button onClick={() => setActionSubTab("shown")} disabled={actionSubTab === "shown"}>
-              表示中
-            </button>
-            <button onClick={() => setActionSubTab("hidden")} disabled={actionSubTab === "hidden"}>
-              非表示
-            </button>
-          </div>
+          {/* ✅ 表示中/非表示 サブタブ：SegmentedBar */}
+          <SegmentedBar
+            items={subTabItems as any}
+            value={actionSubTab}
+            onChange={(v: any) => setActionSubTab(v as ActionSubTab)}
+            ariaLabel="行動の表示切り替え"
+          />
 
-          {/* ✅ タブで中身を切替 */}
+          <div style={{ height: 12 }} />
+
           {listForRender.length === 0 ? (
             <p style={{ opacity: 0.7 }}>
               {actionSubTab === "shown" ? "表示中の行動はありません" : "非表示の行動はありません"}
@@ -694,43 +694,18 @@ export default function RegisterView({
 
   return (
     <>
-    <div style={{ display: "grid", gap: space.lg }}>
+      <div style={{ display: "grid", gap: space.lg }}>
+        {/* ✅ Register上部：SegmentedBarで切替（all無し） */}
+        <SegmentedBar
+          items={registerItems as any}
+          value={registerTab}
+          onChange={(v: any) => setRegisterTab(v as RegisterTab)}
+          ariaLabel="登録の表示切り替え"
+        />
 
-      <Card style={cardStyle}>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-            gap: 8,
-          }}
-        >
-          <button
-            onClick={() => setRegisterTab("habit")}
-            disabled={registerTab === "habit"}
-            style={{ width: "100%" }}
-          >
-            習慣
-          </button>
-          <button
-            onClick={() => setRegisterTab("oneoff")}
-            disabled={registerTab === "oneoff"}
-            style={{ width: "100%" }}
-          >
-            タスク
-          </button>
-          <button
-            onClick={() => setRegisterTab("action")}
-            disabled={registerTab === "action"}
-            style={{ width: "100%" }}
-          >
-            行動
-          </button>
-        </div>
-      </Card>
-
-      {registerTab === "habit" && <TasksView fixedType="habit" title="習慣" />}
-      {registerTab === "oneoff" && <TasksView fixedType="oneoff" title="タスク" />}
-      {registerTab === "action" && <ActionsView />}
+        {registerTab === "habit" && <TasksView fixedType="habit" title="習慣" />}
+        {registerTab === "oneoff" && <TasksView fixedType="oneoff" title="タスク" />}
+        {registerTab === "action" && <ActionsView />}
       </div>
     </>
   );

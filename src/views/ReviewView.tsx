@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import type { Action, Task } from "../lib/types";
 
 import Card from "../components/ui/Card";
@@ -7,7 +7,17 @@ import CategoryBadge from "../components/badges/CategoryBadge";
 import PriorityBadge from "../components/badges/PriorityBadge";
 import VolBar from "../components/badges/VolBar";
 import PrimaryBtn from "../components/ui/PrimaryBtn";
+import SegmentedBar from "../components/ui/SegmentedBar";
 import { space } from "../lib/ui/spacing";
+
+type Filter = "all" | "habit" | "task" | "action";
+
+const segmentedItems = [
+  { key: "all", label: "すべて" },
+  { key: "habit", label: "習慣" },
+  { key: "task", label: "タスク" },
+  { key: "action", label: "行動" },
+] as const;
 
 type Props = {
   userId: string | null;
@@ -47,6 +57,9 @@ export default function ReviewView({
 }: Props) {
   const [reviewLoading, setReviewLoading] = useState(false);
   const reqIdRef = useRef(0);
+
+  // ✅ Segmented filter
+  const [filter, setFilter] = useState<Filter>("all");
 
   useEffect(() => {
     if (!userId) return;
@@ -88,6 +101,7 @@ export default function ReviewView({
     if (!a) return false;
     return a.is_active !== false;
   });
+
   const sumVolume = (arr: any[], getV: (x: any) => any) =>
     arr.reduce((acc, x) => acc + (Number(getV(x)) || 0), 0);
 
@@ -99,7 +113,6 @@ export default function ReviewView({
 
   const actionsCount = doneActionEntries.length;
   const actionsVol = sumVolume(doneActionEntries, (e) => (e as any).volume);
-
 
   async function saveReview() {
     if (!userId) return;
@@ -124,16 +137,15 @@ export default function ReviewView({
   // --- UI parts style (Today/Registerと揃える) ---
   const listWrap: React.CSSProperties = {
     display: "grid",
-    gap: 6, // ← 10 → 6 にして間隔を狭める
+    gap: 6,
   };
 
   const itemCard: React.CSSProperties = {
-    border: "1px solid rgba(0,0,0,0.12)", // ← 枠線を明確に（白背景向け）
+    border: "1px solid rgba(0,0,0,0.12)",
     borderRadius: 12,
-    padding: 10, // ← 12 → 10 で少し詰める
-    background: "rgba(255,255,255,0.02)", // ← 好みで（不要なら消してOK）
+    padding: 10,
+    background: "rgba(255,255,255,0.02)",
   };
-
 
   const itemRow: React.CSSProperties = {
     display: "flex",
@@ -163,7 +175,7 @@ export default function ReviewView({
 
   const sectionCardBody: React.CSSProperties = {
     display: "grid",
-    gap: 10, // 見出しとリストの間
+    gap: 10,
   };
 
   const sectionHead: React.CSSProperties = {
@@ -171,7 +183,6 @@ export default function ReviewView({
     justifyContent: "space-between",
     alignItems: "baseline",
     gap: 10,
-    // ✅ 見出しは“行”にする。枠線/背景/角丸は付けない
     padding: "0 2px",
   };
 
@@ -183,7 +194,6 @@ export default function ReviewView({
     whiteSpace: "nowrap",
   };
 
-
   const statPill: React.CSSProperties = {
     border: "1px solid rgba(0,0,0,0.12)",
     borderRadius: 999,
@@ -192,185 +202,197 @@ export default function ReviewView({
     opacity: 0.8,
   };
 
-
-
   return (
     <>
-    <div style={{ display: "grid", gap: space.xl }}>
+      <div style={{ display: "grid", gap: space.xl }}>
+        {/* 充実度 / メモ */}
+        <Card style={cardStyle}>
+          {reviewLoading && <small style={{ opacity: 0.7 }}>読み込み中…</small>}
+          <div style={{ display: "grid", gap: 10 }}>
+            <label>
+              充実度（1-100）
+              <div style={{ display: "grid", gap: 6 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                  <b>{fulfillment || 0}</b>
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={fulfillment}
+                    onChange={(e) => setFulfillment(Number(e.target.value))}
+                    style={{ width: 90, boxSizing: "border-box" }}
+                  />
+                </div>
 
-      <Card style={cardStyle}>
-        {reviewLoading && <small style={{ opacity: 0.7 }}>読み込み中…</small>}
-        <div style={{ display: "grid", gap: 10 }}>
-          <label>
-            充実度（1-100）
-            <div style={{ display: "grid", gap: 6 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                <b>{fulfillment || 0}</b>
                 <input
-                  type="number"
+                  type="range"
                   min={1}
                   max={100}
-                  value={fulfillment}
+                  step={1}
+                  value={Math.min(100, Math.max(1, Number(fulfillment) || 1))}
                   onChange={(e) => setFulfillment(Number(e.target.value))}
-                  style={{ width: 90, boxSizing: "border-box" }}
+                  style={{ width: "100%" }}
                 />
-              </div>
 
-              <input
-                type="range"
-                min={1}
-                max={100}
-                step={1}
-                value={Math.min(100, Math.max(1, Number(fulfillment) || 1))}
-                onChange={(e) => setFulfillment(Number(e.target.value))}
-                style={{ width: "100%" }}
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, opacity: 0.7 }}>
+                  <span>1</span>
+                  <span>50</span>
+                  <span>100</span>
+                </div>
+              </div>
+            </label>
+
+            <label>
+              振り返りメモ
+              <textarea
+                rows={5}
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                style={{ width: "100%", boxSizing: "border-box" }}
+                placeholder="例：今日はタスク偏重だった。明日は回復系を1つ入れる。"
               />
+            </label>
 
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, opacity: 0.7 }}>
-                <span>1</span>
-                <span>50</span>
-                <span>100</span>
+            <PrimaryBtn onClick={saveReview}>保存</PrimaryBtn>
+          </div>
+        </Card>
+
+        {/* ✅ ここに SegmentedBar（充実度の下） */}
+        <SegmentedBar
+          items={segmentedItems as any}
+          value={filter}
+          onChange={setFilter}
+          ariaLabel="振り返りの表示切り替え"
+        />
+
+        {/* ✅ 習慣 */}
+        {(filter === "all" || filter === "habit") && (
+          <Card style={cardStyle}>
+            <div style={sectionCardBody}>
+              <div style={sectionHead}>
+                <h3 style={{ margin: 0 }}>実施した習慣</h3>
+                <div style={sectionStats}>
+                  <span style={statPill}>合計数: {habitsCount}</span>
+                  <span style={statPill}>合計ボリューム: {habitsVol}</span>
+                </div>
               </div>
-            </div>
-          </label>
 
-          <label>
-            振り返りメモ
-            <textarea
-              rows={5}
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              style={{ width: "100%", boxSizing: "border-box" }}
-              placeholder="例：今日はタスク偏重だった。明日は回復系を1つ入れる。"
-            />
-          </label>
-
-          <PrimaryBtn onClick={saveReview}>保存</PrimaryBtn>
-        </div>
-      </Card>
-
-      <Card style={cardStyle}>
-        <div style={sectionCardBody}>
-          <div style={sectionHead}>
-            <h3 style={{ margin: 0 }}>その日こなした習慣</h3>
-            <div style={sectionStats}>
-              <span style={statPill}>合計数: {habitsCount}</span>
-              <span style={statPill}>合計ボリューム: {habitsVol}</span>
-            </div>
-          </div>
-
-          {doneHabits.length === 0 ? (
-            <p>まだありません</p>
-          ) : (
-            <div style={listWrap}>
-              {doneHabits.map((t) => (
-                <div key={t.id} style={itemCard}>
-                  <div style={itemRow}>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={itemTitle}>{t.title}</div>
-                      <div style={metaLine}>
-                        <PriorityBadge value={(t as any).priority} />
-                        <VolBar value={(t as any).volume} />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </Card>
-
-      <Card style={cardStyle}>
-        <div style={sectionCardBody}>
-          <div style={sectionHead}>
-            <h3 style={{ marginTop: 0 }}>その日こなしたタスク</h3>
-            <div style={sectionStats}>
-              <span style={statPill}>合計数: {tasksCount}</span>
-              <span style={statPill}>合計ボリューム: {tasksVol}</span>
-            </div>
-          </div>
-          {doneOneoffs.length === 0 ? (
-            <p>まだありません</p>
-          ) : (
-            <div style={listWrap}>
-              {doneOneoffs.map((t) => (
-                <div key={t.id} style={itemCard}>
-                  <div style={itemRow}>
-                    <div style={{ minWidth: 0 }}>
-                      {/* 1行目：タスク名 */}
-                      <div style={itemTitle}>{t.title}</div>
-
-                      {/* 2行目：優先度＆ボリューム */}
-                      <div style={metaLine}>
-                        <PriorityBadge value={(t as any).priority} />
-                        <VolBar value={(t as any).volume} />
-                      </div>
-
-                      {/* 3行目：期限（ある場合だけ） */}
-                      {t.due_date ? (
-                        <div style={{ ...metaLine, marginTop: 4 }}>
-                          <span style={smallLabel}>期限：</span>
-                          <span style={smallLabel}>{t.due_date}</span>
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </Card>
-      <Card style={cardStyle}>
-        <div style={sectionCardBody}>
-          <div style={sectionHead}>
-            <h3 style={{ marginTop: 0 }}>その日やった行動</h3>
-            <div style={sectionStats}>
-              <span style={statPill}>合計数: {actionsCount}</span>
-              <span style={statPill}>合計ボリューム: {actionsVol}</span>
-            </div>
-          </div>
-          {doneActionEntries.length === 0 ? (
-            <p>まだありません</p>
-          ) : (
-            <div style={listWrap}>
-              {doneActionEntries.map((e: any) => {
-                const a = actionById.get(e.action_id);
-                const title = a ? (a.kind ?? a.title) : "（不明）";
-
-                return (
-                  <div key={e.id} style={itemCard}>
-                    {/* 1行目：行動名 + カテゴリ */}
-                    <div style={itemRow}>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={itemTitle}>
-                          {title}{" "}
-                          <span style={{ marginLeft: 8 }}>
-                            <CategoryBadge category={a?.category} />
-                          </span>
-                        </div>
-
-                        {/* 2行目：詳細（あれば） */}
-                        {e.note ? (
-                          <div style={{ ...smallLabel, marginTop: 6, opacity: 0.85 }}>
-                            {e.note}
+              {doneHabits.length === 0 ? (
+                <p>まだありません</p>
+              ) : (
+                <div style={listWrap}>
+                  {doneHabits.map((t) => (
+                    <div key={t.id} style={itemCard}>
+                      <div style={itemRow}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={itemTitle}>{t.title}</div>
+                          <div style={metaLine}>
+                            <PriorityBadge value={(t as any).priority} />
+                            <VolBar value={(t as any).volume} />
                           </div>
-                        ) : null}
-
-                        {/* 3行目：ボリューム */}
-                        <div style={metaLine}>
-                          <VolBar value={(e as any).volume} />
                         </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
+                  ))}
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      </Card>
+          </Card>
+        )}
+
+        {/* ✅ タスク */}
+        {(filter === "all" || filter === "task") && (
+          <Card style={cardStyle}>
+            <div style={sectionCardBody}>
+              <div style={sectionHead}>
+                <h3 style={{ marginTop: 0 }}>実施したタスク</h3>
+                <div style={sectionStats}>
+                  <span style={statPill}>合計数: {tasksCount}</span>
+                  <span style={statPill}>合計ボリューム: {tasksVol}</span>
+                </div>
+              </div>
+
+              {doneOneoffs.length === 0 ? (
+                <p>まだありません</p>
+              ) : (
+                <div style={listWrap}>
+                  {doneOneoffs.map((t) => (
+                    <div key={t.id} style={itemCard}>
+                      <div style={itemRow}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={itemTitle}>{t.title}</div>
+
+                          <div style={metaLine}>
+                            <PriorityBadge value={(t as any).priority} />
+                            <VolBar value={(t as any).volume} />
+                          </div>
+
+                          {t.due_date ? (
+                            <div style={{ ...metaLine, marginTop: 4 }}>
+                              <span style={smallLabel}>期限：</span>
+                              <span style={smallLabel}>{t.due_date}</span>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </Card>
+        )}
+
+        {/* ✅ 行動 */}
+        {(filter === "all" || filter === "action") && (
+          <Card style={cardStyle}>
+            <div style={sectionCardBody}>
+              <div style={sectionHead}>
+                <h3 style={{ marginTop: 0 }}>実施した行動</h3>
+                <div style={sectionStats}>
+                  <span style={statPill}>合計数: {actionsCount}</span>
+                  <span style={statPill}>合計ボリューム: {actionsVol}</span>
+                </div>
+              </div>
+
+              {doneActionEntries.length === 0 ? (
+                <p>まだありません</p>
+              ) : (
+                <div style={listWrap}>
+                  {doneActionEntries.map((e: any) => {
+                    const a = actionById.get(e.action_id);
+                    const title = a ? (a.kind ?? a.title) : "（不明）";
+
+                    return (
+                      <div key={e.id} style={itemCard}>
+                        <div style={itemRow}>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={itemTitle}>
+                              {title}{" "}
+                              <span style={{ marginLeft: 8 }}>
+                                <CategoryBadge category={a?.category} />
+                              </span>
+                            </div>
+
+                            {e.note ? (
+                              <div style={{ ...smallLabel, marginTop: 6, opacity: 0.85 }}>
+                                {e.note}
+                              </div>
+                            ) : null}
+
+                            <div style={metaLine}>
+                              <VolBar value={(e as any).volume} />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </Card>
+        )}
       </div>
     </>
   );

@@ -7,9 +7,17 @@ export type ReleaseNote = {
 };
 
 // ここだけ編集すればOKにする（最上位）
-export const APP_VERSION = "0.9.0";
+export const APP_VERSION = "0.9.1";
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+    {
+        date: "2026-02-17",
+        version: "0.9.1",
+        items: [
+            "記録タブ、振り返りタブで表示する項目をタブ選択可能に",
+            "登録タブのタブ選択UIの改善",
+        ],
+    },
     {
         date: "2026-02-17",
         version: "0.9.0",
