@@ -463,7 +463,7 @@ export default function ReviewView({
                 <div style={listWrap}>
                   {doneActionEntries.map((e: any) => {
                     const a = actionById.get(e.action_id);
-                    const title = a ? (a.kind ?? a.title) : "（不明）";
+                    const title = a ? (a.kind) : "（不明）";
 
                     return (
                       <div key={e.id} style={itemCard}>

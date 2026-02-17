@@ -335,7 +335,7 @@ export default function TodayView({
                         <div style={{ minWidth: 0, display: "grid", gap: 4 }}>
                             <div style={{ display: "flex", gap: 8, alignItems: "center", minWidth: 0 }}>
                                 <div style={{ fontWeight: 700, minWidth: 0, wordBreak: "break-word", lineHeight: 1.3 }}>
-                                    {a ? (a.kind ?? a.title) : "（不明）"}
+                                    {a ? (a.kind) : "（不明）"}
                                 </div>
                                 <div style={{ flexShrink: 0, opacity: 0.85 }}>
                                     <CategoryBadge category={a?.category} />
@@ -379,7 +379,7 @@ export default function TodayView({
         return (
             <li style={{ marginBottom: 8 }}>
                 <div style={{ border: "1px solid var(--border)", borderRadius: 12, padding: 10, background: "var(--card)" }}>
-                    <div style={{ fontWeight: 600, marginBottom: 8 }}>{a ? (a.kind ?? a.title) : "（不明）"}</div>
+                    <div style={{ fontWeight: 600, marginBottom: 8 }}>{a ? (a.kind) : "（不明）"}</div>
 
                     <div style={{ display: "grid", gap: 10 }}>
                         <label>
@@ -388,7 +388,7 @@ export default function TodayView({
                                 {activeActions.length === 0 ? <option value="">（表示中の行動がありません）</option> : null}
                                 {activeActions.map((a) => (
                                     <option key={a.id} value={a.id}>
-                                        {a.kind ?? a.title}
+                                        {a.kind}
                                     </option>
                                 ))}
                             </select>

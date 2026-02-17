@@ -14,8 +14,7 @@ export type Action = {
   id: string;
   user_id: string;
   category: string;
-  title: string;     // 互換で残してOK
-  kind: string | null;
+  kind: string;
   is_active: boolean;
   is_hidden: boolean;
   created_at: string;

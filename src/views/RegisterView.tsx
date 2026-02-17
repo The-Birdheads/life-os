@@ -473,13 +473,13 @@ export default function RegisterView({
 
     function ActionRow({ actionItem, onSave }: { actionItem: Action; onSave: (patch: Partial<Action>) => Promise<void> }) {
       const [editing, setEditing] = useState(false);
-      const initialKind = (actionItem as any).kind ?? actionItem.title;
+      const initialKind = (actionItem as any).kind;
 
       const [kind, setKind] = useState<string>(initialKind);
       const [category, setCategory] = useState(actionItem.category);
 
       useEffect(() => {
-        const k = (actionItem as any).kind ?? actionItem.title;
+        const k = (actionItem as any).kind ;
         setKind(k);
         setCategory(actionItem.category);
       }, [actionItem]);
@@ -490,7 +490,7 @@ export default function RegisterView({
             <div style={{ flex: 1, minWidth: 0, display: "grid", gap: 4 }}>
               <div style={{ display: "flex", gap: 8, alignItems: "center", minWidth: 0 }}>
                 <div style={{ ...titleLine, minWidth: 0 }}>
-                  {(actionItem as any).kind ?? actionItem.title}
+                  {(actionItem as any).kind}
                 </div>
                 <div style={{ flexShrink: 0, opacity: 0.85 }}>
                   <CategoryBadge category={actionItem.category} />
@@ -571,7 +571,6 @@ export default function RegisterView({
                   await onSave({
                     category: category ?? "other",
                     kind: safeKind,
-                    title: safeKind,
                   } as any);
 
                   setEditing(false);
@@ -673,14 +672,15 @@ export default function RegisterView({
                   onSave={async (patch) => {
                     try {
                       setMsg("");
-                      const k = (patch as any).kind;
-                      const finalPatch = typeof k === "string" ? ({ ...(patch as any), title: k } as any) : patch;
-                      await updateAction(a.id, finalPatch as any);
+
+                      await updateAction(a.id, patch as any);
+
                       setMsg("行動を更新しました。");
                     } catch (e: any) {
                       setMsg(e?.message ?? "更新エラー");
                     }
                   }}
+
                 />
               ))}
             </div>
