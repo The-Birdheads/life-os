@@ -15,6 +15,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
         version: "0.9.1",
         items: [
             "記録タブ、振り返りタブで表示する項目をタブ選択可能に",
+            "充実度の編集済、編集前の表示を出し分け",
             "登録タブのタブ選択UIの改善",
             "見出しの追加、UI改善",
         ],

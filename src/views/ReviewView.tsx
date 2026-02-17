@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from "react";
 import type { Action, Task } from "../lib/types";
 
 import Card from "../components/ui/Card";
+import IconBtn from "../components/ui/IconBtn";
 
 import CategoryBadge from "../components/badges/CategoryBadge";
 import PriorityBadge from "../components/badges/PriorityBadge";
@@ -62,6 +63,10 @@ export default function ReviewView({
   // ✅ Segmented filter
   const [filter, setFilter] = useState<Filter>("all");
 
+  // ✅ 「一度でも保存されたか」＋「編集モード」
+  const [hasSavedReview, setHasSavedReview] = useState(false);
+  const [isEditingReview, setIsEditingReview] = useState(true);
+
   useEffect(() => {
     if (!userId) return;
 
@@ -85,8 +90,14 @@ export default function ReviewView({
         return;
       }
 
+      // ✅ その日の保存有無で初期表示を決める
+      const saved = !!data; // レコードがある＝一度でも保存された
+      setHasSavedReview(saved);
+      setIsEditingReview(!saved); // 未保存→編集、保存済→確認
+
       setNote(data?.note ?? "");
       setFulfillment(typeof data?.fulfillment === "number" ? data.fulfillment : 0);
+
       setReviewLoading(false);
     })();
   }, [userId, day, setMsg, setNote, setFulfillment, supabase]);
@@ -132,7 +143,12 @@ export default function ReviewView({
     );
 
     if (error) throw error;
+
     setMsg("振り返りを保存しました。");
+
+    // ✅ 保存後は「登録済」扱いにして確認画面へ
+    setHasSavedReview(true);
+    setIsEditingReview(false);
   }
 
   // --- UI parts style (Today/Registerと揃える) ---
@@ -195,62 +211,143 @@ export default function ReviewView({
     opacity: 0.8,
   };
 
+  // ✅ 充実度「確認」画面用の見た目
+  const confirmWrap: React.CSSProperties = {
+    display: "grid",
+    gap: 12,
+  };
+
+  const confirmRow: React.CSSProperties = {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "baseline",
+    gap: 12,
+  };
+
+  const bigNumber: React.CSSProperties = {
+    fontSize: 36,
+    fontWeight: 900,
+    lineHeight: 1,
+    letterSpacing: 0.2,
+  };
+
+  const confirmLabel: React.CSSProperties = {
+    fontSize: 12,
+    opacity: 0.7,
+  };
+
+  const noteBox: React.CSSProperties = {
+    border: "1px solid rgba(0,0,0,0.12)",
+    borderRadius: 12,
+    padding: "10px 12px",
+    background: "rgba(255,255,255,0.02)",
+    whiteSpace: "pre-wrap",
+    lineHeight: 1.4,
+  };
+
   return (
     <>
       <div style={{ display: "grid", gap: space.xl }}>
-        {/* ✅ 見出し：充実度 */}
-        <SectionTitle title="充実度" />
+        {/* ✅ 見出し：充実度（右に編集ボタンを出す） */}
+        <SectionTitle
+          title="充実度"
+          right={
+            hasSavedReview && !isEditingReview ? (
+              <IconBtn title="編集" onClick={() => setIsEditingReview(true)}>
+                ✏️
+              </IconBtn>
+            ) : null
+          }
+        />
 
-        {/* 充実度 / メモ */}
+        {/* ✅ 充実度Card：未登録時＆編集時 / 登録済で出し分け */}
         <Card style={cardStyle}>
           {reviewLoading && <small style={{ opacity: 0.7 }}>読み込み中…</small>}
-          <div style={{ display: "grid", gap: 10 }}>
-            <label>
-              充実度（1-100）
-              <div style={{ display: "grid", gap: 6 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                  <b>{fulfillment || 0}</b>
-                  <input
-                    type="number"
-                    min={1}
-                    max={100}
-                    value={fulfillment}
-                    onChange={(e) => setFulfillment(Number(e.target.value))}
-                    style={{ width: 90, boxSizing: "border-box" }}
-                  />
+
+          {/* 登録済＆確認モード */}
+          {hasSavedReview && !isEditingReview ? (
+            <div style={confirmWrap}>
+              <div style={confirmRow}>
+                <div>
+                  <div style={confirmLabel}>充実度</div>
+                  <div style={bigNumber}>{fulfillment ? fulfillment : "—"}</div>
                 </div>
 
-                <input
-                  type="range"
-                  min={1}
-                  max={100}
-                  step={1}
-                  value={Math.min(100, Math.max(1, Number(fulfillment) || 1))}
-                  onChange={(e) => setFulfillment(Number(e.target.value))}
-                  style={{ width: "100%" }}
-                />
-
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, opacity: 0.7 }}>
-                  <span>1</span>
-                  <span>50</span>
-                  <span>100</span>
+                <div style={{ textAlign: "right" }}>
+                  <div style={confirmLabel}>範囲</div>
+                  <div style={{ fontSize: 12, opacity: 0.75 }}>1〜100</div>
                 </div>
               </div>
-            </label>
 
-            <label>
-              振り返りメモ
-              <textarea
-                rows={5}
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                style={{ width: "100%", boxSizing: "border-box" }}
-                placeholder="例：今日はタスク偏重だった。明日は回復系を1つ入れる。"
-              />
-            </label>
+              <div>
+                <div style={{ ...confirmLabel, marginBottom: 6 }}>振り返りメモ</div>
+                <div style={noteBox}>{note.trim() ? note : "（メモは未入力です）"}</div>
+              </div>
+            </div>
+          ) : (
+            /* 未登録 or 編集モード（現在の編集可能な画面） */
+            <div style={{ display: "grid", gap: 10 }}>
+              <label>
+                <div style={confirmLabel}>充実度を1～100の範囲で入力</div>
+                <div style={{ display: "grid", gap: 6 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                    <b>{fulfillment || 0}</b>
+                    <input
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={fulfillment}
+                      onChange={(e) => setFulfillment(Number(e.target.value))}
+                      style={{ width: 90, boxSizing: "border-box" }}
+                    />
+                  </div>
 
-            <PrimaryBtn onClick={saveReview}>保存</PrimaryBtn>
-          </div>
+                  <input
+                    type="range"
+                    min={1}
+                    max={100}
+                    step={1}
+                    value={Math.min(100, Math.max(1, Number(fulfillment) || 1))}
+                    onChange={(e) => setFulfillment(Number(e.target.value))}
+                    style={{ width: "100%" }}
+                  />
+
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, opacity: 0.7 }}>
+                    <span>1</span>
+                    <span>50</span>
+                    <span>100</span>
+                  </div>
+                </div>
+              </label>
+
+              <label>
+                <div style={{ ...confirmLabel, marginBottom: 6 }}>振り返りメモを入力</div>
+                <textarea
+                  rows={5}
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  style={{ width: "100%", boxSizing: "border-box" }}
+                  placeholder="例：今日はタスク偏重だった。明日は回復系を1つ入れる。"
+                />
+              </label>
+
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                {hasSavedReview ? (
+                  <IconBtn
+                    title="キャンセル"
+                    onClick={() => {
+                      // 保存済のときだけ「確認画面に戻る」
+                      setIsEditingReview(false);
+                    }}
+                  >
+                    ✖️
+                  </IconBtn>
+                ) : null}
+
+                <PrimaryBtn onClick={saveReview}>保存</PrimaryBtn>
+              </div>
+            </div>
+          )}
         </Card>
 
         {/* ✅ 見出し：実施したこと一覧（SegmentedBarの上） */}
@@ -380,9 +477,7 @@ export default function ReviewView({
                             </div>
 
                             {e.note ? (
-                              <div style={{ ...smallLabel, marginTop: 6, opacity: 0.85 }}>
-                                {e.note}
-                              </div>
+                              <div style={{ ...smallLabel, marginTop: 6, opacity: 0.85 }}>{e.note}</div>
                             ) : null}
 
                             <div style={metaLine}>
