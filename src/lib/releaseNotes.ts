@@ -7,9 +7,19 @@ export type ReleaseNote = {
 };
 
 // ここだけ編集すればOKにする（最上位）
-export const APP_VERSION = "0.8.3";
+export const APP_VERSION = "0.9.0";
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+    {
+        date: "2026-02-17",
+        version: "0.9.0",
+        items: [
+            "下タブのアイコン追加",
+            "日付切り替えをヘッダーバーへ統一",
+            "ダークモードを削除しモードを統一",
+            "ヘッダーの整理等、全体的なUIの調整",
+        ],
+    },
     {
         date: "2026-02-16",
         version: "0.8.3",

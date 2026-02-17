@@ -10,6 +10,8 @@ import VolBar from "../components/badges/VolBar";
 import PrimaryBtn from "../components/ui/PrimaryBtn";
 import SecondaryBtn from "../components/ui/SecondaryBtn";
 
+import { space } from "../lib/ui/spacing";
+
 type RegisterTab = "habit" | "oneoff" | "action";
 
 type Props = {
@@ -692,8 +694,9 @@ export default function RegisterView({
 
   return (
     <>
+    <div style={{ display: "grid", gap: space.lg }}>
+
       <Card style={cardStyle}>
-        <h2 style={{ marginTop: 0 }}>登録</h2>
         <div
           style={{
             display: "grid",
@@ -728,6 +731,7 @@ export default function RegisterView({
       {registerTab === "habit" && <TasksView fixedType="habit" title="習慣" />}
       {registerTab === "oneoff" && <TasksView fixedType="oneoff" title="タスク" />}
       {registerTab === "action" && <ActionsView />}
+      </div>
     </>
   );
 }

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Task } from "../lib/types";
 import Card from "../components/ui/Card";
-import DateNav from "../components/ui/DateNav";
+
 
 
 type Tab = "today" | "review" | "week" | "register";
@@ -47,7 +47,6 @@ export default function WeekView({
         {
             day: string;
             habitDone: number;
-            habitTotal: number;
             taskDone: number;
             actionDone: number;
             fulfillment: number | null;
@@ -60,11 +59,6 @@ export default function WeekView({
     const days = useMemo(
         () => Array.from({ length: 7 }, (_, i) => addDaysISO(startDay, i)),
         [startDay]
-    );
-
-    const habitTotal = useMemo(
-        () => tasks.filter((t) => t.task_type === "habit" && t.is_active).length,
-        [tasks]
     );
 
     useEffect(() => {
@@ -134,7 +128,6 @@ export default function WeekView({
                 const nextRows = days.map((d) => ({
                     day: d,
                     habitDone: habitDoneMap.get(d) ?? 0,
-                    habitTotal,
                     taskDone: oneoffDoneMap.get(d) ?? 0,
                     actionDone: actionCountMap.get(d) ?? 0,
                     fulfillment: fulfillmentMap.get(d) ?? null,
@@ -147,7 +140,7 @@ export default function WeekView({
                 setWeekLoading(false);
             }
         })();
-    }, [userId, startDay, endDay, days, tasks, habitTotal, setMsg, supabase]);
+    }, [userId, startDay, endDay, days, tasks, setMsg, supabase]);
 
     const avg = useMemo(() => {
         const vals = rows.map((r) => r.fulfillment).filter((v): v is number => typeof v === "number");
@@ -170,13 +163,7 @@ export default function WeekView({
     return (
         <>
             <Card style={cardStyle}>
-                {/* ✅ 週タブでも日付ナビ */}
-                <div style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
-                    <DateNav day={day} setDay={setDay} label="" />
-                </div>
-            </Card>
-            <Card style={cardStyle}>
-                <h2 style={{ marginTop: 12 }}>{startDay} 〜 {endDay} の7日間</h2>
+                <h2 style={{ marginTop: 12 }}>{endDay} までの7日間</h2>
                 <div> 平均 充実度: <b>{avg.toFixed(1)}</b>
                     {weekLoading ? <small style={{ marginLeft: 8, opacity: 0.7 }}>読み込み中…</small> : null}
                 </div>
@@ -253,7 +240,7 @@ export default function WeekView({
                                     </td>
 
                                     <td style={{ padding: cellPad, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>
-                                        {r.habitDone} / {r.habitTotal}
+                                        {r.habitDone}
                                     </td>
                                     <td style={{ padding: cellPad, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>
                                         {r.taskDone}

@@ -1,16 +1,4 @@
-export const theme = {
-  bg: "var(--bg)",
-  text: "var(--text)",
-  card: "var(--card)",
-  border: "var(--border)",
-  toastBg: "var(--toast-bg)",
-  toastText: "var(--toast-text)",
-
-  // ▼追加
-  menuBg: "var(--card)",
-  menuBorder: "var(--border)",
-  menuText: "var(--text)",
-};
+import { theme } from "./theme";
 
 export const cardStyle: React.CSSProperties = {
   background: theme.card,

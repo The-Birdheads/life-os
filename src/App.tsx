@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "./lib/supabase";
 import { todayJST } from "./lib/day";
+import { clampDayToToday, addDaysJST, canGoNextDay } from "./lib/dayNav";
 import type { Action, Task } from "./lib/types";
 import AuthView from "./views/AuthView";
 import AppShell from "./views/AppShell";
@@ -21,25 +22,8 @@ import {
 type Tab = "today" | "review" | "week" | "register";
 type Mode = "signIn" | "signUp";
 
-// ---- 日付ユーティリティ（差分最小：lib/day.ts は触らない）----
-function pad2(n: number) {
-  return String(n).padStart(2, "0");
-}
-
-// day が "YYYY-MM-DD" の想定
-function addDaysISO(dayISO: string, delta: number) {
-  const d = new Date(`${dayISO}T00:00:00+09:00`); // JST固定で計算
-  d.setDate(d.getDate() + delta);
-  const y = d.getFullYear();
-  const m = pad2(d.getMonth() + 1);
-  const dd = pad2(d.getDate());
-  return `${y}-${m}-${dd}`;
-}
-
 function toHeaderDateLabel(dayISO: string) {
-  // "YYYY / MM / DD" 表示
   const [y, m, d] = dayISO.split("-");
-  if (!y || !m || !d) return dayISO;
   return `${y} / ${m} / ${d}`;
 }
 
@@ -50,35 +34,44 @@ export default function App() {
   const [password, setPassword] = useState("");
   const [userId, setUserId] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [msg, setMsg] = useState<string>("");
+  const [msg, setMsg] = useState("");
 
   useEffect(() => {
     if (!msg) return;
-
-    const t = setTimeout(() => {
-      setMsg("");
-    }, 3000);
-
+    const t = setTimeout(() => setMsg(""), 3000);
     return () => clearTimeout(t);
   }, [msg]);
 
-  const [todayActionEntries, setTodayActionEntries] = useState<any[]>([]);
-
   // ------- UI -------
   const [tab, setTab] = useState<Tab>("today");
+
   useEffect(() => {
     setMsg("");
   }, [tab]);
 
-  const [day, setDay] = useState(() => todayJST());
+  // ⭐ 日付状態（唯一の真実）
+  const [day, _setDay] = useState(() => todayJST());
+
+  // ⭐ 安全 setter（全経路ここ通過）
+  const safeSetDay = (d: string) => {
+    _setDay(clampDayToToday(d));
+  };
+
+  // ⭐ 日付移動も統一
+  const safeShiftDay = (delta: number) => {
+    safeSetDay(addDaysJST(day, delta));
+  };
+
+  const canNext = canGoNextDay(day);
 
   // ------- Data -------
   const [tasks, setTasks] = useState<Task[]>([]);
   const [actions, setActions] = useState<Action[]>([]);
   const [doneTaskIds, setDoneTaskIds] = useState<Set<string>>(new Set());
   const [doneTaskIdsAnyDay, setDoneTaskIdsAnyDay] = useState<Set<string>>(new Set());
+  const [todayActionEntries, setTodayActionEntries] = useState<any[]>([]);
   const [note, setNote] = useState("");
-  const [fulfillment, setFulfillment] = useState<number>(0);
+  const [fulfillment, setFulfillment] = useState(0);
 
   // ------- Auth init -------
   useEffect(() => {
@@ -95,6 +88,12 @@ export default function App() {
     });
 
     return () => sub.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const handler = (e: any) => safeSetDay(e.detail);
+    window.addEventListener("lifeos:setDay", handler);
+    return () => window.removeEventListener("lifeos:setDay", handler);
   }, []);
 
   async function onSubmit(e: React.FormEvent) {
@@ -124,36 +123,22 @@ export default function App() {
   async function signInWithGoogle() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: {
-        redirectTo: window.location.origin,
-      },
+      options: { redirectTo: window.location.origin },
     });
-
     if (error) throw error;
   }
 
-  // ------- Load base data -------
+  // ------- Load base -------
   async function loadBase() {
     if (!userId) return;
-
-    const res = await fetchBase({
-      supabase,
-      userId,
-    });
-
+    const res = await fetchBase({ supabase, userId });
     setTasks(res.tasks);
     setActions(res.actions);
   }
 
   async function loadTodayEntries() {
     if (!userId) return;
-
-    const res = await fetchTodayEntries({
-      supabase,
-      userId,
-      day,
-    });
-
+    const res = await fetchTodayEntries({ supabase, userId, day });
     setDoneTaskIds(res.doneTaskIds);
     setDoneTaskIdsAnyDay(res.doneTaskIdsAnyDay);
     setTodayActionEntries(res.todayActionEntries);
@@ -161,26 +146,12 @@ export default function App() {
 
   useEffect(() => {
     if (!userId) return;
-    (async () => {
-      try {
-        await loadBase();
-      } catch (e: any) {
-        setMsg(e?.message ?? "読み込みエラー");
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    loadBase().catch((e: any) => setMsg(e?.message ?? "読み込みエラー"));
   }, [userId]);
 
   useEffect(() => {
     if (!userId) return;
-    (async () => {
-      try {
-        await loadTodayEntries();
-      } catch (e: any) {
-        setMsg(e?.message ?? "読み込みエラー");
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    loadTodayEntries().catch((e: any) => setMsg(e?.message ?? "読み込みエラー"));
   }, [userId, day]);
 
   // ------- Render -------
@@ -201,8 +172,8 @@ export default function App() {
     );
   }
 
-  // ✅ ヘッダに渡す日付表示（register 以外）
-  const headerDateLabel = tab !== "register" ? toHeaderDateLabel(day) : undefined;
+  const headerDateLabel =
+    tab !== "register" ? toHeaderDateLabel(day) : undefined;
 
   return (
     <AppShell
@@ -215,28 +186,16 @@ export default function App() {
       containerStyle={containerStyle}
       toastWrapStyle={toastWrapStyle}
       toastStyle={toastStyle}
-      // ✅ 追加：固定ヘッダ用
       headerDateLabel={headerDateLabel}
-      onPrevDay={
-        tab !== "register"
-          ? () => {
-              setDay((d) => addDaysISO(d, -1));
-            }
-          : undefined
-      }
-      onNextDay={
-        tab !== "register"
-          ? () => {
-              setDay((d) => addDaysISO(d, 1));
-            }
-          : undefined
-      }
+      onPrevDay={tab !== "register" ? () => safeShiftDay(-1) : undefined}
+      onNextDay={tab !== "register" && canNext ? () => safeShiftDay(1) : undefined}
+      canGoNext={canNext}
     >
       {tab === "today" && (
         <TodayView
           userId={userId}
           day={day}
-          setDay={setDay}
+          setDay={safeSetDay}
           tasks={tasks}
           actions={actions}
           doneTaskIds={doneTaskIds}
@@ -267,7 +226,7 @@ export default function App() {
         <ReviewView
           userId={userId}
           day={day}
-          setDay={setDay}
+          setDay={safeSetDay}
           tasks={tasks}
           doneTaskIds={doneTaskIds}
           actions={actions}
@@ -287,11 +246,12 @@ export default function App() {
           userId={userId}
           tasks={tasks}
           day={day}
-          setDay={setDay}
+          setDay={safeSetDay}
           setTab={setTab}
           setMsg={setMsg}
           supabase={supabase}
           cardStyle={cardStyle}
+
         />
       )}
     </AppShell>

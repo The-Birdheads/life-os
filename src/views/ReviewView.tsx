@@ -2,12 +2,12 @@ import { useEffect, useState, useRef } from "react";
 import type { Action, Task } from "../lib/types";
 
 import Card from "../components/ui/Card";
-import DateNav from "../components/ui/DateNav";
 
 import CategoryBadge from "../components/badges/CategoryBadge";
 import PriorityBadge from "../components/badges/PriorityBadge";
 import VolBar from "../components/badges/VolBar";
 import PrimaryBtn from "../components/ui/PrimaryBtn";
+import { space } from "../lib/ui/spacing";
 
 type Props = {
   userId: string | null;
@@ -33,7 +33,6 @@ type Props = {
 export default function ReviewView({
   userId,
   day,
-  setDay,
   tasks,
   doneTaskIds,
   actions,
@@ -197,11 +196,7 @@ export default function ReviewView({
 
   return (
     <>
-      <Card style={cardStyle}>
-        <div style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
-          <DateNav day={day} setDay={setDay} />
-        </div>
-      </Card>
+    <div style={{ display: "grid", gap: space.xl }}>
 
       <Card style={cardStyle}>
         {reviewLoading && <small style={{ opacity: 0.7 }}>読み込み中…</small>}
@@ -376,6 +371,7 @@ export default function ReviewView({
           )}
         </div>
       </Card>
+      </div>
     </>
   );
 }

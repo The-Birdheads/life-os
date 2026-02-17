@@ -1,24 +1,30 @@
-import { todayJST } from "../../lib/day";
 import { useRef } from "react";
-
-function addDaysJST(day: string, delta: number) {
-  const d = new Date(`${day}T00:00:00+09:00`);
-  d.setDate(d.getDate() + delta);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${dd}`;
-}
 
 type Props = {
   day: string;
-  setDay: (d: string) => void;
+
+  // ✅ App.tsxで一元化した安全関数を渡す
+  onPrev: () => void;
+  onNext: () => void;
+  canNext: boolean;
+
+  // ✅ date input からの日付変更も安全関数（safeSetDay）に繋ぐ
+  onPick: (d: string) => void;
+
+  // ✅ input の max を App 側で渡す（例：todayJST()）
+  maxDay: string;
+
   label?: string;
 };
 
-export default function DateNav({ day, setDay }: Props) {
-  const maxDay = todayJST();
-  const canNext = day < maxDay;
+export default function DateNav({
+  day,
+  onPrev,
+  onNext,
+  canNext,
+  onPick,
+  maxDay,
+}: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const navBtn: React.CSSProperties = {
@@ -54,21 +60,20 @@ export default function DateNav({ day, setDay }: Props) {
     fontWeight: 700,
     letterSpacing: "0.06em",
     fontSize: 18,
+    whiteSpace: "nowrap",
   };
 
   const overlayDateInput: React.CSSProperties = {
     position: "absolute",
-    inset: 0,          // ✅ top/left/right/bottom を全部 0（ズレ防止）
+    inset: 0,
     width: "100%",
     height: "100%",
-    opacity: 0,        // ✅ 見えないが、クリック/タップは拾う
+    opacity: 0,
     cursor: "pointer",
-    zIndex: 1,         // ✅ 表示の上に確実に乗せる
+    zIndex: 1,
     border: "none",
     background: "transparent",
   };
-
-
 
   return (
     <div
@@ -81,40 +86,33 @@ export default function DateNav({ day, setDay }: Props) {
         position: "relative",
       }}
     >
-      <button
-        type="button"
-        onClick={() => setDay(addDaysJST(day, -1))}
-        aria-label="前日"
-        style={navBtn}
-      >
+      <button type="button" onClick={onPrev} aria-label="前日" style={navBtn}>
         ◀
       </button>
 
       <div style={dateWrap}>
-        <div style={dateDisplay}>
-          {day.replaceAll("-", " / ")}
-        </div>
+        <div style={dateDisplay}>{day.replaceAll("-", " / ")}</div>
 
         <input
           ref={inputRef}
           type="date"
           value={day}
           max={maxDay}
-          onChange={(e) => setDay(e.target.value)}
+          onChange={(e) => onPick(e.target.value)}
           aria-label="日付を選択"
           style={overlayDateInput}
           onPointerDown={() => {
-            // ✅ Chrome系は showPicker が効く（ユーザー操作中ならOK）
             const el = inputRef.current as any;
             if (el?.showPicker) el.showPicker();
           }}
         />
       </div>
 
-
       <button
         type="button"
-        onClick={() => setDay(addDaysJST(day, +1))}
+        onClick={() => {
+          if (canNext) onNext();
+        }}
         disabled={!canNext}
         aria-label="翌日"
         style={{
@@ -127,5 +125,4 @@ export default function DateNav({ day, setDay }: Props) {
       </button>
     </div>
   );
-
 }

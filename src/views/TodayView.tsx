@@ -2,13 +2,13 @@ import { useEffect, useState } from "react";
 import type { Action, Task } from "../lib/types";
 
 import Card from "../components/ui/Card";
-import DateNav from "../components/ui/DateNav";
 import IconBtn from "../components/ui/IconBtn";
 
 import CategoryBadge from "../components/badges/CategoryBadge";
 import PriorityBadge from "../components/badges/PriorityBadge";
 import VolBar from "../components/badges/VolBar";
 import PrimaryBtn from "../components/ui/PrimaryBtn";
+import { space } from "../lib/ui/spacing";
 
 type Props = {
     userId: string;
@@ -34,7 +34,6 @@ type Props = {
 export default function TodayView({
     userId,
     day,
-    setDay,
     tasks,
     actions,
     doneTaskIds,
@@ -448,122 +447,119 @@ export default function TodayView({
 
     return (
         <>
-            <Card style={cardStyle}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <DateNav day={day} setDay={setDay} />
-                </div>
-            </Card>
+            <div style={{ display: "grid", gap: space.xl }}>
 
-            <Card style={cardStyle}>
-                <h3 style={{ marginTop: 0 }}>習慣</h3>
-                {sortedHabits.length === 0 ? (
-                    <p>まだありません（タスクタブで追加）</p>
-                ) : (
-                    <ul style={{ listStyle: "none", paddingLeft: 0, margin: 0 }}>
-                        {sortedHabits.map((t) => {
-                            const isHidden = !!(t as any).is_hidden;
-                            const checked = doneTaskIds.has(t.id);
-                            const isPastDone = doneTaskIdsAnyDay.has(t.id);
-
-                            return (
-                                <li key={t.id} style={{ marginBottom: 10 }}>
-                                    <label
-                                        style={{ ...rowLabelStyle, ...rowCard }}
-                                        onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.01)")}
-                                        onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
-                                    >
-                                        <input
-                                            type="checkbox"
-                                            checked={checked}
-                                            onChange={(e) => toggleTaskDone(t.id, e.target.checked)}
-                                            style={{ alignSelf: "center" }}
-                                        />
-
-                                        <div style={{ display: "grid", gap: 4 }}>
-                                            <div style={titleStyle(checked)}>{t.title}</div>
-
-                                            <div style={metaLineStyle}>
-                                                <PriorityBadge value={(t as any).priority} />
-                                                <VolBar value={(t as any).volume} />
-                                                {isHidden && (checked || isPastDone) ? <small style={{ opacity: 0.6 }}>（非表示・履歴のため表示）</small> : null}
-                                            </div>
-                                        </div>
-                                    </label>
-                                </li>
-                            );
-                        })}
-                    </ul>
-                )}
-            </Card>
-
-            <Card style={cardStyle}>
-                <h3 style={{ marginTop: 0 }}>タスク</h3>
-                {sortedOneoffs.length === 0 ? (
-                    <p>タスクがありません（タスクタブで追加）</p>
-                ) : (
-                    <ul style={{ listStyle: "none", paddingLeft: 0, margin: 0 }}>
-                        {sortedOneoffs.map((t) => {
-                            const checked = doneTaskIds.has(t.id);
-                            const isHidden = !!(t as any).is_hidden;
-
-                            return (
-                                <li key={t.id} style={{ marginBottom: 10 }}>
-                                    <label
-                                        style={{ ...rowLabelStyle, ...rowCard }}
-                                        onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.01)")}
-                                        onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
-                                    >
-                                        <input
-                                            type="checkbox"
-                                            checked={checked}
-                                            onChange={(e) => toggleTaskDone(t.id, e.target.checked)}
-                                            style={{ alignSelf: "center" }}
-                                        />
-
-                                        <div style={{ display: "grid", gap: 4 }}>
-                                            <div style={titleStyle(checked)}>{t.title}</div>
-
-                                            <div style={metaLineStyle}>
-                                                <PriorityBadge value={(t as any).priority} />
-                                                <VolBar value={(t as any).volume} />
-                                                {isHidden && checked ? <small style={{ opacity: 0.6 }}>（非表示・当日完了のため表示）</small> : null}
-                                                {/* タスクは「過去完了だけ」では表示されない仕様なので、注釈も checked のみにする */}
-                                            </div>
-
-                                            {t.due_date ? (
-                                                <div style={dueStyle}>
-                                                    <span style={{ marginRight: 4 }}>期限：</span>
-                                                    {t.due_date}
-                                                </div>
-                                            ) : null}
-                                        </div>
-                                    </label>
-                                </li>
-                            );
-                        })}
-                    </ul>
-                )}
-            </Card>
-
-            <Card style={cardStyle}>
-                <h3 style={{ marginTop: 0 }}>行動（都度入力）</h3>
-
-                <ActionEntryForm activeActions={activeActions} />
-
-                <div style={{ marginTop: 12 }}>
-                    <h4 style={{ margin: "12px 0 6px" }}>今日の行動ログ</h4>
-
-                    {todayActionEntries.length === 0 ? (
-                        <p>まだありません</p>
+                <Card style={cardStyle}>
+                    <h3 style={{ marginTop: 0 }}>習慣</h3>
+                    {sortedHabits.length === 0 ? (
+                        <p>まだありません（タスクタブで追加）</p>
                     ) : (
-                        <ul style={{ listStyle: "none", paddingLeft: 0, margin: 0, display: "grid", gap: 10 }}>
-                            {(todayActionEntries ?? []).map((e: any) => (
-                                <ActionEntryRow key={e.id} entry={e} />
-                            ))}
+                        <ul style={{ listStyle: "none", paddingLeft: 0, margin: 0 }}>
+                            {sortedHabits.map((t) => {
+                                const isHidden = !!(t as any).is_hidden;
+                                const checked = doneTaskIds.has(t.id);
+                                const isPastDone = doneTaskIdsAnyDay.has(t.id);
+
+                                return (
+                                    <li key={t.id} style={{ marginBottom: 10 }}>
+                                        <label
+                                            style={{ ...rowLabelStyle, ...rowCard }}
+                                            onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.01)")}
+                                            onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                checked={checked}
+                                                onChange={(e) => toggleTaskDone(t.id, e.target.checked)}
+                                                style={{ alignSelf: "center" }}
+                                            />
+
+                                            <div style={{ display: "grid", gap: 4 }}>
+                                                <div style={titleStyle(checked)}>{t.title}</div>
+
+                                                <div style={metaLineStyle}>
+                                                    <PriorityBadge value={(t as any).priority} />
+                                                    <VolBar value={(t as any).volume} />
+                                                    {isHidden && (checked || isPastDone) ? <small style={{ opacity: 0.6 }}>（非表示・履歴のため表示）</small> : null}
+                                                </div>
+                                            </div>
+                                        </label>
+                                    </li>
+                                );
+                            })}
                         </ul>
                     )}
-                </div>
-            </Card>
+                </Card>
+
+                <Card style={cardStyle}>
+                    <h3 style={{ marginTop: 0 }}>タスク</h3>
+                    {sortedOneoffs.length === 0 ? (
+                        <p>タスクがありません（タスクタブで追加）</p>
+                    ) : (
+                        <ul style={{ listStyle: "none", paddingLeft: 0, margin: 0 }}>
+                            {sortedOneoffs.map((t) => {
+                                const checked = doneTaskIds.has(t.id);
+                                const isHidden = !!(t as any).is_hidden;
+
+                                return (
+                                    <li key={t.id} style={{ marginBottom: 10 }}>
+                                        <label
+                                            style={{ ...rowLabelStyle, ...rowCard }}
+                                            onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.01)")}
+                                            onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                checked={checked}
+                                                onChange={(e) => toggleTaskDone(t.id, e.target.checked)}
+                                                style={{ alignSelf: "center" }}
+                                            />
+
+                                            <div style={{ display: "grid", gap: 4 }}>
+                                                <div style={titleStyle(checked)}>{t.title}</div>
+
+                                                <div style={metaLineStyle}>
+                                                    <PriorityBadge value={(t as any).priority} />
+                                                    <VolBar value={(t as any).volume} />
+                                                    {isHidden && checked ? <small style={{ opacity: 0.6 }}>（非表示・当日完了のため表示）</small> : null}
+                                                    {/* タスクは「過去完了だけ」では表示されない仕様なので、注釈も checked のみにする */}
+                                                </div>
+
+                                                {t.due_date ? (
+                                                    <div style={dueStyle}>
+                                                        <span style={{ marginRight: 4 }}>期限：</span>
+                                                        {t.due_date}
+                                                    </div>
+                                                ) : null}
+                                            </div>
+                                        </label>
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    )}
+                </Card>
+
+                <Card style={cardStyle}>
+                    <h3 style={{ marginTop: 0 }}>行動（都度入力）</h3>
+
+                    <ActionEntryForm activeActions={activeActions} />
+
+                    <div style={{ marginTop: 12 }}>
+                        <h4 style={{ margin: "12px 0 6px" }}>今日の行動ログ</h4>
+
+                        {todayActionEntries.length === 0 ? (
+                            <p>まだありません</p>
+                        ) : (
+                            <ul style={{ listStyle: "none", paddingLeft: 0, margin: 0, display: "grid", gap: 10 }}>
+                                {(todayActionEntries ?? []).map((e: any) => (
+                                    <ActionEntryRow key={e.id} entry={e} />
+                                ))}
+                            </ul>
+                        )}
+                    </div>
+                </Card>
+            </div>
         </>
     );
 }
