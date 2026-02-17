@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Task } from "../lib/types";
 import Card from "../components/ui/Card";
+import SectionTitle from "../components/ui/SectionTitle";
+import { space } from "../lib/ui/spacing";
+
 
 
 
@@ -162,8 +165,9 @@ export default function WeekView({
 
     return (
         <>
+        <div style={{ display: "grid", gap: space.lg, marginTop: space.md }}>
+        <SectionTitle title={`${endDay} までの7日間`} />
             <Card style={cardStyle}>
-                <h2 style={{ marginTop: 12 }}>{endDay} までの7日間</h2>
                 <div> 平均 充実度: <b>{avg.toFixed(1)}</b>
                     {weekLoading ? <small style={{ marginLeft: 8, opacity: 0.7 }}>読み込み中…</small> : null}
                 </div>
@@ -264,6 +268,7 @@ export default function WeekView({
                     </table>
                 </div>
             </Card>
+            </div>
         </>
     );
 }

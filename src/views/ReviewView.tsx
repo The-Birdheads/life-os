@@ -8,6 +8,7 @@ import PriorityBadge from "../components/badges/PriorityBadge";
 import VolBar from "../components/badges/VolBar";
 import PrimaryBtn from "../components/ui/PrimaryBtn";
 import SegmentedBar from "../components/ui/SegmentedBar";
+import SectionTitle from "../components/ui/SectionTitle";
 import { space } from "../lib/ui/spacing";
 
 type Filter = "all" | "habit" | "task" | "action";
@@ -178,14 +179,6 @@ export default function ReviewView({
     gap: 10,
   };
 
-  const sectionHead: React.CSSProperties = {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "baseline",
-    gap: 10,
-    padding: "0 2px",
-  };
-
   const sectionStats: React.CSSProperties = {
     display: "flex",
     gap: 8,
@@ -205,6 +198,9 @@ export default function ReviewView({
   return (
     <>
       <div style={{ display: "grid", gap: space.xl }}>
+        {/* ✅ 見出し：充実度 */}
+        <SectionTitle title="充実度" />
+
         {/* 充実度 / メモ */}
         <Card style={cardStyle}>
           {reviewLoading && <small style={{ opacity: 0.7 }}>読み込み中…</small>}
@@ -257,7 +253,10 @@ export default function ReviewView({
           </div>
         </Card>
 
-        {/* ✅ ここに SegmentedBar（充実度の下） */}
+        {/* ✅ 見出し：実施したこと一覧（SegmentedBarの上） */}
+        <SectionTitle title="実施したこと一覧" />
+
+        {/* ✅ SegmentedBar */}
         <SegmentedBar
           items={segmentedItems as any}
           value={filter}
@@ -269,13 +268,15 @@ export default function ReviewView({
         {(filter === "all" || filter === "habit") && (
           <Card style={cardStyle}>
             <div style={sectionCardBody}>
-              <div style={sectionHead}>
-                <h3 style={{ margin: 0 }}>実施した習慣</h3>
-                <div style={sectionStats}>
-                  <span style={statPill}>合計数: {habitsCount}</span>
-                  <span style={statPill}>合計ボリューム: {habitsVol}</span>
-                </div>
-              </div>
+              <SectionTitle
+                title="習慣"
+                right={
+                  <div style={sectionStats}>
+                    <span style={statPill}>合計数: {habitsCount}</span>
+                    <span style={statPill}>合計ボリューム: {habitsVol}</span>
+                  </div>
+                }
+              />
 
               {doneHabits.length === 0 ? (
                 <p>まだありません</p>
@@ -304,13 +305,15 @@ export default function ReviewView({
         {(filter === "all" || filter === "task") && (
           <Card style={cardStyle}>
             <div style={sectionCardBody}>
-              <div style={sectionHead}>
-                <h3 style={{ marginTop: 0 }}>実施したタスク</h3>
-                <div style={sectionStats}>
-                  <span style={statPill}>合計数: {tasksCount}</span>
-                  <span style={statPill}>合計ボリューム: {tasksVol}</span>
-                </div>
-              </div>
+              <SectionTitle
+                title="タスク"
+                right={
+                  <div style={sectionStats}>
+                    <span style={statPill}>合計数: {tasksCount}</span>
+                    <span style={statPill}>合計ボリューム: {tasksVol}</span>
+                  </div>
+                }
+              />
 
               {doneOneoffs.length === 0 ? (
                 <p>まだありません</p>
@@ -347,13 +350,15 @@ export default function ReviewView({
         {(filter === "all" || filter === "action") && (
           <Card style={cardStyle}>
             <div style={sectionCardBody}>
-              <div style={sectionHead}>
-                <h3 style={{ marginTop: 0 }}>実施した行動</h3>
-                <div style={sectionStats}>
-                  <span style={statPill}>合計数: {actionsCount}</span>
-                  <span style={statPill}>合計ボリューム: {actionsVol}</span>
-                </div>
-              </div>
+              <SectionTitle
+                title="行動"
+                right={
+                  <div style={sectionStats}>
+                    <span style={statPill}>合計数: {actionsCount}</span>
+                    <span style={statPill}>合計ボリューム: {actionsVol}</span>
+                  </div>
+                }
+              />
 
               {doneActionEntries.length === 0 ? (
                 <p>まだありません</p>

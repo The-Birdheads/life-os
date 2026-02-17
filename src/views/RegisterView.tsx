@@ -10,6 +10,7 @@ import VolBar from "../components/badges/VolBar";
 import PrimaryBtn from "../components/ui/PrimaryBtn";
 import SecondaryBtn from "../components/ui/SecondaryBtn";
 import SegmentedBar from "../components/ui/SegmentedBar";
+import SectionTitle from "../components/ui/SectionTitle";
 
 import { space } from "../lib/ui/spacing";
 
@@ -337,8 +338,8 @@ export default function RegisterView({
     return (
       <>
         {/* 追加カード */}
+        <SectionTitle title={`${title}追加`} />
         <Card style={cardStyle}>
-          <h2 style={{ marginTop: 0 }}>{title}追加</h2>
           <form
             onSubmit={async (e) => {
               e.preventDefault();
@@ -423,9 +424,8 @@ export default function RegisterView({
         </Card>
 
         {/* 登録済み（編集） */}
+        <SectionTitle title={`登録済み${title}（編集）`} />
         <Card style={cardStyle}>
-          <h3 style={{ marginTop: 0 }}>登録済み{title}（編集）</h3>
-
           {/* ✅ 表示中/非表示 サブタブ：SegmentedBar */}
           <SegmentedBar
             items={subTabItems as any}
@@ -601,9 +601,8 @@ export default function RegisterView({
 
     return (
       <>
+        <SectionTitle title={`行動の種類追加`} />
         <Card style={cardStyle}>
-          <h2 style={{ marginTop: 0 }}>行動（種類）追加</h2>
-
           <form
             onSubmit={async (e) => {
               e.preventDefault();
@@ -649,9 +648,8 @@ export default function RegisterView({
           </form>
         </Card>
 
+        <SectionTitle title={`登録済みの行動の種類（編集）`} />
         <Card style={cardStyle}>
-          <h3 style={{ marginTop: 0 }}>登録済みの行動の種類（編集）</h3>
-
           {/* ✅ 表示中/非表示 サブタブ：SegmentedBar */}
           <SegmentedBar
             items={subTabItems as any}
