@@ -11,6 +11,8 @@ import PrimaryBtn from "../components/ui/PrimaryBtn";
 import SegmentedBar from "../components/ui/SegmentedBar";
 import SectionTitle from "../components/ui/SectionTitle";
 import { space } from "../lib/ui/spacing";
+import TextInput from "../components/ui/TextInput";
+import Slider from "../components/ui/Slider";
 
 type Filter = "all" | "habit" | "task" | "action";
 
@@ -290,26 +292,25 @@ export default function ReviewView({
               <label>
                 <div style={confirmLabel}>充実度を1～100の範囲で入力</div>
                 <div style={{ display: "grid", gap: 6 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
                     <b>{fulfillment || 0}</b>
-                    <input
+                    <TextInput
                       type="number"
-                      min={1}
-                      max={100}
+                      min="1"
+                      max="100"
                       value={fulfillment}
                       onChange={(e) => setFulfillment(Number(e.target.value))}
-                      style={{ width: 90, boxSizing: "border-box" }}
+                      style={{ width: 90 }}
                     />
                   </div>
 
-                  <input
-                    type="range"
-                    min={1}
-                    max={100}
-                    step={1}
+                  <Slider
+                    min="1"
+                    max="100"
+                    step="1"
                     value={Math.min(100, Math.max(1, Number(fulfillment) || 1))}
                     onChange={(e) => setFulfillment(Number(e.target.value))}
-                    style={{ width: "100%" }}
+                    fullWidth
                   />
 
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, opacity: 0.7 }}>

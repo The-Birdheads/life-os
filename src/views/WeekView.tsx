@@ -7,7 +7,7 @@ import { space } from "../lib/ui/spacing";
 
 
 
-type Tab = "today" | "review" | "week" | "register";
+type Tab = "today" | "review" | "week";
 
 type Props = {
     userId: string;
@@ -165,109 +165,111 @@ export default function WeekView({
 
     return (
         <>
-        <div style={{ display: "grid", gap: space.lg, marginTop: space.md }}>
-        <SectionTitle title={`${endDay} までの7日間`} />
-            <Card style={cardStyle}>
-                <div> 平均 充実度: <b>{avg.toFixed(1)}</b>
-                    {weekLoading ? <small style={{ marginLeft: 8, opacity: 0.7 }}>読み込み中…</small> : null}
-                </div>
+            <div style={{ display: "grid", gap: space.lg, marginTop: space.md }}>
+                <SectionTitle title={`${endDay} までの7日間`} />
+                <Card style={cardStyle}>
+                    <div> 平均 充実度: <b>{avg.toFixed(1)}</b>
+                        {weekLoading ? <small style={{ marginLeft: 8, opacity: 0.7 }}>読み込み中…</small> : null}
+                    </div>
 
-                <div style={{ width: "100%" }}>
-                    <table
-                        style={{
-                            width: "100%",
-                            tableLayout: "fixed",
-                            borderCollapse: "collapse",
-                        }}
-                    >
-                        <colgroup>
-                            {/* ✅ 画面幅に合わせて均等割り（目安） */}
-                            <col style={{ width: "22%" }} />
-                            <col style={{ width: "18.5%" }} />
-                            <col style={{ width: "18.5%" }} />
-                            <col style={{ width: "18.5%" }} />
-                            <col style={{ width: "22.5%" }} />
-                        </colgroup>
+                    <div style={{ width: "100%" }}>
+                        <table
+                            style={{
+                                width: "100%",
+                                tableLayout: "fixed",
+                                borderCollapse: "collapse",
+                            }}
+                        >
+                            <colgroup>
+                                {/* ✅ 画面幅に合わせて均等割り（目安） */}
+                                <col style={{ width: "22%" }} />
+                                <col style={{ width: "18.5%" }} />
+                                <col style={{ width: "18.5%" }} />
+                                <col style={{ width: "18.5%" }} />
+                                <col style={{ width: "22.5%" }} />
+                            </colgroup>
 
-                        <thead>
-                            <tr>
-                                <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: cellPad }}>日付</th>
-                                <th style={{ textAlign: "right", borderBottom: "1px solid #eee", padding: cellPad }}>習慣</th>
-                                <th style={{ textAlign: "right", borderBottom: "1px solid #eee", padding: cellPad }}>タスク</th>
-                                <th style={{ textAlign: "right", borderBottom: "1px solid #eee", padding: cellPad }}>行動</th>
-                                <th style={{ textAlign: "right", borderBottom: "1px solid #eee", padding: cellPad }}>充実度</th>
-                            </tr>
-                        </thead>
-
-                        <tbody>
-                            {rows.map((r) => (
-                                <tr key={r.day}>
-                                    <td style={{ padding: cellPad, 
-                                        borderBottom: "1px solid #f3f4f6", 
-                                        fontSize: cellFontSize, 
-                                        overflow: "hidden" }}>
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                setDay(r.day);
-                                                setTab("review");
-                                            }}
-                                            style={{
-                                                padding: 0,
-                                                margin: 0,
-                                                border: "none",
-                                                background: "transparent",
-                                                cursor: "pointer",
-                                                textDecoration: "underline",
-                                                font: "inherit",
-                                                color: "inherit",
-                                                display: "block",     // ✅ 追加
-                                                width: "100%",        // ✅ 追加
-                                                textAlign: "left",    // ✅ 追加（好み）
-                                                overflow: "hidden",   // ✅ 念のため
-                                            }}
-                                            aria-label={`${r.day} の振り返りを開く`}
-                                        >
-                                            <span
-                                                style={{
-                                                    display: "block",
-                                                    maxWidth: "100%",
-                                                    overflow: "hidden",
-                                                    textOverflow: "ellipsis",
-                                                    whiteSpace: "nowrap",
-                                                }}
-                                                title={r.day}
-                                            >
-                                                {dayLabel(r.day)}
-                                            </span>
-                                        </button>
-                                    </td>
-
-                                    <td style={{ padding: cellPad, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>
-                                        {r.habitDone}
-                                    </td>
-                                    <td style={{ padding: cellPad, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>
-                                        {r.taskDone}
-                                    </td>
-                                    <td style={{ padding: cellPad, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>
-                                        {r.actionDone}
-                                    </td>
-                                    <td style={{ padding: cellPad, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>
-                                        {r.fulfillment == null ? "-" : r.fulfillment}
-                                    </td>
-                                </tr>
-                            ))}
-                            {rows.length === 0 && !weekLoading ? (
+                            <thead>
                                 <tr>
-                                    <td colSpan={5} style={{ padding: 12, opacity: 0.7 }}>
-                                        データがありません
-                                    </td>
+                                    <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: cellPad }}>日付</th>
+                                    <th style={{ textAlign: "right", borderBottom: "1px solid #eee", padding: cellPad }}>習慣</th>
+                                    <th style={{ textAlign: "right", borderBottom: "1px solid #eee", padding: cellPad }}>タスク</th>
+                                    <th style={{ textAlign: "right", borderBottom: "1px solid #eee", padding: cellPad }}>行動</th>
+                                    <th style={{ textAlign: "right", borderBottom: "1px solid #eee", padding: cellPad }}>充実度</th>
                                 </tr>
-                            ) : null}
-                        </tbody>
-                    </table>
-                </div>
-            </Card>
+                            </thead>
+
+                            <tbody>
+                                {rows.map((r) => (
+                                    <tr key={r.day}>
+                                        <td style={{
+                                            padding: cellPad,
+                                            borderBottom: "1px solid #f3f4f6",
+                                            fontSize: cellFontSize,
+                                            overflow: "hidden"
+                                        }}>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setDay(r.day);
+                                                    setTab("review");
+                                                }}
+                                                style={{
+                                                    padding: 0,
+                                                    margin: 0,
+                                                    border: "none",
+                                                    background: "transparent",
+                                                    cursor: "pointer",
+                                                    textDecoration: "underline",
+                                                    font: "inherit",
+                                                    color: "inherit",
+                                                    display: "block",     // ✅ 追加
+                                                    width: "100%",        // ✅ 追加
+                                                    textAlign: "left",    // ✅ 追加（好み）
+                                                    overflow: "hidden",   // ✅ 念のため
+                                                }}
+                                                aria-label={`${r.day} の振り返りを開く`}
+                                            >
+                                                <span
+                                                    style={{
+                                                        display: "block",
+                                                        maxWidth: "100%",
+                                                        overflow: "hidden",
+                                                        textOverflow: "ellipsis",
+                                                        whiteSpace: "nowrap",
+                                                    }}
+                                                    title={r.day}
+                                                >
+                                                    {dayLabel(r.day)}
+                                                </span>
+                                            </button>
+                                        </td>
+
+                                        <td style={{ padding: cellPad, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>
+                                            {r.habitDone}
+                                        </td>
+                                        <td style={{ padding: cellPad, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>
+                                            {r.taskDone}
+                                        </td>
+                                        <td style={{ padding: cellPad, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>
+                                            {r.actionDone}
+                                        </td>
+                                        <td style={{ padding: cellPad, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>
+                                            {r.fulfillment == null ? "-" : r.fulfillment}
+                                        </td>
+                                    </tr>
+                                ))}
+                                {rows.length === 0 && !weekLoading ? (
+                                    <tr>
+                                        <td colSpan={5} style={{ padding: 12, opacity: 0.7 }}>
+                                            データがありません
+                                        </td>
+                                    </tr>
+                                ) : null}
+                            </tbody>
+                        </table>
+                    </div>
+                </Card>
             </div>
         </>
     );

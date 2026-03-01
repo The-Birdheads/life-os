@@ -1,9 +1,8 @@
 import React from "react";
 import { theme } from "../../lib/ui/theme";
-import { shadow } from "../../lib/ui/shadow";
 import { radius } from "../../lib/ui/radius";
 
-type Tab = "today" | "review" | "week" | "register";
+type Tab = "today" | "review" | "week";
 
 type Props = {
   tab: Tab;
@@ -15,28 +14,27 @@ type TabItem = {
   label: string;
   emoji: string;
 };
-
 const items: TabItem[] = [
   { key: "today", label: "記録", emoji: "📝" },
   { key: "review", label: "振り返り", emoji: "🔎" },
   { key: "week", label: "週", emoji: "📅" },
-  { key: "register", label: "登録", emoji: "➕" },
 ];
 
 export default function Tabs({ tab, setTab }: Props) {
   const wrapStyle: React.CSSProperties = {
     width: "100%",
     boxSizing: "border-box",
-    padding: 6,
-    borderRadius: radius.lg,
-    background: theme.card,
-    border: `1px solid ${theme.border}`,
-    boxShadow: shadow.sm,
+    padding: "6px",
+    borderRadius: "16px",
+    background: "rgba(255, 255, 255, 0.1)", /* ダーク背景用透け感 */
+    backdropFilter: "blur(4px)",
+    border: `1px solid rgba(255,255,255,0.1)`,
+    boxShadow: "inset 0 1px 1px rgba(255,255,255,0.05)",
   };
 
   const rowStyle: React.CSSProperties = {
     display: "grid",
-    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
     gap: 6,
   };
 
@@ -77,15 +75,16 @@ export default function Tabs({ tab, setTab }: Props) {
 
           const activeStyle: React.CSSProperties = active
             ? {
-                background: theme.primarySoft,
-                borderColor: theme.border,
-                color: theme.primary,
-              }
+              background: theme.surfaceDarkText, /* アクティブ時は白く光らせる */
+              borderColor: "transparent",
+              color: theme.primary, /* 文字色はメインのダークスレート */
+              boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+            }
             : {
-                background: "transparent",
-                borderColor: "transparent",
-                color: theme.subtext, // ✅ 非選択でも読める（PCで白文字事故を防ぐ）
-              };
+              background: "transparent",
+              borderColor: "transparent",
+              color: "rgba(248, 250, 252, 0.7)", /* 非アクティブ時は薄い白抜き (surfaceDarkTextベース) */
+            };
 
           return (
             <button

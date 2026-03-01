@@ -7,8 +7,9 @@ import AuthView from "./views/AuthView";
 import AppShell from "./views/AppShell";
 import WeekView from "./views/WeekView";
 import ReviewView from "./views/ReviewView";
-import RegisterView from "./views/RegisterView";
 import TodayView from "./views/TodayView";
+import FABMenu from "./components/features/register/FABMenu";
+import RegisterModals from "./components/features/register/RegisterModals";
 import { fetchTodayEntries } from "./lib/api/today";
 import { fetchBase } from "./lib/api/base";
 import {
@@ -19,7 +20,7 @@ import {
   toastStyle,
 } from "./lib/ui/style";
 
-type Tab = "today" | "review" | "week" | "register";
+type Tab = "today" | "review" | "week";
 type Mode = "signIn" | "signUp";
 
 function toHeaderDateLabel(dayISO: string) {
@@ -72,6 +73,9 @@ export default function App() {
   const [todayActionEntries, setTodayActionEntries] = useState<any[]>([]);
   const [note, setNote] = useState("");
   const [fulfillment, setFulfillment] = useState(0);
+
+  // ------- Modals -------
+  const [openModal, setOpenModal] = useState<"habit" | "oneoff" | "action" | null>(null);
 
   // ------- Auth init -------
   useEffect(() => {
@@ -172,8 +176,7 @@ export default function App() {
     );
   }
 
-  const headerDateLabel =
-    tab !== "register" ? toHeaderDateLabel(day) : undefined;
+  const headerDateLabel = toHeaderDateLabel(day);
 
   return (
     <AppShell
@@ -187,8 +190,8 @@ export default function App() {
       toastWrapStyle={toastWrapStyle}
       toastStyle={toastStyle}
       headerDateLabel={headerDateLabel}
-      onPrevDay={tab !== "register" ? () => safeShiftDay(-1) : undefined}
-      onNextDay={tab !== "register" && canNext ? () => safeShiftDay(1) : undefined}
+      onPrevDay={() => safeShiftDay(-1)}
+      onNextDay={canNext ? () => safeShiftDay(1) : undefined}
       canGoNext={canNext}
     >
       {tab === "today" && (
@@ -206,21 +209,11 @@ export default function App() {
           supabase={supabase}
           cardStyle={cardStyle}
           loadTodayEntries={loadTodayEntries}
-        />
-      )}
-
-      {tab === "register" && (
-        <RegisterView
-          userId={userId}
-          tasks={tasks}
-          actions={actions}
-          doneTaskIdsAnyDay={doneTaskIdsAnyDay}
-          setMsg={setMsg}
-          supabase={supabase}
-          cardStyle={cardStyle}
           loadBase={loadBase}
         />
       )}
+
+
 
       {tab === "review" && (
         <ReviewView
@@ -254,6 +247,24 @@ export default function App() {
 
         />
       )}
+
+      {tab === "today" && (
+        <FABMenu onSelect={(type) => setOpenModal(type)} />
+      )}
+
+      <RegisterModals
+        openModal={openModal}
+        setOpenModal={setOpenModal}
+        userId={userId}
+        day={day}
+        tasks={tasks}
+        actions={actions}
+        doneTaskIdsAnyDay={doneTaskIdsAnyDay}
+        setMsg={setMsg}
+        supabase={supabase}
+        loadBase={loadBase}
+        loadTodayEntries={loadTodayEntries}
+      />
     </AppShell>
   );
 }

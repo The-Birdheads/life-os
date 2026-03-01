@@ -5,10 +5,9 @@ import Toast from "../components/ui/Toast";
 import Tabs from "../components/ui/Tabs";
 import PrimaryBtn from "../components/ui/PrimaryBtn";
 import { theme } from "../lib/ui/theme";
-import { shadow } from "../lib/ui/shadow";
 
 
-type Tab = "today" | "review" | "week" | "register";
+type Tab = "today" | "review" | "week";
 
 type Props = {
   userEmail: string | null;
@@ -90,19 +89,21 @@ export default function AppShell({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [releaseOpen]);
 
-  const iconBtnStyle: React.CSSProperties = {
+  const headerIconBtnStyle: React.CSSProperties = {
     appearance: "none",
-    border: `1px solid ${theme.border}`,
-    background: theme.card,
-    color: theme.text,
-    borderRadius: 12,
-    width: 38,
-    height: 38,
+    border: `1px solid rgba(255,255,255,0.15)`, /* ダーク背景用ボーダー */
+    background: "rgba(255, 255, 255, 0.1)", /* ダーク背景用透け感 */
+    backdropFilter: "blur(4px)",
+    color: theme.surfaceDarkText, /* 白抜き */
+    borderRadius: "12px",
+    width: "38px",
+    height: "38px",
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
     cursor: "pointer",
     flexShrink: 0,
+    transition: "all 0.2s ease",
   };
 
   return (
@@ -116,10 +117,13 @@ export default function AppShell({
             left: 0,
             right: 0,
             zIndex: 70,
-            background: theme.bg,
-            borderBottom: `1px solid ${theme.border}`,
-            boxShadow: shadow.sm,
+            background: theme.surfaceDark, /* シックなダーク背景 */
+            backdropFilter: "blur(12px) saturate(180%)",
+            WebkitBackdropFilter: "blur(12px) saturate(180%)",
+            borderBottom: `1px solid rgba(255,255,255,0.05)`, /* ダーク用ボーダー */
+            boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)", /* 落ちる影 */
             paddingTop: "env(safe-area-inset-top, 0px)",
+            color: theme.surfaceDarkText, /* テキストを白系に */
           }}
         >
           <div style={{
@@ -134,88 +138,85 @@ export default function AppShell({
 
             {/* CENTER */}
             <div style={{ justifySelf: "center" }}>
-              {tab === "register" ? (
-                <div style={{ fontWeight: 800 }}>登録</div>
-              ) : (
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <button style={iconBtnStyle} onClick={onPrevDay}>◀</button>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <button style={headerIconBtnStyle} onClick={onPrevDay}>◀</button>
 
+                <div
+                  style={{
+                    position: "relative",
+                    height: 38,
+                    minWidth: 150,
+                  }}
+                >
                   <div
                     style={{
-                      position: "relative",
-                      height: 38,
-                      minWidth: 150,
+                      height: "100%",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      padding: "0 16px",
+                      borderRadius: "12px",
+                      border: `1px solid rgba(255,255,255,0.1)`,
+                      background: "rgba(255, 255, 255, 0.05)", /* ダーク背景に馴染む透け感 */
+                      fontWeight: 700,
+                      color: theme.surfaceDarkText, /* 白抜きで統一 */
+                      whiteSpace: "nowrap",
+                      pointerEvents: "none",
+                      boxShadow: "inset 0 1px 1px rgba(255, 255, 255, 0.05)",
                     }}
                   >
-                    <div
-                      style={{
-                        height: "100%",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        padding: "0 12px",
-                        borderRadius: 12,
-                        border: `1px solid ${theme.border}`,
-                        background: theme.card,
-                        fontWeight: 900,
-                        whiteSpace: "nowrap",
-                        pointerEvents: "none",
-                      }}
-                    >
-                      {headerDateLabel}
-                    </div>
-
-                    <input
-                      type="date"
-                      value={headerDateLabel?.replaceAll(" / ", "-")}
-                      max={new Date().toISOString().slice(0, 10)}
-                      onChange={(e) => {
-                        const val = e.target.value
-                        if (val) {
-                          window.dispatchEvent(
-                            new CustomEvent("lifeos:setDay", { detail: val })
-                          )
-                        }
-                      }}
-                      onPointerDown={(e) => {
-                        const el = e.currentTarget as any
-                        if (el.showPicker) el.showPicker()
-                      }}
-                      style={{
-                        position: "absolute",
-                        inset: 0,
-                        opacity: 0,
-                        cursor: "pointer",
-                      }}
-                    />
-
+                    {headerDateLabel}
                   </div>
 
-
-                  <button
+                  <input
+                    type="date"
+                    value={headerDateLabel?.replaceAll(" / ", "-")}
+                    max={new Date().toISOString().slice(0, 10)}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      if (val) {
+                        window.dispatchEvent(
+                          new CustomEvent("lifeos:setDay", { detail: val })
+                        )
+                      }
+                    }}
+                    onPointerDown={(e) => {
+                      const el = e.currentTarget as any
+                      if (el.showPicker) el.showPicker()
+                    }}
                     style={{
-                      ...iconBtnStyle,
-                      opacity: canGoNext ? 1 : 0.4,
-                      cursor: canGoNext ? "pointer" : "default",
+                      position: "absolute",
+                      inset: 0,
+                      opacity: 0,
+                      cursor: "pointer",
                     }}
-                    onClick={() => {
-                      if (canGoNext && onNextDay) onNextDay();
-                    }}
-                  >
-                    ▶
-                  </button>
+                  />
 
                 </div>
-              )}
+
+
+                <button
+                  style={{
+                    ...headerIconBtnStyle,
+                    opacity: canGoNext ? 1 : 0.4,
+                    cursor: canGoNext ? "pointer" : "default",
+                  }}
+                  onClick={() => {
+                    if (canGoNext && onNextDay) onNextDay();
+                  }}
+                >
+                  ▶
+                </button>
+              </div>
             </div>
 
             {/* RIGHT */}
             <div ref={menuRef} style={{ justifySelf: "end", position: "relative" }}>
-              <button onClick={() => setMenuOpen(v => !v)} style={{ ...iconBtnStyle, width: 40, height: 40 }}>
+              <button onClick={() => setMenuOpen(v => !v)} style={{ ...headerIconBtnStyle, width: "40px", height: "40px" }}>
                 <svg width="20" height="20" viewBox="0 0 24 24">
                   <path
                     d="M4 7h16M4 12h16M4 17h16"
-                    stroke={theme.text}
+                    stroke={theme.surfaceDarkText}
                     strokeWidth="2"
                     strokeLinecap="round"
                   />
@@ -225,17 +226,19 @@ export default function AppShell({
               {menuOpen && (
                 <div
                   style={{
-                    position: "absolute",
-                    right: 0,
+                    right: "12px",
                     top: "calc(100% + 8px)",
                     width: "min(86vw, 340px)",
-                    borderRadius: 12,
-                    border: `1px solid ${theme.border}`,
-                    background: theme.card,
+                    borderRadius: "16px",
+                    border: `1px solid rgba(255,255,255,0.5)`,
+                    background: "rgba(255, 255, 255, 0.85)",
+                    backdropFilter: "blur(16px) saturate(180%)",
+                    WebkitBackdropFilter: "blur(16px) saturate(180%)",
                     color: theme.text,
-                    boxShadow: shadow.md,
-                    padding: 10,
+                    boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)",
+                    padding: "16px",
                     zIndex: 80,
+                    animation: "fadeInUp 0.2s cubic-bezier(0.16, 1, 0.3, 1)", /* アニメーション追加 (App.cssで定義必要) */
                   }}
                 >
                   <PrimaryBtn fullWidth onClick={() => {
@@ -287,9 +290,10 @@ export default function AppShell({
             right: 0,
             bottom: 0,
             zIndex: 60,
-            background: theme.bg,
-            borderTop: `1px solid ${theme.border}`,
-            boxShadow: shadow.sm,
+            background: theme.surfaceDark, /* ヘッダーと同じダークカラー */
+            backdropFilter: "blur(12px) saturate(180%)",
+            WebkitBackdropFilter: "blur(12px) saturate(180%)",
+            borderTop: `1px solid rgba(255,255,255,0.05)`,
           }}
         >
           <div style={{ ...railStyle, padding: 8 }}>
@@ -306,12 +310,13 @@ export default function AppShell({
             style={{
               position: "fixed",
               inset: 0,
-              background: "rgba(0,0,0,0.45)",
-              boxShadow: shadow.lg,
+              background: "rgba(15, 23, 42, 0.4)", /* より洗練された暗色 */
+              backdropFilter: "blur(4px)", /* 後ろをぼかす */
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               zIndex: 100,
+              animation: "fadeIn 0.2s ease",
             }}
           >
             <div
@@ -320,10 +325,12 @@ export default function AppShell({
                 width: "min(92vw, 720px)",
                 maxHeight: "80vh",
                 overflow: "auto",
-                borderRadius: 14,
+                borderRadius: "20px",
                 background: theme.card,
-                border: `1px solid ${theme.border}`,
-                padding: 14,
+                border: "none", /* ボーダー削除でスッキリ */
+                boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)",
+                padding: "24px",
+                animation: "slideUpFade 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
               }}
             >
               <b>リリースノート</b>

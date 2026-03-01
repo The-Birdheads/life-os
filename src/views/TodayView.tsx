@@ -1,16 +1,21 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import type { Action, Task } from "../lib/types";
 
 import Card from "../components/ui/Card";
-import IconBtn from "../components/ui/IconBtn";
 
 import CategoryBadge from "../components/badges/CategoryBadge";
 import PriorityBadge from "../components/badges/PriorityBadge";
 import VolBar from "../components/badges/VolBar";
-import PrimaryBtn from "../components/ui/PrimaryBtn";
 import SegmentedBar from "../components/ui/SegmentedBar";
 import SectionTitle from "../components/ui/SectionTitle";
 import { space } from "../lib/ui/spacing";
+import Checkbox from "../components/ui/Checkbox";
+import Select from "../components/ui/Select";
+import TextInput from "../components/ui/TextInput";
+import Slider from "../components/ui/Slider";
+import PrimaryBtn from "../components/ui/PrimaryBtn";
+import SecondaryBtn from "../components/ui/SecondaryBtn";
+import { theme } from "../lib/ui/theme";
 
 type Filter = "all" | "habit" | "task" | "action";
 
@@ -40,6 +45,7 @@ type Props = {
     cardStyle: React.CSSProperties;
 
     loadTodayEntries: () => Promise<void>;
+    loadBase: () => Promise<void>;
 };
 
 export default function TodayView({
@@ -56,13 +62,14 @@ export default function TodayView({
     supabase,
     cardStyle,
     loadTodayEntries,
+    loadBase,
 }: Props) {
     // ✅ Segmented filter（コンポーネント内）
     const [filter, setFilter] = useState<Filter>("all");
+    const [editingItem, setEditingItem] = useState<{ type: "habit" | "oneoff" | "action"; item: any } | null>(null);
 
     const activeHabits = tasks.filter((t) => t.is_active && t.task_type === "habit");
     const activeOneoffs = tasks.filter((t) => t.is_active && t.task_type === "oneoff");
-    const activeActions = actions.filter((a) => a.is_active && !a.is_hidden);
 
     /**
      * ✅ 習慣（habit）の表示ルール
@@ -215,244 +222,40 @@ export default function TodayView({
     const sortedHabits = [...habits].sort((a, b) => compareTask(a, b, doneTaskIds));
     const sortedOneoffs = [...visibleOneoffs].sort((a, b) => compareTask(a, b, doneTaskIds));
 
-    function ActionEntryForm({ activeActions }: { activeActions: any[] }) {
-        const [actionId, setActionId] = useState<string>(activeActions[0]?.id ?? "");
-        const [detail, setDetail] = useState<string>("");
-        const [volume, setVolume] = useState<number>(5);
 
-        useEffect(() => {
-            if (!actionId) {
-                setActionId(activeActions[0]?.id ?? "");
-                return;
-            }
-            // actionIdが「非表示化でリストから消えた」場合、先頭に寄せる
-            if (activeActions.length > 0 && !activeActions.some((a) => a.id === actionId)) {
-                setActionId(activeActions[0].id);
-            }
-            // eslint-disable-next-line react-hooks/exhaustive-deps
-        }, [activeActions.length]);
-
-        return (
-            <form
-                onSubmit={async (e) => {
-                    e.preventDefault();
-                    setMsg("");
-
-                    try {
-                        const { error } = await supabase.from("action_entries").insert({
-                            user_id: userId,
-                            day,
-                            action_id: actionId,
-                            note: detail.trim() ? detail.trim() : null,
-                            volume: Math.min(10, Math.max(1, Number(volume))),
-                        });
-                        if (error) throw error;
-
-                        setDetail("");
-                        setVolume(5);
-                        await loadTodayEntries();
-                    } catch (err: any) {
-                        setMsg(err?.message ?? "追加エラー");
-                    }
-                }}
-                style={{ display: "grid", gap: 10 }}
-            >
-                <label>
-                    行動名
-                    <select value={actionId} onChange={(e) => setActionId(e.target.value)} style={{ width: "100%" }}>
-                        {activeActions.map((a) => (
-                            <option key={a.id} value={a.id}>
-                                {a.kind ?? a.title}
-                            </option>
-                        ))}
-                    </select>
-                </label>
-
-                <label>
-                    詳細（自由入力）
-                    <input
-                        value={detail}
-                        onChange={(e) => setDetail(e.target.value)}
-                        style={{ width: "100%", boxSizing: "border-box" }}
-                    />
-                </label>
-
-                <label>
-                    ボリューム（1-10）: <b>{volume}</b>
-                    <input
-                        type="range"
-                        min={1}
-                        max={10}
-                        step={1}
-                        value={volume}
-                        onChange={(e) => setVolume(Number(e.target.value))}
-                        style={{ width: "100%" }}
-                    />
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, opacity: 0.7 }}>
-                        <span>1</span>
-                        <span>5</span>
-                        <span>10</span>
-                    </div>
-                </label>
-
-                <PrimaryBtn type="submit" disabled={!actionId}>
-                    行動ログを追加
-                </PrimaryBtn>
-            </form>
-        );
-    }
 
     function ActionEntryRow({ entry }: { entry: any }) {
         const a = actions.find((x) => x.id === entry.action_id);
 
-        const [editing, setEditing] = useState(false);
-        const [note, setNote] = useState<string>(entry.note ?? "");
-        const [volume, setVolume] = useState<number>(Number(entry.volume ?? 5));
-        const [actionId, setActionId] = useState<string>(entry.action_id);
-
-        useEffect(() => {
-            setActionId(entry.action_id);
-            setNote(entry.note ?? "");
-            setVolume(Number(entry.volume ?? 5));
-            setEditing(false);
-        }, [entry.id, entry.action_id, entry.note, entry.volume]);
-
-        if (!editing) {
-            return (
-                <li>
-                    <div
-                        style={{
-                            border: "1px solid var(--border)",
-                            borderRadius: 12,
-                            padding: "10px 12px",
-                            background: "var(--card)",
-                            display: "flex",
-                            justifyContent: "space-between",
-                            gap: 10,
-                            alignItems: "center",
-                        }}
-                    >
-                        <div style={{ minWidth: 0, display: "grid", gap: 4 }}>
-                            <div style={{ display: "flex", gap: 8, alignItems: "center", minWidth: 0 }}>
-                                <div style={{ fontWeight: 700, minWidth: 0, wordBreak: "break-word", lineHeight: 1.3 }}>
-                                    {a ? (a.kind) : "（不明）"}
-                                </div>
-                                <div style={{ flexShrink: 0, opacity: 0.85 }}>
-                                    <CategoryBadge category={a?.category} />
-                                </div>
-                            </div>
-
-                            {entry.note ? <div style={{ opacity: 0.8, fontSize: 12, lineHeight: 1.3 }}>{entry.note}</div> : null}
-
-                            <div style={{ opacity: 0.75, display: "flex", alignItems: "center", gap: 8 }}>
-                                <VolBar value={entry.volume} />
-                            </div>
-                        </div>
-
-                        <div style={{ display: "flex", gap: 6, flexShrink: 0, alignItems: "center" }}>
-                            <IconBtn title="編集" onClick={() => setEditing(true)}>
-                                ✏️
-                            </IconBtn>
-
-                            <IconBtn
-                                title="削除"
-                                danger
-                                onClick={async () => {
-                                    if (!confirm("この行動ログを削除しますか？")) return;
-                                    const { error } = await supabase.from("action_entries").delete().eq("user_id", userId).eq("id", entry.id);
-                                    if (error) {
-                                        setMsg(error.message);
-                                        return;
-                                    }
-                                    await loadTodayEntries();
-                                    setMsg("行動ログを削除しました。");
-                                }}
-                            >
-                                🗑️
-                            </IconBtn>
-                        </div>
-                    </div>
-                </li>
-            );
-        }
-
         return (
-            <li style={{ marginBottom: 8 }}>
-                <div style={{ border: "1px solid var(--border)", borderRadius: 12, padding: 10, background: "var(--card)" }}>
-                    <div style={{ fontWeight: 600, marginBottom: 8 }}>{a ? (a.kind) : "（不明）"}</div>
-
-                    <div style={{ display: "grid", gap: 10 }}>
-                        <label>
-                            行動の種類
-                            <select value={actionId} onChange={(e) => setActionId(e.target.value)} style={{ width: "100%" }} disabled={activeActions.length === 0}>
-                                {activeActions.length === 0 ? <option value="">（表示中の行動がありません）</option> : null}
-                                {activeActions.map((a) => (
-                                    <option key={a.id} value={a.id}>
-                                        {a.kind}
-                                    </option>
-                                ))}
-                            </select>
-                        </label>
-
-                        <label>
-                            詳細
-                            <input
-                                value={note}
-                                onChange={(e) => setNote(e.target.value)}
-                                style={{ width: "100%", boxSizing: "border-box" }}
-                                placeholder="自由入力"
-                            />
-                        </label>
-
-                        <label>
-                            ボリューム（1-10）: <b>{volume}</b>
-                            <input
-                                type="range"
-                                min={1}
-                                max={10}
-                                step={1}
-                                value={volume}
-                                onChange={(e) => setVolume(Number(e.target.value))}
-                                style={{ width: "100%" }}
-                            />
-                            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, opacity: 0.7 }}>
-                                <span>1</span>
-                                <span>5</span>
-                                <span>10</span>
+            <li>
+                <div
+                    style={{
+                        ...rowCard,
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: 10,
+                        alignItems: "center",
+                        cursor: "pointer",
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.01)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
+                    onClick={() => setEditingItem({ type: "action", item: entry })}
+                >
+                    <div style={{ minWidth: 0, display: "grid", gap: 4 }}>
+                        <div style={{ display: "flex", gap: 8, alignItems: "center", minWidth: 0 }}>
+                            <div style={{ fontWeight: 700, minWidth: 0, wordBreak: "break-word", lineHeight: 1.3 }}>
+                                {a ? (a.kind) : "（不明）"}
                             </div>
-                        </label>
+                            <div style={{ flexShrink: 0, opacity: 0.85 }}>
+                                <CategoryBadge category={a?.category} />
+                            </div>
+                        </div>
 
-                        <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
-                            <IconBtn
-                                title="保存"
-                                onClick={async () => {
-                                    try {
-                                        setMsg("");
-                                        await updateActionEntry(entry.id, {
-                                            action_id: actionId,
-                                            note: note.trim() ? note.trim() : null,
-                                            volume: Math.min(10, Math.max(1, Number(volume))),
-                                        });
-                                        setMsg("行動ログを更新しました。");
-                                    } catch (e: any) {
-                                        setMsg(e?.message ?? "更新エラー");
-                                    }
-                                }}
-                            >
-                                💾
-                            </IconBtn>
+                        {entry.note ? <div style={{ opacity: 0.8, fontSize: 12, lineHeight: 1.3 }}>{entry.note}</div> : null}
 
-                            <IconBtn
-                                title="キャンセル"
-                                onClick={() => {
-                                    setNote(entry.note ?? "");
-                                    setVolume(Number(entry.volume ?? 5));
-                                    setActionId(entry.action_id);
-                                    setEditing(false);
-                                }}
-                            >
-                                ✖️
-                            </IconBtn>
+                        <div style={{ opacity: 0.75, display: "flex", alignItems: "center", gap: 8 }}>
+                            <VolBar value={entry.volume} />
                         </div>
                     </div>
                 </div>
@@ -460,8 +263,179 @@ export default function TodayView({
         );
     }
 
+    function EditItemModal() {
+        if (!editingItem) return null;
+
+        const { type, item } = editingItem;
+
+        const [title, setTitle] = useState(item.title || "");
+        const [priority, setPriority] = useState(item.priority ?? 3);
+        const [volume, setVolume] = useState(item.volume ?? 5);
+        const [dueDate, setDueDate] = useState(item.due_date || "");
+
+        const [actionId, setActionId] = useState(item.action_id || "");
+        const [note, setNote] = useState(item.note || "");
+
+        const overlayStyle: React.CSSProperties = {
+            position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+            background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)",
+            zIndex: 100, display: "flex", justifyContent: "center", alignItems: "flex-end",
+            animation: "fadeIn 0.2s ease",
+        };
+        const modalStyle: React.CSSProperties = {
+            width: "100%", maxWidth: 600, maxHeight: "90vh",
+            background: "var(--bg)", borderTopLeftRadius: 20, borderTopRightRadius: 20,
+            padding: "24px 16px", overflowY: "auto",
+            boxShadow: "0 -4px 20px rgba(0,0,0,0.15)",
+            animation: "slideUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.2)",
+        };
+        const closeBtnStyle: React.CSSProperties = {
+            position: "absolute", top: 16, right: 16, border: "none", background: "rgba(0,0,0,0.05)",
+            width: 32, height: 32, borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center",
+            cursor: "pointer", fontSize: 20, lineHeight: 1, color: "var(--text)", paddingBottom: 2,
+        };
+
+        const handleSave = async (e: React.FormEvent) => {
+            e.preventDefault();
+            setMsg("");
+            try {
+                if (type === "action") {
+                    await updateActionEntry(item.id, {
+                        action_id: actionId,
+                        note: note.trim() ? note.trim() : null,
+                        volume: Math.min(10, Math.max(1, Number(volume))),
+                    });
+                } else {
+                    const { error } = await supabase.from("tasks").update({
+                        title: title.trim(),
+                        priority,
+                        volume,
+                        due_date: type === "oneoff" && dueDate ? dueDate : null,
+                    }).eq("user_id", userId).eq("id", item.id);
+                    if (error) throw error;
+                    await loadBase();
+                }
+                setEditingItem(null);
+                setMsg("更新しました。");
+            } catch (err: any) {
+                setMsg(err?.message ?? "更新エラー");
+            }
+        };
+
+        const handleDelete = async () => {
+            if (!confirm("本当に削除しますか？")) return;
+            setMsg("");
+            try {
+                if (type === "action") {
+                    const { error } = await supabase.from("action_entries").delete().eq("user_id", userId).eq("id", item.id);
+                    if (error) throw error;
+                    await loadTodayEntries();
+                } else {
+                    const { error } = await supabase.from("tasks").delete().eq("user_id", userId).eq("id", item.id);
+                    if (error) throw error;
+                    await loadBase();
+                }
+                setEditingItem(null);
+                setMsg("削除しました。");
+            } catch (err: any) {
+                setMsg(err?.message ?? "削除エラー");
+            }
+        };
+
+        const modalTitle = type === "habit" ? "習慣の編集" : type === "oneoff" ? "タスクの編集" : "行動ログの編集";
+        const activeActions = actions.filter((a) => a.is_active && !a.is_hidden);
+
+        return (
+            <div style={overlayStyle} onClick={() => setEditingItem(null)}>
+                <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
+                    <button style={closeBtnStyle} onClick={() => setEditingItem(null)}>×</button>
+                    <h2 style={{ marginTop: 0, marginBottom: 20, fontSize: 20 }}>{modalTitle}</h2>
+
+                    <form onSubmit={handleSave} style={{ display: "grid", gap: 16 }}>
+                        {(type === "habit" || type === "oneoff") && (
+                            <>
+                                <label>
+                                    タイトル
+                                    <TextInput value={title} onChange={(e) => setTitle(e.target.value)} fullWidth required />
+                                </label>
+                                <label>
+                                    優先度（1-5）: <b>{priority}</b>
+                                    <Slider min="1" max="5" step="1" value={priority} onChange={(e) => setPriority(Number(e.target.value))} fullWidth />
+                                </label>
+                                <label>
+                                    ボリューム（1-10）: <b>{volume}</b>
+                                    <Slider min="1" max="10" step="1" value={volume} onChange={(e) => setVolume(Number(e.target.value))} fullWidth />
+                                </label>
+                                {type === "oneoff" && (
+                                    <label>
+                                        期限（任意）
+                                        <TextInput type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} fullWidth />
+                                    </label>
+                                )}
+                            </>
+                        )}
+
+                        {type === "action" && (
+                            <>
+                                <label>
+                                    行動の種類
+                                    <Select value={actionId} onChange={(e) => setActionId(e.target.value)} fullWidth required>
+                                        {activeActions.length === 0 && <option value="">（表示中の行動がありません）</option>}
+                                        {activeActions.findIndex(a => a.id === actionId) === -1 && item.action_id === actionId && (
+                                            <option value={actionId}>（現在の種類 - 非表示または削除済）</option>
+                                        )}
+                                        {activeActions.map((a) => (
+                                            <option key={a.id} value={a.id}>{a.kind}</option>
+                                        ))}
+                                    </Select>
+                                </label>
+                                <label>
+                                    詳細
+                                    <TextInput value={note} onChange={(e) => setNote(e.target.value)} fullWidth placeholder="自由入力" />
+                                </label>
+                                <label>
+                                    ボリューム（1-10）: <b>{volume}</b>
+                                    <Slider min="1" max="10" step="1" value={volume} onChange={(e) => setVolume(Number(e.target.value))} fullWidth />
+                                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, opacity: 0.7 }}>
+                                        <span>1</span>
+                                        <span>5</span>
+                                        <span>10</span>
+                                    </div>
+                                </label>
+                            </>
+                        )}
+
+                        <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+                            <div style={{ flex: 1 }}>
+                                <PrimaryBtn type="submit" fullWidth>保存</PrimaryBtn>
+                            </div>
+                            <div style={{ flex: 1 }}>
+                                <SecondaryBtn type="button" onClick={() => setEditingItem(null)} fullWidth>キャンセル</SecondaryBtn>
+                            </div>
+                        </div>
+                        <div style={{ textAlign: "center", marginTop: 8 }}>
+                            <button type="button" onClick={handleDelete} style={{ background: "none", border: "none", color: theme.danger, cursor: "pointer", textDecoration: "underline", fontSize: 14 }}>
+                                このアイテムを削除
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <>
+            <style>{`
+                @keyframes fadeIn {
+                    from { opacity: 0; }
+                    to { opacity: 1; }
+                }
+                @keyframes slideUp {
+                    from { transform: translateY(100%); opacity: 0; }
+                    to { transform: translateY(0); opacity: 1; }
+                }
+            `}</style>
             {/* ✅ サブバー（segmented bar） */}
             <SegmentedBar
                 items={segmentedItems as any}
@@ -476,7 +450,7 @@ export default function TodayView({
                     <>
 
                         <Card style={cardStyle}>
-                            <SectionTitle title="習慣" style={{marginBottom:12,}}/>
+                            <SectionTitle title="習慣" style={{ marginBottom: 12, }} />
                             {sortedHabits.length === 0 ? (
                                 <p>まだありません（タスクタブで追加）</p>
                             ) : (
@@ -488,17 +462,18 @@ export default function TodayView({
 
                                         return (
                                             <li key={t.id}>
-                                                <label
-                                                    style={{ ...rowLabelStyle, ...rowCard }}
+                                                <div
+                                                    style={{ ...rowLabelStyle, ...rowCard, cursor: "pointer" }}
                                                     onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.01)")}
                                                     onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
+                                                    onClick={() => setEditingItem({ type: "habit", item: t })}
                                                 >
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={checked}
-                                                        onChange={(e) => toggleTaskDone(t.id, e.target.checked)}
-                                                        style={{ alignSelf: "center" }}
-                                                    />
+                                                    <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", alignSelf: "center" }}>
+                                                        <Checkbox
+                                                            checked={checked}
+                                                            onChange={(e) => toggleTaskDone(t.id, e.target.checked)}
+                                                        />
+                                                    </div>
 
                                                     <div style={{ display: "grid", gap: 4 }}>
                                                         <div style={titleStyle(checked)}>{t.title}</div>
@@ -511,7 +486,7 @@ export default function TodayView({
                                                             ) : null}
                                                         </div>
                                                     </div>
-                                                </label>
+                                                </div>
                                             </li>
                                         );
                                     })}
@@ -523,9 +498,9 @@ export default function TodayView({
 
                 {(filter === "all" || filter === "task") && (
                     <>
-                        
+
                         <Card style={cardStyle}>
-                            <SectionTitle title="タスク" style={{marginBottom:12,}}/>
+                            <SectionTitle title="タスク" style={{ marginBottom: 12, }} />
                             {sortedOneoffs.length === 0 ? (
                                 <p>タスクがありません（タスクタブで追加）</p>
                             ) : (
@@ -536,17 +511,18 @@ export default function TodayView({
 
                                         return (
                                             <li key={t.id}>
-                                                <label
-                                                    style={{ ...rowLabelStyle, ...rowCard }}
+                                                <div
+                                                    style={{ ...rowLabelStyle, ...rowCard, cursor: "pointer" }}
                                                     onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.01)")}
                                                     onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
+                                                    onClick={() => setEditingItem({ type: "oneoff", item: t })}
                                                 >
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={checked}
-                                                        onChange={(e) => toggleTaskDone(t.id, e.target.checked)}
-                                                        style={{ alignSelf: "center" }}
-                                                    />
+                                                    <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", alignSelf: "center" }}>
+                                                        <Checkbox
+                                                            checked={checked}
+                                                            onChange={(e) => toggleTaskDone(t.id, e.target.checked)}
+                                                        />
+                                                    </div>
 
                                                     <div style={{ display: "grid", gap: 4 }}>
                                                         <div style={titleStyle(checked)}>{t.title}</div>
@@ -564,7 +540,7 @@ export default function TodayView({
                                                             </div>
                                                         ) : null}
                                                     </div>
-                                                </label>
+                                                </div>
                                             </li>
                                         );
                                     })}
@@ -576,15 +552,12 @@ export default function TodayView({
 
                 {(filter === "all" || filter === "action") && (
                     <>
-                        
+
 
                         <Card style={cardStyle}>
-                            <SectionTitle title="行動" style={{marginBottom:12,}}/>
-                            <ActionEntryForm activeActions={activeActions} />
+                            <SectionTitle title="行動" style={{ marginBottom: 12, }} />
 
                             <div style={{ marginTop: space.md }}>
-                                <h4 style={{ margin: "12px 0 6px" }}>今日の行動ログ</h4>
-
                                 {todayActionEntries.length === 0 ? (
                                     <p>まだありません</p>
                                 ) : (
@@ -599,6 +572,8 @@ export default function TodayView({
                     </>
                 )}
             </div>
+
+            {editingItem && <EditItemModal />}
         </>
     );
 }
