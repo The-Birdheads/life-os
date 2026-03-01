@@ -11,7 +11,7 @@ export default function FABMenu({ onSelect }: Props) {
     // 外側クリックで閉じる
     useEffect(() => {
         if (!open) return;
-        const onClick = (e: MouseEvent) => {
+        const onClick = () => {
             // FABメニューの内側クリックは伝播させない工夫が必要だが、
             // 今回はシンプルにキャプチャフェーズで処理するか、
             // メニュー内のクリックで閉じるのでそのままでOK
