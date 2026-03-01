@@ -187,7 +187,6 @@ export default function WeekView({
                         <table
                             style={{
                                 width: "100%",
-                                minWidth: "400px", // スマホでも崩れにくくするため
                                 tableLayout: "fixed",
                                 borderCollapse: "collapse",
                             }}
