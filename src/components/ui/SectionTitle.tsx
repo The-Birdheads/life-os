@@ -22,10 +22,9 @@ export default function SectionTitle({
   const defaultTextColor = isLarge ? "#ffffff" : "#111827"; // 中見出しは黒/濃いグレー
 
   const wrap: React.CSSProperties = {
-    // 画面横幅いっぱいに広げるためのネガティブマージン
-    width: "100vw",
-    marginLeft: "calc(50% - 50vw)",
-    marginRight: "calc(50% - 50vw)",
+    // 画面横幅いっぱいに広げるためのネガティブマージン（コンテナのpadding:12pxを相殺）
+    margin: "0 -12px",
+    padding: "0 12px",
 
     display: "flex",
     alignItems: "center",

@@ -2,13 +2,23 @@ html,
 body {
   overflow-x: hidden;
   width: 100%;
+  margin: 0;
+  padding: 0;
   position: relative;
+  box-sizing: border-box;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: inherit;
 }
 
 #root {
   max-width: 1280px;
   margin: 0 auto;
   overflow-x: hidden;
+  width: 100%;
 }
 
 /* -------------------------------------

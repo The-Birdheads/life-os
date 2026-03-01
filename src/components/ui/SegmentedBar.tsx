@@ -30,13 +30,10 @@ export default function SegmentedBar<K extends string>({
       role="tablist"
       aria-label={ariaLabel}
       style={{
-        margin: "0 auto",
         padding: "8px 12px",
 
-        // 追加要望10+微修正: ヘッダーと同じ幅（画面幅いっぱい）に広げ、色を1トーン明るくする
-        width: "100vw",
-        marginLeft: "calc(50% - 50vw)",
-        marginRight: "calc(50% - 50vw)",
+        // コンテナのpadding:12pxを打ち消して画面いっぱいにする
+        margin: "0 -12px",
         background: "#64748b", // Slate 500 (12:00更新)
         color: theme.surfaceDarkText,
 
