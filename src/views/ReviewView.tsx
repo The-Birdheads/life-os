@@ -252,125 +252,127 @@ export default function ReviewView({
   return (
     <>
       <div style={{ display: "grid", gap: space.xl }}>
-        {/* ✅ 見出し：振り返り */}
-        <SectionTitle
-          title="振り返り"
-          isLarge={true}
-          right={
-            hasSavedReview && !isEditingReview ? (
-              <IconBtn title="編集" onClick={() => setIsEditingReview(true)}>
-                ✏️
-              </IconBtn>
-            ) : null
-          }
-          style={{ marginBottom: 8 }}
-        />
+        {/* ✅ セクション：振り返り */}
+        <div>
+          <SectionTitle
+            title="振り返り"
+            isLarge={true}
+            right={
+              hasSavedReview && !isEditingReview ? (
+                <IconBtn title="編集" onClick={() => setIsEditingReview(true)}>
+                  ✏️
+                </IconBtn>
+              ) : null
+            }
+            style={{ marginBottom: 8 }}
+          />
 
-        {/* ✅ 充実度Card：未登録時＆編集時 / 登録済で出し分け */}
-        <Card style={cardStyle}>
-          {reviewLoading && <small style={{ opacity: 0.7 }}>読み込み中…</small>}
+          {/* ✅ 充実度Card：未登録時＆編集時 / 登録済で出し分け */}
+          <Card style={cardStyle}>
+            {reviewLoading && <small style={{ opacity: 0.7 }}>読み込み中…</small>}
 
-          {/* 登録済＆確認モード */}
-          {hasSavedReview && !isEditingReview ? (
-            <div style={confirmWrap}>
-              <div style={confirmRow}>
+            {/* 登録済＆確認モード */}
+            {hasSavedReview && !isEditingReview ? (
+              <div style={confirmWrap}>
+                <div style={confirmRow}>
+                  <div>
+                    <div style={confirmLabel}>充実度</div>
+                    <div style={bigNumber}>{fulfillment ? fulfillment : "—"}</div>
+                  </div>
+
+                  <div style={{ textAlign: "right" }}>
+                    <div style={confirmLabel}>範囲</div>
+                    <div style={{ fontSize: 12, opacity: 0.75 }}>1〜100</div>
+                  </div>
+                </div>
+
                 <div>
-                  <div style={confirmLabel}>充実度</div>
-                  <div style={bigNumber}>{fulfillment ? fulfillment : "—"}</div>
-                </div>
-
-                <div style={{ textAlign: "right" }}>
-                  <div style={confirmLabel}>範囲</div>
-                  <div style={{ fontSize: 12, opacity: 0.75 }}>1〜100</div>
+                  <div style={{ ...confirmLabel, marginBottom: 6 }}>振り返りメモ</div>
+                  <div style={noteBox}>{note.trim() ? note : "（メモは未入力です）"}</div>
                 </div>
               </div>
-
-              <div>
-                <div style={{ ...confirmLabel, marginBottom: 6 }}>振り返りメモ</div>
-                <div style={noteBox}>{note.trim() ? note : "（メモは未入力です）"}</div>
+            ) : !hasSavedReview && !isEditingReview ? (
+              /* ✅ 追加要望11, 12: 未記入時は「振り返りを記入」ボタン（点線枠）のみ表示 */
+              <div style={{ padding: "0" }}>
+                <button
+                  onClick={() => setIsEditingReview(true)}
+                  style={{
+                    width: "100%",
+                    padding: "16px",
+                    border: "2px dashed #cbd5e1",
+                    borderRadius: 12,
+                    background: "#f8fafc",
+                    color: theme.subtext,
+                    fontWeight: "bold",
+                    cursor: "pointer",
+                    transition: "background 0.2s"
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = "#e2e8f0"}
+                  onMouseLeave={(e) => e.currentTarget.style.background = "#f8fafc"}
+                >
+                  振り返りを記入
+                </button>
               </div>
-            </div>
-          ) : !hasSavedReview && !isEditingReview ? (
-            /* ✅ 追加要望11, 12: 未記入時は「振り返りを記入」ボタン（点線枠）のみ表示 */
-            <div style={{ padding: "0" }}>
-              <button
-                onClick={() => setIsEditingReview(true)}
-                style={{
-                  width: "100%",
-                  padding: "16px",
-                  border: "2px dashed #cbd5e1",
-                  borderRadius: 12,
-                  background: "#f8fafc",
-                  color: theme.subtext,
-                  fontWeight: "bold",
-                  cursor: "pointer",
-                  transition: "background 0.2s"
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.background = "#e2e8f0"}
-                onMouseLeave={(e) => e.currentTarget.style.background = "#f8fafc"}
-              >
-                振り返りを記入
-              </button>
-            </div>
-          ) : (
-            /* 未登録で記入中、or 編集モード（プルダウン展開時） */
-            <div style={{ display: "grid", gap: 10 }}>
-              <div>
-                <div style={confirmLabel}>充実度を1〜100の範囲で入力</div>
-                <div style={{ display: "grid", gap: 6 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
-                    <b>{fulfillment || 0}</b>
-                    <TextInput
-                      type="number"
+            ) : (
+              /* 未登録で記入中、or 編集モード（プルダウン展開時） */
+              <div style={{ display: "grid", gap: 10 }}>
+                <div>
+                  <div style={confirmLabel}>充実度を1〜100の範囲で入力</div>
+                  <div style={{ display: "grid", gap: 6 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
+                      <b>{fulfillment || 0}</b>
+                      <TextInput
+                        type="number"
+                        min="1"
+                        max="100"
+                        value={fulfillment}
+                        onChange={(e) => setFulfillment(Number(e.target.value))}
+                        style={{ width: 90 }}
+                      />
+                    </div>
+
+                    <Slider
                       min="1"
                       max="100"
-                      value={fulfillment}
+                      step="1"
+                      value={Math.min(100, Math.max(1, Number(fulfillment) || 1))}
                       onChange={(e) => setFulfillment(Number(e.target.value))}
-                      style={{ width: 90 }}
+                      fullWidth
                     />
-                  </div>
 
-                  <Slider
-                    min="1"
-                    max="100"
-                    step="1"
-                    value={Math.min(100, Math.max(1, Number(fulfillment) || 1))}
-                    onChange={(e) => setFulfillment(Number(e.target.value))}
-                    fullWidth
-                  />
-
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, opacity: 0.7 }}>
-                    <span>1</span>
-                    <span>50</span>
-                    <span>100</span>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, opacity: 0.7 }}>
+                      <span>1</span>
+                      <span>50</span>
+                      <span>100</span>
+                    </div>
                   </div>
                 </div>
+
+                <label>
+                  <div style={{ ...confirmLabel, marginBottom: 6 }}>振り返りメモを入力</div>
+                  <textarea
+                    rows={5}
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    style={{ width: "100%", boxSizing: "border-box" }}
+                    placeholder="例：今日はタスク偏重だった。明日は回復系を1つ入れる。"
+                  />
+                </label>
+
+                <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 8 }}>
+                  <IconBtn
+                    title="キャンセル"
+                    onClick={() => setIsEditingReview(false)}
+                  >
+                    ✖️
+                  </IconBtn>
+
+                  <PrimaryBtn onClick={saveReview}>保存</PrimaryBtn>
+                </div>
               </div>
-
-              <label>
-                <div style={{ ...confirmLabel, marginBottom: 6 }}>振り返りメモを入力</div>
-                <textarea
-                  rows={5}
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  style={{ width: "100%", boxSizing: "border-box" }}
-                  placeholder="例：今日はタスク偏重だった。明日は回復系を1つ入れる。"
-                />
-              </label>
-
-              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 8 }}>
-                <IconBtn
-                  title="キャンセル"
-                  onClick={() => setIsEditingReview(false)}
-                >
-                  ✖️
-                </IconBtn>
-
-                <PrimaryBtn onClick={saveReview}>保存</PrimaryBtn>
-              </div>
-            </div>
-          )}
-        </Card>
+            )}
+          </Card>
+        </div>
 
         {/* ✅ 追加要望11: ダッシュボード（3分割パネル） */}
         <div>
@@ -407,7 +409,7 @@ export default function ReviewView({
 
         {/* ✅ 見出し：実施したこと一覧（SegmentedBarの上） */}
         <div>
-          <SectionTitle title="実施したこと一覧" isLarge={true} style={{ marginBottom: 0 }} />
+          <SectionTitle title="実施したこと一覧" isLarge={true} style={{ marginBottom: 8 }} />
 
           {/* ✅ SegmentedBar */}
           <SegmentedBar

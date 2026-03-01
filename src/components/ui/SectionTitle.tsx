@@ -25,6 +25,7 @@ export default function SectionTitle({
     // 画面横幅いっぱいに広げるためのネガティブマージン（コンテナのpadding:12pxを相殺）
     margin: "0 -12px",
     padding: "0 12px",
+    boxSizing: "border-box", // ✅ paddingとmarginの干渉で100%幅をオーバーしないように追加
 
     display: "flex",
     alignItems: "center",

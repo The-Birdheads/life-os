@@ -183,7 +183,7 @@ export default function WeekView({
                         {weekLoading ? <small style={{ color: "#94a3b8" }}>読み込み中…</small> : null}
                     </div>
 
-                    <div style={{ width: "100%", overflowX: "auto" }}>
+                    <div style={{ width: "100%", overflowX: "auto", padding: "0 12px", boxSizing: "border-box" }}>
                         <table
                             style={{
                                 width: "100%",
