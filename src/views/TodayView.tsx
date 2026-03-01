@@ -149,24 +149,37 @@ export default function TodayView({
     const rowLabelStyle: React.CSSProperties = {
         display: "grid",
         gridTemplateColumns: "22px 1fr",
-        columnGap: 10,
+        columnGap: 14, // 左からチェックボックスまでの余白(約12px)と同等の余白をタイトルとの間にも空ける
         alignItems: "start",
     };
 
-    const rowCard: React.CSSProperties = {
-        border: "1px solid var(--border)",
-        borderRadius: 12,
-        padding: "10px 12px",
-        background: "var(--card)",
-        transition: "0.15s",
+    // ✅ アイテム行の沈み込みと色反転（追加要望7＆8）
+    const rowCard = (accentColor: string | undefined, checked: boolean = false): React.CSSProperties => {
+        const isDone = checked;
+        return {
+            border: "1px solid var(--border)",
+            borderRadius: 12,
+            padding: "10px 12px",
+
+            // Doneなら背景をテーマ色に、そうでなければ白系(var(--card))
+            background: isDone && accentColor ? accentColor : "var(--card)",
+            color: isDone && accentColor ? "#ffffff" : "var(--text)",
+
+            // 未完了なら右下に影を持たせる、完了なら影を消して沈み込む位置へ
+            boxShadow: !isDone && accentColor ? `3px 3px 0px ${accentColor}40` : "0 1px 2px rgba(0,0,0,0.02)",
+            transform: isDone ? "translate(3px, 3px)" : "translate(0, 0)",
+
+            transition: "all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)",
+        };
     };
 
-    const titleStyle = (checked: boolean): React.CSSProperties => ({
-        opacity: checked ? 1 : 0.4,
+    const titleStyle = (checked: boolean, accentColor?: string): React.CSSProperties => ({
+        opacity: checked ? (accentColor ? 1 : 0.6) : 1, // 色付き背景ならopacity下げない
         minWidth: 0,
         wordBreak: "break-word",
         lineHeight: 1.3,
         fontWeight: 600,
+        textDecoration: checked && !accentColor ? "line-through" : "none", // （通常は反転で表現）
     });
 
     const metaLineStyle: React.CSSProperties = {
@@ -231,7 +244,7 @@ export default function TodayView({
             <li>
                 <div
                     style={{
-                        ...rowCard,
+                        ...rowCard(theme.action, true), // 行動は常にDone扱いとして反転＋沈み込み
                         display: "flex",
                         justifyContent: "space-between",
                         gap: 10,
@@ -442,15 +455,15 @@ export default function TodayView({
                 value={filter}
                 onChange={setFilter}
                 ariaLabel="記録の表示切り替え"
+                stickyTop={56} /* 追加要望10: ヘッダー下に追従固定 */
             />
 
             {/* ✅ カード群（フィルタに応じて出し分け） */}
             <div style={{ display: "grid", gap: space.lg, marginTop: space.md }}>
                 {(filter === "all" || filter === "habit") && (
-                    <>
-
+                    <div>
+                        <SectionTitle title="習慣" icon="🔁" accentColor={theme.habit} style={{ marginBottom: 8 }} />
                         <Card style={cardStyle}>
-                            <SectionTitle title="習慣" style={{ marginBottom: 12, }} />
                             {sortedHabits.length === 0 ? (
                                 <p>まだありません（タスクタブで追加）</p>
                             ) : (
@@ -463,24 +476,25 @@ export default function TodayView({
                                         return (
                                             <li key={t.id}>
                                                 <div
-                                                    style={{ ...rowLabelStyle, ...rowCard, cursor: "pointer" }}
-                                                    onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.01)")}
-                                                    onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
+                                                    style={{ ...rowLabelStyle, ...rowCard(theme.habit, checked), cursor: "pointer" }}
+                                                    onMouseEnter={(e) => { if (!checked) e.currentTarget.style.transform = "translate(0,0) scale(1.01)"; }}
+                                                    onMouseLeave={(e) => { if (!checked) e.currentTarget.style.transform = "translate(0,0) scale(1)"; }}
                                                     onClick={() => setEditingItem({ type: "habit", item: t })}
                                                 >
                                                     <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", alignSelf: "center" }}>
                                                         <Checkbox
                                                             checked={checked}
+                                                            color={theme.habit}
                                                             onChange={(e) => toggleTaskDone(t.id, e.target.checked)}
                                                         />
                                                     </div>
 
                                                     <div style={{ display: "grid", gap: 4 }}>
-                                                        <div style={titleStyle(checked)}>{t.title}</div>
+                                                        <div style={titleStyle(checked, theme.habit)}>{t.title}</div>
 
                                                         <div style={metaLineStyle}>
                                                             <PriorityBadge value={(t as any).priority} />
-                                                            <VolBar value={(t as any).volume} />
+                                                            <VolBar value={(t as any).volume} isReverse={checked || isPastDone} />
                                                             {isHidden && (checked || isPastDone) ? (
                                                                 <small style={{ opacity: 0.6 }}>（非表示・履歴のため表示）</small>
                                                             ) : null}
@@ -493,14 +507,13 @@ export default function TodayView({
                                 </ul>
                             )}
                         </Card>
-                    </>
+                    </div>
                 )}
 
                 {(filter === "all" || filter === "task") && (
-                    <>
-
+                    <div>
+                        <SectionTitle title="タスク" icon="✅" accentColor={theme.task} style={{ marginBottom: 8 }} />
                         <Card style={cardStyle}>
-                            <SectionTitle title="タスク" style={{ marginBottom: 12, }} />
                             {sortedOneoffs.length === 0 ? (
                                 <p>タスクがありません（タスクタブで追加）</p>
                             ) : (
@@ -512,24 +525,25 @@ export default function TodayView({
                                         return (
                                             <li key={t.id}>
                                                 <div
-                                                    style={{ ...rowLabelStyle, ...rowCard, cursor: "pointer" }}
-                                                    onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.01)")}
-                                                    onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
+                                                    style={{ ...rowLabelStyle, ...rowCard(theme.task, checked), cursor: "pointer" }}
+                                                    onMouseEnter={(e) => { if (!checked) e.currentTarget.style.transform = "translate(0,0) scale(1.01)"; }}
+                                                    onMouseLeave={(e) => { if (!checked) e.currentTarget.style.transform = "translate(0,0) scale(1)"; }}
                                                     onClick={() => setEditingItem({ type: "oneoff", item: t })}
                                                 >
                                                     <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", alignSelf: "center" }}>
                                                         <Checkbox
                                                             checked={checked}
+                                                            color={theme.task}
                                                             onChange={(e) => toggleTaskDone(t.id, e.target.checked)}
                                                         />
                                                     </div>
 
                                                     <div style={{ display: "grid", gap: 4 }}>
-                                                        <div style={titleStyle(checked)}>{t.title}</div>
+                                                        <div style={titleStyle(checked, theme.task)}>{t.title}</div>
 
                                                         <div style={metaLineStyle}>
                                                             <PriorityBadge value={(t as any).priority} />
-                                                            <VolBar value={(t as any).volume} />
+                                                            <VolBar value={(t as any).volume} isReverse={checked} />
                                                             {isHidden && checked ? <small style={{ opacity: 0.6 }}>（非表示・当日完了のため表示）</small> : null}
                                                         </div>
 
@@ -547,17 +561,16 @@ export default function TodayView({
                                 </ul>
                             )}
                         </Card>
-                    </>
+                    </div>
                 )}
 
                 {(filter === "all" || filter === "action") && (
-                    <>
+                    <div>
 
 
+                        <SectionTitle title="行動" icon="⚡" accentColor={theme.action} style={{ marginBottom: 8 }} />
                         <Card style={cardStyle}>
-                            <SectionTitle title="行動" style={{ marginBottom: 12, }} />
-
-                            <div style={{ marginTop: space.md }}>
+                            <div style={{ marginTop: 0 }}>
                                 {todayActionEntries.length === 0 ? (
                                     <p>まだありません</p>
                                 ) : (
@@ -569,7 +582,7 @@ export default function TodayView({
                                 )}
                             </div>
                         </Card>
-                    </>
+                    </div>
                 )}
             </div>
 

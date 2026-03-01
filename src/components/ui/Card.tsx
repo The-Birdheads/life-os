@@ -1,6 +1,4 @@
 import React from "react";
-import { shadow } from "../../lib/ui/shadow";
-import { radius } from "../../lib/ui/radius";
 import { space } from "../../lib/ui/spacing";
 
 type Props = {
@@ -19,11 +17,11 @@ export default function Card({ children, style }: Props) {
 
         padding: space.lg, // ⭐ デフォルト余白（最重要）
 
-        boxShadow: shadow.sm,
-        borderRadius: radius.md,
+        boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -2px rgba(0,0,0,0.05)",
+        borderRadius: 16,
 
         background: "var(--card)",
-        border: "1px solid var(--border)",
+        border: "1px solid rgba(0,0,0,0.06)",
 
         ...style, // ← 外部指定で上書き可能
       }}

@@ -91,8 +91,8 @@ export default function AppShell({
 
   const headerIconBtnStyle: React.CSSProperties = {
     appearance: "none",
-    border: `1px solid rgba(255,255,255,0.15)`, /* ダーク背景用ボーダー */
-    background: "rgba(255, 255, 255, 0.1)", /* ダーク背景用透け感 */
+    border: "none", /* 追加要望6: ボーダーを削除してフラットに */
+    background: "rgba(255, 255, 255, 0.05)", /* ダーク背景用透け感 */
     backdropFilter: "blur(4px)",
     color: theme.surfaceDarkText, /* 白抜き */
     borderRadius: "12px",
@@ -108,7 +108,7 @@ export default function AppShell({
 
   return (
     <div style={layoutStyle}>
-      <div style={{ ...containerStyle, overflowX: "hidden" }}>
+      <div style={{ ...containerStyle }}>
         {/* HEADER */}
         <div
           style={{
@@ -156,13 +156,12 @@ export default function AppShell({
                       justifyContent: "center",
                       padding: "0 16px",
                       borderRadius: "12px",
-                      border: `1px solid rgba(255,255,255,0.1)`,
+                      border: "none", /* 追加要望6: ボーダーレス */
                       background: "rgba(255, 255, 255, 0.05)", /* ダーク背景に馴染む透け感 */
                       fontWeight: 700,
                       color: theme.surfaceDarkText, /* 白抜きで統一 */
                       whiteSpace: "nowrap",
                       pointerEvents: "none",
-                      boxShadow: "inset 0 1px 1px rgba(255, 255, 255, 0.05)",
                     }}
                   >
                     {headerDateLabel}
@@ -226,43 +225,54 @@ export default function AppShell({
               {menuOpen && (
                 <div
                   style={{
-                    right: "12px",
-                    top: "calc(100% + 8px)",
-                    width: "min(86vw, 340px)",
-                    borderRadius: "16px",
-                    border: `1px solid rgba(255,255,255,0.5)`,
-                    background: "rgba(255, 255, 255, 0.85)",
-                    backdropFilter: "blur(16px) saturate(180%)",
-                    WebkitBackdropFilter: "blur(16px) saturate(180%)",
-                    color: theme.text,
-                    boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)",
-                    padding: "16px",
+                    position: "fixed",
+                    top: topBarHeight + 12,
+                    left: 0,
+                    right: 0,
+                    display: "flex",
+                    justifyContent: "center",
+                    pointerEvents: "none",
                     zIndex: 80,
-                    animation: "fadeInUp 0.2s cubic-bezier(0.16, 1, 0.3, 1)", /* アニメーション追加 (App.cssで定義必要) */
                   }}
                 >
-                  <PrimaryBtn fullWidth onClick={() => {
-                    setMenuOpen(false);
-                    setReleaseOpen(true);
-                  }}>
-                    リリースノート
-                  </PrimaryBtn>
+                  <div
+                    style={{
+                      pointerEvents: "auto",
+                      width: "min(92vw, 340px)",
+                      borderRadius: "16px",
+                      border: `1px solid rgba(255,255,255,0.5)`,
+                      background: "rgba(255, 255, 255, 0.85)",
+                      backdropFilter: "blur(16px) saturate(180%)",
+                      WebkitBackdropFilter: "blur(16px) saturate(180%)",
+                      color: theme.text,
+                      boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)",
+                      padding: "16px",
+                      animation: "fadeInUp 0.2s cubic-bezier(0.16, 1, 0.3, 1)", /* アニメーション追加 (App.cssで定義必要) */
+                    }}
+                  >
+                    <PrimaryBtn fullWidth onClick={() => {
+                      setMenuOpen(false);
+                      setReleaseOpen(true);
+                    }}>
+                      リリースノート
+                    </PrimaryBtn>
 
-                  <div style={{ height: 8 }} />
+                    <div style={{ height: 8 }} />
 
-                  <PrimaryBtn fullWidth onClick={onSignOut}>
-                    ログアウト
-                  </PrimaryBtn>
+                    <PrimaryBtn fullWidth onClick={onSignOut}>
+                      ログアウト
+                    </PrimaryBtn>
 
-                  <div style={{ fontSize: 12, opacity: .7, marginTop: 10 }}>
-                    バージョン
+                    <div style={{ fontSize: 12, opacity: .7, marginTop: 10 }}>
+                      バージョン
+                    </div>
+                    <div style={{ fontWeight: 700 }}>v{APP_VERSION}</div>
+
+                    <div style={{ fontSize: 12, opacity: .7, marginTop: 10 }}>
+                      ログイン中のユーザ
+                    </div>
+                    <div style={{ fontWeight: 600 }}>{userEmail ?? "不明"}</div>
                   </div>
-                  <div style={{ fontWeight: 700 }}>v{APP_VERSION}</div>
-
-                  <div style={{ fontSize: 12, opacity: .7, marginTop: 10 }}>
-                    ログイン中のユーザ
-                  </div>
-                  <div style={{ fontWeight: 600 }}>{userEmail ?? "不明"}</div>
                 </div>
               )}
             </div>
@@ -271,12 +281,17 @@ export default function AppShell({
 
         <Toast msg={msg} wrapStyle={toastWrapStyle} toastStyle={toastStyle} />
 
-        {/* MAIN */}
+        {/* MAIN CONTENT AREA */}
         <div
           style={{
             ...railStyle,
-            paddingTop: `calc(${topBarHeight}px + 12px)`,
-            paddingBottom: `calc(${bottomNavHeight}px + 12px)`,
+            minHeight: `calc(100vh - ${topBarHeight}px - ${bottomNavHeight}px)`,
+            paddingTop: topBarHeight + 16,
+            paddingBottom: bottomNavHeight + 84, /* 追加要望10: 画面最下部の要素がフッター・FABに隠れないよう十分な余白をとる */
+            marginTop: "env(safe-area-inset-top, 0px)",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "stretch",
           }}
         >
           {children}

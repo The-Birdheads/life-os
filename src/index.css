@@ -19,11 +19,23 @@ body {
   min-height: 100vh;
   background: var(--bg);
   background-image: radial-gradient(circle at top right, #e0e7ff 0%, transparent 40%),
-                    radial-gradient(circle at bottom left, #f1f5f9 0%, transparent 40%);
+    radial-gradient(circle at bottom left, #f1f5f9 0%, transparent 40%);
   background-attachment: fixed;
   color: var(--text);
   overflow-x: hidden;
-  overscroll-behavior-y: none; /* Pull-to-refreshや無駄なバウンスを防ぐ */
+  overscroll-behavior-y: none;
+  /* Pull-to-refreshや無駄なバウンスを防ぐ */
+
+  /* スクロールバー起因の横ズレ防止 */
+  scrollbar-width: none;
+  /* Firefox */
+  -ms-overflow-style: none;
+  /* IE and Edge */
+}
+
+/* Chrome, Safari, Opera 用のスクロールバー非表示 */
+body::-webkit-scrollbar {
+  display: none;
 }
 
 /* スマホ入力ズーム防止と美しさ向上 */
@@ -42,7 +54,8 @@ select:focus {
 }
 
 /* リンクとボタンの基本トランジション */
-button, a {
+button,
+a {
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -51,12 +64,22 @@ button:active {
 }
 
 /* レスポンシブ表示制御 */
-.only-mobile { display: none; }
-.only-desktop { display: inline; }
+.only-mobile {
+  display: none;
+}
+
+.only-desktop {
+  display: inline;
+}
 
 @media (max-width: 520px) {
-  .only-mobile { display: inline; }
-  .only-desktop { display: none; }
+  .only-mobile {
+    display: inline;
+  }
+
+  .only-desktop {
+    display: none;
+  }
 }
 
 /* -------------------------------------
@@ -76,8 +99,8 @@ button:active {
 .hover-elevate {
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
+
 .hover-elevate:hover {
   transform: translateY(-2px);
   box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
 }
-

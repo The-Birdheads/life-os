@@ -22,6 +22,11 @@ export const theme = {
   danger: "#dc2626", // Red 600
   warning: "#d97706", // Amber 600
 
+  // 種別カラー (追加要望6) -> 要望7にて色入れ替え
+  habit: "#3b82f6", // Blue 500 (旧タスク色)
+  task: "#10b981", // Emerald 500 (旧習慣色)
+  action: "#f59e0b", // Amber 500
+
   toastBg: "rgba(15, 23, 42, 0.95)", // より濃いスレート
   toastText: "#ffffff",
 } as const;

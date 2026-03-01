@@ -3,10 +3,12 @@ import { theme } from "../../lib/ui/theme";
 
 type Props = Omit<React.InputHTMLAttributes<HTMLInputElement>, "type"> & {
     label?: React.ReactNode;
+    color?: string;
 };
 
-export default function Checkbox({ label, style, ...props }: Props) {
+export default function Checkbox({ label, style, color, ...props }: Props) {
     const checked = props.checked || false;
+    const clr = color || theme.primary;
 
     const wrapperStyle: React.CSSProperties = {
         display: "inline-flex",
@@ -21,13 +23,14 @@ export default function Checkbox({ label, style, ...props }: Props) {
         width: "22px",
         height: "22px",
         borderRadius: "6px",
-        border: `2px solid ${checked ? theme.primary : theme.border}`,
-        background: checked ? theme.primary : "rgba(255, 255, 255, 0.7)",
+        // 未完了: テーマ色、完了: 白色 のボーダー
+        border: `2px solid ${checked ? "#ffffff" : clr}`,
+        background: checked ? clr : "rgba(255, 255, 255, 0.7)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         transition: "all 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
-        boxShadow: checked ? `0 2px 4px ${theme.primary}40` : "inset 0 1px 2px rgba(0,0,0,0.05)",
+        boxShadow: checked ? `0 2px 4px ${clr}40` : "inset 0 1px 2px rgba(0,0,0,0.05)",
         flexShrink: 0,
     };
 

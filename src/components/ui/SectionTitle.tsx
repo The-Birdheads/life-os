@@ -1,58 +1,71 @@
 import React from "react";
-import { theme } from "../../lib/ui/theme";
 
 type Props = {
   title: string;
+  icon?: string;
+  accentColor?: string;
   right?: React.ReactNode;
   style?: React.CSSProperties;
+  isLarge?: boolean; // ✅ 追加：振り返り等の大きな見出し用
 };
 
-export default function SectionTitle({ title, right, style }: Props) {
+export default function SectionTitle({
+  title,
+  icon,
+  accentColor,
+  right,
+  style,
+  isLarge,
+}: Props) {
+  // サブタブと同じ色
+  const defaultBgColor = isLarge ? "#64748b" : "#f1f5f9"; // Slate 500 or Slate 100
+  const defaultTextColor = isLarge ? "#ffffff" : "#111827"; // 中見出しは黒/濃いグレー
+
   const wrap: React.CSSProperties = {
-    width: "100%",
+    // 画面横幅いっぱいに広げるためのネガティブマージン
+    width: "100vw",
+    marginLeft: "calc(50% - 50vw)",
+    marginRight: "calc(50% - 50vw)",
+
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 12,
+    height: isLarge ? 56 : 44, // ✅ ヘッダーと同じ56px、中見出しは少し小さい44pxに設定
 
-    background: theme.card,
-    color: theme.text,
+    background: accentColor ? `${accentColor}15` : defaultBgColor,
+    color: defaultTextColor,
 
-    borderTop: `1px solid ${theme.border}`,
-    borderBottom: `1px solid ${theme.border}`,
-
-    // 左アクセントライン（スタイリッシュ帯感）
-    boxShadow: `inset 3px 0 0 ${theme.primary}`,
-
-    padding: "10px 0",
+    // フォント等の設定
+    fontSize: isLarge ? 16 : 14, // ✅ isLargeのときは文字サイズを大きく
+    lineHeight: 1.2,
+    ...style,
   };
 
   const left: React.CSSProperties = {
     display: "flex",
-    alignItems: "baseline",
-    gap: 10,
-    minWidth: 0,
-    paddingLeft: 12,
+    alignItems: "center",
+    gap: 8,
+    // 親要素の 100vw の中で、元のコンテンツ幅に合わせるためのパディング
+    // アプリ全体の max-width が 600px 程度だと仮定して中央寄せ＆内側マージンを計算
+    paddingLeft: "calc(max(0px, 50vw - 300px) + 16px)", // ✅ 目安: Cardの枠と同じくらいに開始位置を合わせる
   };
 
   const titleStyle: React.CSSProperties = {
-    margin: 0,
-    fontSize: 13,
-    fontWeight: 800,
-    letterSpacing: 0.6,
-    whiteSpace: "nowrap",
+    fontWeight: "bold",
+    opacity: isLarge ? 1.0 : 0.9,
   };
 
   const rightWrap: React.CSSProperties = {
-    paddingRight: 12,
+    paddingRight: "calc(max(0px, 50vw - 300px) + 16px)", // ✅ 目安: 終了位置もCard内側に合わせる
     display: "flex",
     alignItems: "center",
     gap: 6,
   };
 
   return (
-    <div style={{ ...wrap, ...style }}>
+    <div style={{ ...wrap }}>
       <div style={left}>
+        {icon && <span style={{ fontSize: 16, lineHeight: 1 }}>{icon}</span>}
         <h3 style={titleStyle}>{title}</h3>
       </div>
 

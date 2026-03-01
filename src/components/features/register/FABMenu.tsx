@@ -27,7 +27,7 @@ export default function FABMenu({ onSelect }: Props) {
     const fabStyle: React.CSSProperties = {
         position: "fixed",
         right: 24,
-        bottom: 90, // Tabsより上に配置
+        bottom: 104, // Tabs(64px) + 余白バランス
         width: 56,
         height: 56,
         borderRadius: 28,
@@ -48,7 +48,7 @@ export default function FABMenu({ onSelect }: Props) {
     const menuStyle: React.CSSProperties = {
         position: "fixed",
         right: 24,
-        bottom: 160,
+        bottom: 176, // 104 + 56 + 16
         display: "flex",
         flexDirection: "column",
         gap: 12,

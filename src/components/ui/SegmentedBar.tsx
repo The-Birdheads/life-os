@@ -1,6 +1,5 @@
 import { theme } from "../../lib/ui/theme";
 import { radius } from "../../lib/ui/radius";
-import { shadow } from "../../lib/ui/shadow";
 
 type Item<K extends string> = {
   key: K;
@@ -14,8 +13,8 @@ type Props<K extends string> = {
   onChange: (key: K) => void;
   ariaLabel?: string;
 
-  maxWidth?: number;   // 例: 720
-  fullWidth?: boolean; // default true
+  maxWidth?: number;     // 例: 720
+  stickyTop?: number;    // 指定すれば sticky になり上からの距離を設定
 };
 
 export default function SegmentedBar<K extends string>({
@@ -24,108 +23,117 @@ export default function SegmentedBar<K extends string>({
   onChange,
   ariaLabel = "セグメント切り替え",
   maxWidth = 720,
-  fullWidth = true,
+  stickyTop,
 }: Props<K>) {
   return (
     <div
       role="tablist"
       aria-label={ariaLabel}
       style={{
-        width: fullWidth ? "100%" : "fit-content",
-        maxWidth,
         margin: "0 auto",
+        padding: "8px 12px",
 
-        padding: 6,
-        borderRadius: radius.lg,
-        background: theme.card,                  // ✅ レールはカード色
-        border: `1px solid ${theme.border}`,
-        boxShadow: shadow.xs ?? "none",
+        // 追加要望10+微修正: ヘッダーと同じ幅（画面幅いっぱい）に広げ、色を1トーン明るくする
+        width: "100vw",
+        marginLeft: "calc(50% - 50vw)",
+        marginRight: "calc(50% - 50vw)",
+        background: "#64748b", // Slate 500 (12:00更新)
+        color: theme.surfaceDarkText,
+
+        // sticky対応
+        ...(stickyTop !== undefined ? {
+          position: "sticky",
+          top: stickyTop,
+          marginTop: -16, // AppShell側の paddingTop16px によるヘッダーとの隙間を埋める
+          zIndex: 60,
+          boxShadow: "0 2px 4px rgba(0,0,0,0.1)", // ヘッダーと同じ階層感の影
+        } : {}),
 
         display: "flex",
-        gap: 6,
+        justifyContent: "center",
         boxSizing: "border-box",
-        overflow: "hidden",
       }}
     >
-      {items.map((it) => {
-        const active = it.key === value;
+      <div style={{ display: "flex", gap: 6, width: "100%", maxWidth }}>
+        {items.map((it) => {
+          const active = it.key === value;
 
-        return (
-          <button
-            key={it.key}
-            type="button"
-            role="tab"
-            aria-selected={active}
-            onClick={() => onChange(it.key)}
-            style={{
-              flex: 1,
-              minWidth: 0,
-
-              height: 40,
-              padding: "0 12px",
-              borderRadius: radius.lg,
-
-              border: `1px solid ${active ? theme.border : "transparent"}`,
-              background: active ? "rgba(17,17,17,0.06)" : "transparent", // ✅ 選択中だけうっすら面
-              color: theme.text,
-              opacity: active ? 1 : 0.65,         // ✅ 未選択は薄め
-
-              fontWeight: active ? 900 : 700,
-              letterSpacing: "0.02em",
-
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 8,
-
-              cursor: "pointer",
-              transition: "0.15s",
-              userSelect: "none",
-              WebkitTapHighlightColor: "transparent",
-              outline: "none",
-
-              // ✅ 選択中だけ “浮く” 感（やりすぎない）
-              boxShadow: active ? (shadow.sm ?? "none") : "none",
-            }}
-            onMouseEnter={(e) => {
-              if (active) return;
-              e.currentTarget.style.background = "rgba(17,17,17,0.04)";
-              e.currentTarget.style.opacity = "0.85";
-            }}
-            onMouseLeave={(e) => {
-              if (active) return;
-              e.currentTarget.style.background = "transparent";
-              e.currentTarget.style.opacity = "0.65";
-            }}
-          >
-            <span
+          return (
+            <button
+              key={it.key}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => onChange(it.key)}
               style={{
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
+                flex: 1,
+                minWidth: 0,
+                height: 36,
+                padding: "0 12px",
+                borderRadius: radius.md,
+                border: "none",
+
+                // 追加要望10: アクティブ時は白背景・黒文字（反転）
+                background: active ? "#ffffff" : "transparent",
+                color: active ? "#111111" : theme.surfaceDarkText,
+                opacity: active ? 1 : 0.7,
+
+                fontWeight: active ? 800 : 600,
+                fontSize: 14,
+                letterSpacing: "0.02em",
+
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+
+                cursor: "pointer",
+                transition: "0.15s",
+                userSelect: "none",
+                WebkitTapHighlightColor: "transparent",
+                outline: "none",
+                boxShadow: active ? "0 2px 4px rgba(0,0,0,0.1)" : "none",
+              }}
+              onMouseEnter={(e) => {
+                if (active) return;
+                e.currentTarget.style.background = "rgba(255, 255, 255, 0.1)";
+                e.currentTarget.style.opacity = "0.9";
+              }}
+              onMouseLeave={(e) => {
+                if (active) return;
+                e.currentTarget.style.background = "transparent";
+                e.currentTarget.style.opacity = "0.7";
               }}
             >
-              {it.label}
-            </span>
-
-            {it.badge != null && (
               <span
                 style={{
-                  fontSize: 12,
-                  fontWeight: 900,
-                  padding: "2px 8px",
-                  borderRadius: 999,
-                  background: active ? "rgba(17,17,17,0.10)" : "rgba(17,17,17,0.06)",
-                  color: theme.text,
-                  opacity: active ? 0.9 : 0.75,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
                 }}
               >
-                {it.badge}
+                {it.label}
               </span>
-            )}
-          </button>
-        );
-      })}
+
+              {it.badge != null && (
+                <span
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 900,
+                    padding: "2px 8px",
+                    borderRadius: 999,
+                    background: active ? "rgba(0,0,0,0.05)" : "rgba(255,255,255,0.15)",
+                    color: active ? "#111111" : theme.surfaceDarkText,
+                    opacity: 1,
+                  }}
+                >
+                  {it.badge}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import type { Task } from "../lib/types";
 import Card from "../components/ui/Card";
 import SectionTitle from "../components/ui/SectionTitle";
 import { space } from "../lib/ui/spacing";
+import { theme } from "../lib/ui/theme";
 
 
 
@@ -30,10 +31,6 @@ function addDaysISO(day: string, delta: number) {
     return isoDay(dt);
 }
 
-function shortMD(iso: string) {
-    // "2026-02-14" -> "02/14"
-    return iso.slice(5).replace("-", "/");
-}
 
 
 export default function WeekView({
@@ -155,27 +152,42 @@ export default function WeekView({
         typeof window !== "undefined" &&
         window.matchMedia("(max-width: 430px)").matches;
 
-    const cellPad = isMobile ? "6px 4px" : "8px 6px";
+    const cellPad = isMobile ? "12px 4px" : "14px 12px"; // プロっぽく余白を広く
     const cellFontSize = isMobile ? 12 : 14;
 
-    function dayLabel(iso: string) {
-        return isMobile ? shortMD(iso) : iso;
+    function formatDayLabel(iso: string) {
+        if (!iso) return iso;
+        const d = new Date(iso);
+        if (isNaN(d.getTime())) return iso;
+        const dayOfWeek = ["日", "月", "火", "水", "木", "金", "土"][d.getDay()];
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const date = String(d.getDate()).padStart(2, '0');
+        const formatted = `${m}月${date}日(${dayOfWeek})`;
+        return isMobile ? `${m}/${date}(${dayOfWeek})` : formatted;
     }
 
+    // YYYY年MM月DD日
+    const titleDateMatch = endDay.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const titleDateStr = titleDateMatch
+        ? `${titleDateMatch[1]}年${titleDateMatch[2]}月${titleDateMatch[3]}日`
+        : endDay;
 
     return (
         <>
             <div style={{ display: "grid", gap: space.lg, marginTop: space.md }}>
-                <SectionTitle title={`${endDay} までの7日間`} />
-                <Card style={cardStyle}>
-                    <div> 平均 充実度: <b>{avg.toFixed(1)}</b>
-                        {weekLoading ? <small style={{ marginLeft: 8, opacity: 0.7 }}>読み込み中…</small> : null}
+                <SectionTitle title={`${titleDateStr} までの7日間`} isLarge={true} style={{ marginBottom: 8 }} />
+                <Card style={{ ...cardStyle, padding: "24px 0" }}> {/* 余白調整 */}
+                    <div style={{ padding: "0 24px", marginBottom: 16, display: "flex", alignItems: "baseline", gap: 12 }}>
+                        <span style={{ fontSize: 14, color: "#64748b", fontWeight: 500 }}>平均 充実度</span>
+                        <b style={{ fontSize: 24, color: theme.primary }}>{avg.toFixed(1)}</b>
+                        {weekLoading ? <small style={{ color: "#94a3b8" }}>読み込み中…</small> : null}
                     </div>
 
-                    <div style={{ width: "100%" }}>
+                    <div style={{ width: "100%", overflowX: "auto" }}>
                         <table
                             style={{
                                 width: "100%",
+                                minWidth: "400px", // スマホでも崩れにくくするため
                                 tableLayout: "fixed",
                                 borderCollapse: "collapse",
                             }}
@@ -189,22 +201,22 @@ export default function WeekView({
                                 <col style={{ width: "22.5%" }} />
                             </colgroup>
 
-                            <thead>
+                            <thead style={{ background: "#f8fafc", borderTop: "1px solid #e2e8f0", borderBottom: "2px solid #e2e8f0" }}>
                                 <tr>
-                                    <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: cellPad }}>日付</th>
-                                    <th style={{ textAlign: "right", borderBottom: "1px solid #eee", padding: cellPad }}>習慣</th>
-                                    <th style={{ textAlign: "right", borderBottom: "1px solid #eee", padding: cellPad }}>タスク</th>
-                                    <th style={{ textAlign: "right", borderBottom: "1px solid #eee", padding: cellPad }}>行動</th>
-                                    <th style={{ textAlign: "right", borderBottom: "1px solid #eee", padding: cellPad }}>充実度</th>
+                                    <th style={{ textAlign: "left", padding: cellPad, color: "#475569", fontWeight: 600, fontSize: cellFontSize }}>日付</th>
+                                    <th style={{ textAlign: "right", padding: cellPad, color: "#475569", fontWeight: 600, fontSize: cellFontSize }}>習慣</th>
+                                    <th style={{ textAlign: "right", padding: cellPad, color: "#475569", fontWeight: 600, fontSize: cellFontSize }}>タスク</th>
+                                    <th style={{ textAlign: "right", padding: cellPad, color: "#475569", fontWeight: 600, fontSize: cellFontSize }}>行動</th>
+                                    <th style={{ textAlign: "right", padding: cellPad, color: "#475569", fontWeight: 600, fontSize: cellFontSize }}>充実度</th>
                                 </tr>
                             </thead>
 
                             <tbody>
-                                {rows.map((r) => (
-                                    <tr key={r.day}>
+                                {rows.map((r, i) => (
+                                    <tr key={r.day} style={{ background: i % 2 === 0 ? "#ffffff" : "#fafafa", transition: "background 0.2s" }}>
                                         <td style={{
                                             padding: cellPad,
-                                            borderBottom: "1px solid #f3f4f6",
+                                            borderBottom: "1px solid #f1f5f9",
                                             fontSize: cellFontSize,
                                             overflow: "hidden"
                                         }}>
@@ -240,21 +252,21 @@ export default function WeekView({
                                                     }}
                                                     title={r.day}
                                                 >
-                                                    {dayLabel(r.day)}
+                                                    {formatDayLabel(r.day)}
                                                 </span>
                                             </button>
                                         </td>
 
-                                        <td style={{ padding: cellPad, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>
-                                            {r.habitDone}
+                                        <td style={{ padding: cellPad, borderBottom: "1px solid #f1f5f9", textAlign: "right", fontSize: cellFontSize, color: "#334155" }}>
+                                            {r.habitDone || <span style={{ color: "#cbd5e1" }}>-</span>}
                                         </td>
-                                        <td style={{ padding: cellPad, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>
-                                            {r.taskDone}
+                                        <td style={{ padding: cellPad, borderBottom: "1px solid #f1f5f9", textAlign: "right", fontSize: cellFontSize, color: "#334155" }}>
+                                            {r.taskDone || <span style={{ color: "#cbd5e1" }}>-</span>}
                                         </td>
-                                        <td style={{ padding: cellPad, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>
-                                            {r.actionDone}
+                                        <td style={{ padding: cellPad, borderBottom: "1px solid #f1f5f9", textAlign: "right", fontSize: cellFontSize, color: "#334155" }}>
+                                            {r.actionDone || <span style={{ color: "#cbd5e1" }}>-</span>}
                                         </td>
-                                        <td style={{ padding: cellPad, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>
+                                        <td style={{ padding: cellPad, borderBottom: "1px solid #f1f5f9", textAlign: "right", fontSize: cellFontSize, fontWeight: r.fulfillment != null ? 600 : 400, color: r.fulfillment != null ? theme.primary : "#cbd5e1" }}>
                                             {r.fulfillment == null ? "-" : r.fulfillment}
                                         </td>
                                     </tr>

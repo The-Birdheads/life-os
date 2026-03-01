@@ -118,11 +118,21 @@ export default function RegisterModals({
         width: 32, height: 32, borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center",
         cursor: "pointer", fontSize: 20, lineHeight: 1, color: "var(--text)", paddingBottom: 2,
     };
-    const rowCardStyle: React.CSSProperties = {
-        border: "1px solid var(--border)", borderRadius: 12, padding: "10px 12px",
-        background: "var(--card)", display: "flex", justifyContent: "space-between",
-        gap: 10, alignItems: "center", width: "100%", boxSizing: "border-box",
-    };
+
+    // ✅ 追加要望7: アイテム行カードの沈み込みと色反転（モーダル内用）
+    const getRowCardStyle = (accentColor?: string, isDone?: boolean): React.CSSProperties => ({
+        border: "1px solid var(--border)",
+        borderRadius: 12,
+        padding: "10px 12px",
+        background: isDone && accentColor ? accentColor : "var(--card)",
+        color: isDone && accentColor ? "#ffffff" : "var(--text)",
+        display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", width: "100%", boxSizing: "border-box",
+
+        // 未完了なら右下に影を持たせる、完了なら影を消して沈み込む位置へ
+        boxShadow: !isDone && accentColor ? `3px 3px 0px ${accentColor}40` : "0 1px 2px rgba(0,0,0,0.02)",
+        transform: isDone ? "translate(3px, 3px)" : "translate(0, 0)",
+        transition: "all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)",
+    });
 
     // --- Internal Components ---
     function TaskListModal({ type, title }: { type: "habit" | "oneoff"; title: string }) {
@@ -212,13 +222,15 @@ export default function RegisterModals({
 
         function TaskRow({ task }: { task: Task }) {
             const isHidden = !!(task as any).is_hidden;
+            // モーダル内のプレビューでは「完了」状態としての反転はなく、未完了時の「影あり」状態とする
+            const accentColor = type === "habit" ? theme.habit : theme.task;
 
             return (
                 <div
-                    style={{ ...rowCardStyle, cursor: "pointer" }}
+                    style={{ ...getRowCardStyle(accentColor, false), cursor: "pointer" }}
                     onClick={() => setEditingItem(task)}
-                    onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.01)")}
-                    onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
+                    onMouseEnter={(e) => (e.currentTarget.style.transform = "translate(0,0) scale(1.01)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.transform = "translate(0,0) scale(1)")}
                 >
                     <div style={{ flex: 1, minWidth: 0, display: "grid", gap: 4 }}>
                         <div style={{ fontWeight: 700, lineHeight: 1.3, wordBreak: "break-word" }}>{task.title}</div>
@@ -387,12 +399,13 @@ export default function RegisterModals({
 
         function ActionRow({ actionItem }: { actionItem: Action }) {
             const isHidden = !!actionItem.is_hidden;
+            // Actionは常にDone(完了)状態の反転カラーと沈み込み表現とする
             return (
                 <div
-                    style={{ ...rowCardStyle, cursor: "pointer" }}
+                    style={{ ...getRowCardStyle(theme.action, true), cursor: "pointer" }}
                     onClick={() => setEditingItem(actionItem)}
-                    onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.01)")}
-                    onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
+                    onMouseEnter={(e) => (e.currentTarget.style.transform = "translate(3px,3px) scale(1.01)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.transform = "translate(3px,3px) scale(1)")}
                 >
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                         <div style={{ fontWeight: 700 }}>{(actionItem as any).kind}</div>
