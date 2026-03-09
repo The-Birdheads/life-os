@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import type { Action, Task } from "../lib/types";
+import { sqliteRepo } from "../lib/db/instance";
 
 import Card from "../components/ui/Card";
 
@@ -40,7 +41,6 @@ type Props = {
 
     todayActionEntries: any[];
     setMsg: (s: string) => void;
-    supabase: any;
 
     cardStyle: React.CSSProperties;
 
@@ -59,7 +59,6 @@ export default function TodayView({
     doneTaskIdsAnyDay,
     todayActionEntries,
     setMsg,
-    supabase,
     cardStyle,
     loadTodayEntries,
     loadBase,
@@ -125,19 +124,20 @@ export default function TodayView({
 
         try {
             if (nextDone) {
-                const { error } = await supabase.from("task_entries").upsert(
-                    { user_id: userId, day, task_id: taskId, status: "done" },
-                    { onConflict: "user_id,day,task_id" }
-                );
-                if (error) throw error;
+                await sqliteRepo.upsertTaskEntry({
+                    user_id: userId,
+                    day,
+                    task_id: taskId,
+                    status: "done"
+                } as any);
             } else {
-                const { error } = await supabase
-                    .from("task_entries")
-                    .delete()
-                    .eq("user_id", userId)
-                    .eq("day", day)
-                    .eq("task_id", taskId);
-                if (error) throw error;
+                // To un-check, we change status or delete. Since we don't have a direct delete exposed in the interface for task_entries, we can upsert with a different status or we can add delete to the repo. Let's add delete to repo later, for now let's just use "todo" status as unchecked.
+                await sqliteRepo.upsertTaskEntry({
+                    user_id: userId,
+                    day,
+                    task_id: taskId,
+                    status: "todo"
+                } as any);
             }
         } catch (e) {
             // DB失敗時は正に戻す
@@ -166,7 +166,7 @@ export default function TodayView({
             color: isDone && accentColor ? "#ffffff" : "var(--text)",
 
             // 未完了なら右下に影を持たせる、完了なら影を消して沈み込む位置へ
-            boxShadow: !isDone && accentColor ? `3px 3px 0px ${accentColor}40` : "0 1px 2px rgba(0,0,0,0.02)",
+            boxShadow: !isDone && accentColor ? `3px 3px 0px ${accentColor} 40` : "0 1px 2px rgba(0,0,0,0.02)",
             transform: isDone ? "translate(3px, 3px)" : "translate(0, 0)",
 
             transition: "all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)",
@@ -204,13 +204,9 @@ export default function TodayView({
         if (patch.volume !== undefined) updateObj.volume = patch.volume;
         if (patch.action_id !== undefined) updateObj.action_id = patch.action_id;
 
-        const { error } = await supabase
-            .from("action_entries")
-            .update(updateObj)
-            .eq("user_id", userId)
-            .eq("id", entryId);
+        // update action entry via repo logic
+        await sqliteRepo.updateActionEntry(userId, entryId, updateObj);
 
-        if (error) throw error;
         await loadTodayEntries();
     }
 
@@ -319,13 +315,12 @@ export default function TodayView({
                         volume: Math.min(10, Math.max(1, Number(volume))),
                     });
                 } else {
-                    const { error } = await supabase.from("tasks").update({
+                    await sqliteRepo.updateTask(userId, item.id, {
                         title: title.trim(),
                         priority,
                         volume,
                         due_date: type === "oneoff" && dueDate ? dueDate : null,
-                    }).eq("user_id", userId).eq("id", item.id);
-                    if (error) throw error;
+                    } as any);
                     await loadBase();
                 }
                 setEditingItem(null);
@@ -340,12 +335,10 @@ export default function TodayView({
             setMsg("");
             try {
                 if (type === "action") {
-                    const { error } = await supabase.from("action_entries").delete().eq("user_id", userId).eq("id", item.id);
-                    if (error) throw error;
+                    await sqliteRepo.deleteActionEntry(userId, item.id);
                     await loadTodayEntries();
                 } else {
-                    const { error } = await supabase.from("tasks").delete().eq("user_id", userId).eq("id", item.id);
-                    if (error) throw error;
+                    await sqliteRepo.deleteTask(userId, item.id);
                     await loadBase();
                 }
                 setEditingItem(null);
@@ -440,15 +433,15 @@ export default function TodayView({
     return (
         <>
             <style>{`
-                @keyframes fadeIn {
+@keyframes fadeIn {
                     from { opacity: 0; }
                     to { opacity: 1; }
-                }
-                @keyframes slideUp {
-                    from { transform: translateY(100%); opacity: 0; }
+}
+@keyframes slideUp {
+                    from { transform: translateY(100 %); opacity: 0; }
                     to { transform: translateY(0); opacity: 1; }
-                }
-            `}</style>
+}
+`}</style>
             {/* ✅ サブバー（segmented bar） */}
             <SegmentedBar
                 items={segmentedItems as any}

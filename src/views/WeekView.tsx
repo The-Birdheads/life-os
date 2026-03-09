@@ -17,9 +17,10 @@ type Props = {
     setDay: (d: string) => void;
     setTab: (t: Tab) => void;
     setMsg: (s: string) => void;
-    supabase: any; // Phase1なのでanyでOK（後で型付け）
     cardStyle: React.CSSProperties;
 };
+
+import { sqliteRepo } from "../lib/db/instance";
 
 function isoDay(d: Date) {
     return d.toISOString().slice(0, 10);
@@ -40,7 +41,6 @@ export default function WeekView({
     setDay,
     setTab,
     setMsg,
-    supabase,
     cardStyle,
 }: Props) {
     const [rows, setRows] = useState<
@@ -67,36 +67,26 @@ export default function WeekView({
         (async () => {
             setWeekLoading(true);
             try {
-                const [
-                    { data: te, error: teErr },
-                    { data: ae, error: aeErr },
-                    { data: dl, error: dlErr },
-                ] = await Promise.all([
-                    supabase
-                        .from("task_entries")
-                        .select("day, task_id, status")
-                        .eq("user_id", userId)
-                        .gte("day", startDay)
-                        .lte("day", endDay),
+                const db = await (sqliteRepo as any).getDb();
 
-                    supabase
-                        .from("action_entries")
-                        .select("day, id")
-                        .eq("user_id", userId)
-                        .gte("day", startDay)
-                        .lte("day", endDay),
-
-                    supabase
-                        .from("daily_logs")
-                        .select("day, fulfillment")
-                        .eq("user_id", userId)
-                        .gte("day", startDay)
-                        .lte("day", endDay),
+                const [teRes, aeRes, dlRes] = await Promise.all([
+                    db.query(
+                        `SELECT day, task_id, status FROM task_entries WHERE user_id = ? AND day >= ? AND day <= ?`,
+                        [userId, startDay, endDay]
+                    ),
+                    db.query(
+                        `SELECT day, id FROM action_entries WHERE user_id = ? AND day >= ? AND day <= ?`,
+                        [userId, startDay, endDay]
+                    ),
+                    db.query(
+                        `SELECT day, fulfillment FROM daily_logs WHERE user_id = ? AND day >= ? AND day <= ?`,
+                        [userId, startDay, endDay]
+                    )
                 ]);
 
-                if (teErr) throw teErr;
-                if (aeErr) throw aeErr;
-                if (dlErr) throw dlErr;
+                const te = teRes.values || [];
+                const ae = aeRes.values || [];
+                const dl = dlRes.values || [];
 
                 const taskById = new Map(tasks.map((t) => [t.id, t]));
 
@@ -105,7 +95,7 @@ export default function WeekView({
                 const actionCountMap = new Map<string, number>();
                 const fulfillmentMap = new Map<string, number | null>();
 
-                (te ?? []).forEach((r: any) => {
+                te.forEach((r: any) => {
                     if (r.status !== "done") return;
                     const t = taskById.get(r.task_id);
                     if (!t) return;
@@ -117,11 +107,11 @@ export default function WeekView({
                     }
                 });
 
-                (ae ?? []).forEach((r: any) => {
+                ae.forEach((r: any) => {
                     actionCountMap.set(r.day, (actionCountMap.get(r.day) ?? 0) + 1);
                 });
 
-                (dl ?? []).forEach((r: any) => {
+                dl.forEach((r: any) => {
                     fulfillmentMap.set(r.day, typeof r.fulfillment === "number" ? r.fulfillment : null);
                 });
 
@@ -140,7 +130,7 @@ export default function WeekView({
                 setWeekLoading(false);
             }
         })();
-    }, [userId, startDay, endDay, days, tasks, setMsg, supabase]);
+    }, [userId, startDay, endDay, days, tasks, setMsg]);
 
     const avg = useMemo(() => {
         const vals = rows.map((r) => r.fulfillment).filter((v): v is number => typeof v === "number");

@@ -29,6 +29,10 @@ type Props = {
   onPrevDay?: () => void;
   onNextDay?: () => void;
   canGoNext?: boolean;
+  onSync?: () => Promise<void>;
+  adHeight: number;
+  onSignInWithGoogle?: () => void;
+  onDateSelect?: (dateStr: string) => void;
 };
 
 export default function AppShell({
@@ -46,6 +50,10 @@ export default function AppShell({
   onPrevDay,
   onNextDay,
   canGoNext,
+  onSync,
+  adHeight,
+  onSignInWithGoogle,
+  onDateSelect,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -113,7 +121,6 @@ export default function AppShell({
         <div
           style={{
             position: "fixed",
-            top: 0,
             left: 0,
             right: 0,
             zIndex: 70,
@@ -122,8 +129,9 @@ export default function AppShell({
             WebkitBackdropFilter: "blur(12px) saturate(180%)",
             borderBottom: `1px solid rgba(255,255,255,0.05)`, /* ダーク用ボーダー */
             boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)", /* 落ちる影 */
-            paddingTop: "env(safe-area-inset-top, 0px)",
+            paddingTop: "calc(env(safe-area-inset-top, 0px) + 24px)", /* ステータスバー分の余白を明示的に確保 */
             color: theme.surfaceDarkText, /* テキストを白系に */
+            top: adHeight,
           }}
         >
           <div style={{
@@ -133,7 +141,7 @@ export default function AppShell({
           }}>
             {/* LEFT */}
             <div style={{ justifySelf: "start", fontWeight: 900, fontSize: 18 }}>
-              Life OS
+              Habitas
             </div>
 
             {/* CENTER */}
@@ -172,16 +180,27 @@ export default function AppShell({
                     value={headerDateLabel?.replaceAll(" / ", "-")}
                     max={new Date().toISOString().slice(0, 10)}
                     onChange={(e) => {
-                      const val = e.target.value
+                      const val = e.target.value;
+                      console.log("[DatePicker] onChange fired:", val);
                       if (val) {
-                        window.dispatchEvent(
-                          new CustomEvent("lifeos:setDay", { detail: val })
-                        )
+                        if (onDateSelect) {
+                          console.log("[DatePicker] onDateSelect called with:", val);
+                          onDateSelect(val);
+                        } else {
+                          window.dispatchEvent(
+                            new CustomEvent("lifeos:setDay", { detail: val })
+                          );
+                        }
                       }
                     }}
-                    onPointerDown={(e) => {
-                      const el = e.currentTarget as any
-                      if (el.showPicker) el.showPicker()
+                    onClick={(e) => {
+                      console.log("[DatePicker] input clicked");
+                      const el = e.currentTarget as any;
+                      try {
+                        if (el.showPicker) el.showPicker();
+                      } catch (err) {
+                        console.error("[DatePicker] showPicker error:", err);
+                      }
                     }}
                     style={{
                       position: "absolute",
@@ -259,9 +278,32 @@ export default function AppShell({
 
                     <div style={{ height: 8 }} />
 
-                    <PrimaryBtn fullWidth onClick={onSignOut}>
-                      ログアウト
-                    </PrimaryBtn>
+                    {userEmail === "offline-user@local" || !userEmail ? (
+                      <PrimaryBtn fullWidth onClick={() => {
+                        setMenuOpen(false);
+                        onSignInWithGoogle?.();
+                      }}>
+                        Googleでログイン
+                      </PrimaryBtn>
+                    ) : (
+                      <>
+                        <PrimaryBtn fullWidth onClick={() => {
+                          setMenuOpen(false);
+                          if (onSync) onSync();
+                        }}>
+                          クラウド同期
+                        </PrimaryBtn>
+
+                        <div style={{ height: 8 }} />
+
+                        <PrimaryBtn fullWidth onClick={() => {
+                          setMenuOpen(false);
+                          onSignOut();
+                        }}>
+                          ログアウト
+                        </PrimaryBtn>
+                      </>
+                    )}
 
                     <div style={{ fontSize: 12, opacity: .7, marginTop: 10 }}>
                       バージョン
@@ -269,9 +311,11 @@ export default function AppShell({
                     <div style={{ fontWeight: 700 }}>v{APP_VERSION}</div>
 
                     <div style={{ fontSize: 12, opacity: .7, marginTop: 10 }}>
-                      ログイン中のユーザ
+                      {userEmail === "offline-user@local" || !userEmail ? "ステータス" : "ログイン中のユーザ"}
                     </div>
-                    <div style={{ fontWeight: 600 }}>{userEmail ?? "不明"}</div>
+                    <div style={{ fontWeight: 600 }}>
+                      {userEmail === "offline-user@local" || !userEmail ? "オフラインモード" : userEmail}
+                    </div>
                   </div>
                 </div>
               )}
@@ -286,8 +330,8 @@ export default function AppShell({
           style={{
             ...railStyle,
             minHeight: `calc(100vh - ${topBarHeight}px - ${bottomNavHeight}px)`,
-            paddingTop: topBarHeight + 16,
-            paddingBottom: bottomNavHeight + 84, /* 追加要望10: 画面最下部の要素がフッター・FABに隠れないよう十分な余白をとる */
+            paddingTop: topBarHeight + adHeight + 40, /* ヘッダー分＋広告分＋余白 */
+            paddingBottom: 120, /* ボトムは標準に戻す */
             marginTop: "env(safe-area-inset-top, 0px)",
             display: "flex",
             flexDirection: "column",
@@ -309,6 +353,7 @@ export default function AppShell({
             backdropFilter: "blur(12px) saturate(180%)",
             WebkitBackdropFilter: "blur(12px) saturate(180%)",
             borderTop: `1px solid rgba(255,255,255,0.05)`,
+            paddingBottom: "env(safe-area-inset-bottom, 24px)", /* 標準の余白に戻す */
           }}
         >
           <div style={{ ...railStyle, padding: 8 }}>

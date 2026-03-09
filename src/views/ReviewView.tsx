@@ -38,12 +38,12 @@ type Props = {
   setNote: (s: string) => void;
   fulfillment: number;
   setFulfillment: (n: number) => void;
-
   setMsg: (s: string) => void;
-  supabase: any;
 
   cardStyle: React.CSSProperties; // ✅ App.tsx の cardStyle を渡して見た目維持
 };
+
+import { sqliteRepo } from "../lib/db/instance";
 
 export default function ReviewView({
   userId,
@@ -57,7 +57,6 @@ export default function ReviewView({
   fulfillment,
   setFulfillment,
   setMsg,
-  supabase,
   cardStyle,
 }: Props) {
   const [reviewLoading, setReviewLoading] = useState(false);
@@ -77,33 +76,30 @@ export default function ReviewView({
     setReviewLoading(true);
 
     (async () => {
-      const { data, error } = await supabase
-        .from("daily_logs")
-        .select("note, fulfillment")
-        .eq("user_id", userId)
-        .eq("day", day)
-        .maybeSingle();
+      try {
+        const log = await sqliteRepo.getDailyLog(userId, day);
 
-      // ✅ 古いリクエスト結果は捨てる
-      if (reqId !== reqIdRef.current) return;
+        // ✅ 古いリクエスト結果は捨てる
+        if (reqId !== reqIdRef.current) return;
 
-      if (error) {
-        setMsg(error.message);
-        setReviewLoading(false);
-        return;
+        // ✅ その日の保存有無で初期表示を決める
+        const saved = !!log; // レコードがある＝一度でも保存された
+        setHasSavedReview(saved);
+        setIsEditingReview(false); // ✅ 追加要望11: 未保存でもすぐフォームは出さず、ボタンだけ見せる
+
+        setNote(log?.note ?? "");
+        setFulfillment(typeof log?.fulfillment === "number" ? log.fulfillment : 0);
+
+      } catch (error: any) {
+        if (reqId !== reqIdRef.current) return;
+        setMsg(error.message || "読み込みエラー");
+      } finally {
+        if (reqId === reqIdRef.current) {
+          setReviewLoading(false);
+        }
       }
-
-      // ✅ その日の保存有無で初期表示を決める
-      const saved = !!data; // レコードがある＝一度でも保存された
-      setHasSavedReview(saved);
-      setIsEditingReview(false); // ✅ 追加要望11: 未保存でもすぐフォームは出さず、ボタンだけ見せる
-
-      setNote(data?.note ?? "");
-      setFulfillment(typeof data?.fulfillment === "number" ? data.fulfillment : 0);
-
-      setReviewLoading(false);
     })();
-  }, [userId, day, setMsg, setNote, setFulfillment, supabase]);
+  }, [userId, day, setMsg, setNote, setFulfillment]);
 
   // ✅ その日完了したもの（表示用）
   const doneHabits = tasks.filter((t) => t.task_type === "habit" && doneTaskIds.has(t.id));
@@ -135,17 +131,24 @@ export default function ReviewView({
     const fNum = Number(fulfillment);
     const f = Number.isFinite(fNum) && fNum >= 1 && fNum <= 100 ? Math.trunc(fNum) : null;
 
-    const { error } = await supabase.from("daily_logs").upsert(
-      {
+    try {
+      await sqliteRepo.upsertDailyLog({
         user_id: userId,
         day,
         note: note.trim() ? note.trim() : null,
+        satisfaction: null,
+        task_total: habitsCount + tasksCount,
+        action_total: actionsCount,
+        total_score: habitsVol + tasksVol + actionsVol,
+        task_ratio: 0,
+        action_ratio: 0,
+        balance_factor: 0,
         fulfillment: f,
-      },
-      { onConflict: "user_id,day" }
-    );
-
-    if (error) throw error;
+      } as any);
+    } catch (error: any) {
+      setMsg(error?.message || "保存エラー");
+      throw error;
+    }
 
     setMsg("振り返りを保存しました。");
 

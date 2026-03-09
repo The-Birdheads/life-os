@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Habitas</string>
+    <string name="title_activity_main">Habitas</string>
+    <string name="package_name">com.kanta.lifeos</string>
+    <string name="custom_url_scheme">com.kanta.lifeos</string>
+</resources>

@@ -7,15 +7,14 @@ type Props = {
 
 export default function FABMenu({ onSelect }: Props) {
     const [open, setOpen] = useState(false);
+    const adHeight = 0; // 広告が上部に移動したため、下部の回避ロジックは不要になりました
+
+
 
     // 外側クリックで閉じる
     useEffect(() => {
         if (!open) return;
-        const onClick = () => {
-            // FABメニューの内側クリックは伝播させない工夫が必要だが、
-            // 今回はシンプルにキャプチャフェーズで処理するか、
-            // メニュー内のクリックで閉じるのでそのままでOK
-        };
+        const onClick = () => { };
         // 少し遅らせて登録（開いた瞬間のクリックを拾わないように）
         const t = setTimeout(() => window.addEventListener("click", onClick), 10);
         return () => {
@@ -27,7 +26,7 @@ export default function FABMenu({ onSelect }: Props) {
     const fabStyle: React.CSSProperties = {
         position: "fixed",
         right: 24,
-        bottom: 104, // Tabs(64px) + 余白バランス
+        bottom: 104 + adHeight, // Tabs(64px) + 余白バランス (+ 広告50px)
         width: 56,
         height: 56,
         borderRadius: 28,
@@ -41,14 +40,14 @@ export default function FABMenu({ onSelect }: Props) {
         fontSize: 28,
         cursor: "pointer",
         zIndex: 80,
-        transition: "transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)",
+        transition: "transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), bottom 0.3s ease",
         transform: open ? "rotate(45deg)" : "rotate(0deg)",
     };
 
     const menuStyle: React.CSSProperties = {
         position: "fixed",
         right: 24,
-        bottom: 176, // 104 + 56 + 16
+        bottom: 176 + adHeight, // 104 + 56 + 16 (+ 広告50px)
         display: "flex",
         flexDirection: "column",
         gap: 12,
@@ -57,7 +56,7 @@ export default function FABMenu({ onSelect }: Props) {
         opacity: open ? 1 : 0,
         pointerEvents: open ? "auto" : "none",
         transform: open ? "translateY(0)" : "translateY(20px)",
-        transition: "all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)",
+        transition: "all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), bottom 0.3s ease",
     };
 
     const itemBtnStyle: React.CSSProperties = {

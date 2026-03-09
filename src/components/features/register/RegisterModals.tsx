@@ -28,10 +28,11 @@ type Props = {
     actions: Action[];
     doneTaskIdsAnyDay: Set<string>;
     setMsg: (s: string) => void;
-    supabase: any;
     loadBase: () => Promise<void>;
     loadTodayEntries: () => Promise<void>;
 };
+
+import { sqliteRepo } from "../../../lib/db/instance";
 
 export default function RegisterModals({
     openModal,
@@ -42,7 +43,6 @@ export default function RegisterModals({
     actions,
     doneTaskIdsAnyDay,
     setMsg,
-    supabase,
     loadBase,
     loadTodayEntries,
 }: Props) {
@@ -51,51 +51,50 @@ export default function RegisterModals({
 
     // --- DB Helpers ---
     async function addTask(form: { title: string; task_type: "habit" | "oneoff"; priority: number; volume: number; due_date: string | null; is_hidden: boolean; }) {
-        const { error } = await supabase.from("tasks").insert({
+        await sqliteRepo.createTask({
+            id: "", // auto-generated inside createTask
             user_id: userId,
             title: form.title,
             task_type: form.task_type,
             priority: Math.min(5, Math.max(1, form.priority)),
             volume: Math.min(10, Math.max(1, form.volume)),
             due_date: form.task_type === "oneoff" ? form.due_date : null,
+            is_active: true,
             is_hidden: form.is_hidden,
         });
-        if (error) throw error;
         await loadBase();
     }
 
     async function updateTask(taskId: string, patch: Partial<Task>) {
-        const { error } = await supabase.from("tasks").update(patch).eq("user_id", userId).eq("id", taskId);
-        if (error) throw error;
+        await sqliteRepo.updateTask(userId, taskId, patch);
         await loadBase();
     }
 
     async function deleteTaskForever(taskId: string) {
-        const { error } = await supabase.from("tasks").delete().eq("user_id", userId).eq("id", taskId);
-        if (error) throw error;
+        await sqliteRepo.deleteTask(userId, taskId);
         await loadBase();
     }
 
     async function addAction(form: { kind: string; category: string; is_hidden?: boolean }) {
-        const { error } = await supabase.from("actions").insert({
+        await sqliteRepo.createAction({
+            id: "",
             user_id: userId,
             kind: form.kind,
             category: form.category,
+            is_active: true,
             is_hidden: form.is_hidden ?? false,
+            created_at: new Date().toISOString(),
         });
-        if (error) throw error;
         await loadBase();
     }
 
     async function updateAction(actionId: string, patch: Partial<Action>) {
-        const { error } = await supabase.from("actions").update(patch).eq("user_id", userId).eq("id", actionId);
-        if (error) throw error;
+        await sqliteRepo.updateAction(userId, actionId, patch);
         await loadBase();
     }
 
     async function deleteActionForever(actionId: string) {
-        const { error } = await supabase.from("actions").delete().eq("user_id", userId).eq("id", actionId);
-        if (error) throw error;
+        await sqliteRepo.deleteAction(userId, actionId);
         await loadBase();
     }
 
@@ -107,9 +106,9 @@ export default function RegisterModals({
         transition: "opacity 0.2s ease",
     };
     const modalStyle: React.CSSProperties = {
-        width: "100%", maxWidth: 600, maxHeight: "90vh",
+        width: "100%", maxWidth: 600, maxHeight: "calc(100dvh - 24px)",
         background: "var(--bg)", borderTopLeftRadius: 20, borderTopRightRadius: 20,
-        padding: "24px 16px", overflowY: "auto",
+        display: "flex", flexDirection: "column",
         boxShadow: "0 -4px 20px rgba(0,0,0,0.15)",
         animation: "slideUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.2)",
     };
@@ -134,33 +133,149 @@ export default function RegisterModals({
         transition: "all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)",
     });
 
-    // --- Internal Components ---
-    function TaskListModal({ type, title }: { type: "habit" | "oneoff"; title: string }) {
-        const [subTab, setSubTab] = useState<SubTab>("shown");
-        const [adding, setAdding] = useState(false);
-        const [editingItem, setEditingItem] = useState<Task | null>(null);
+    // --- Render logic ---
+    if (!openModal && !categoryModalOpen) return null;
 
-        // Add Form State
-        const [newTitle, setNewTitle] = useState("");
-        const [priority, setPriority] = useState(3);
-        const [volume, setVolume] = useState(5);
-        const [dueDate, setDueDate] = useState("");
+    return (
+        <>
+            <style>{`
+        @keyframes slideUp {
+          from { transform: translateY(100%); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+      `}</style>
+            <div style={overlayStyle} onClick={() => {
+                if (categoryModalOpen) setCategoryModalOpen(false);
+                else setOpenModal(null);
+            }}>
+                <div style={{ position: "relative", width: "100%", maxWidth: 720, margin: "0 auto", display: "flex", justifyContent: "center" }}>
+                    {categoryModalOpen ? (
+                        <ActionCategoryModal
+                            actions={actions}
+                            userId={userId}
+                            setMsg={setMsg}
+                            addAction={addAction}
+                            updateAction={updateAction}
+                            deleteActionForever={deleteActionForever}
+                            setCategoryModalOpen={setCategoryModalOpen}
+                            modalStyle={modalStyle}
+                            closeBtnStyle={closeBtnStyle}
+                            overlayStyle={overlayStyle}
+                            getRowCardStyle={getRowCardStyle}
+                        />
+                    ) : openModal === "habit" ? (
+                        <TaskListModal
+                            type="habit"
+                            title="習慣"
+                            tasks={tasks}
+                            doneTaskIdsAnyDay={doneTaskIdsAnyDay}
+                            userId={userId}
+                            setMsg={setMsg}
+                            addTask={addTask}
+                            updateTask={updateTask}
+                            deleteTaskForever={deleteTaskForever}
+                            setOpenModal={setOpenModal}
+                            modalStyle={modalStyle}
+                            closeBtnStyle={closeBtnStyle}
+                            overlayStyle={overlayStyle}
+                            getRowCardStyle={getRowCardStyle}
+                        />
+                    ) : openModal === "oneoff" ? (
+                        <TaskListModal
+                            type="oneoff"
+                            title="タスク"
+                            tasks={tasks}
+                            doneTaskIdsAnyDay={doneTaskIdsAnyDay}
+                            userId={userId}
+                            setMsg={setMsg}
+                            addTask={addTask}
+                            updateTask={updateTask}
+                            deleteTaskForever={deleteTaskForever}
+                            setOpenModal={setOpenModal}
+                            modalStyle={modalStyle}
+                            closeBtnStyle={closeBtnStyle}
+                            overlayStyle={overlayStyle}
+                            getRowCardStyle={getRowCardStyle}
+                        />
+                    ) : openModal === "action" ? (
+                        <ActionEntryModal
+                            actions={actions}
+                            userId={userId}
+                            day={day}
+                            setMsg={setMsg}
+                            loadTodayEntries={loadTodayEntries}
+                            setOpenModal={setOpenModal}
+                            setCategoryModalOpen={setCategoryModalOpen}
+                            modalStyle={modalStyle}
+                            closeBtnStyle={closeBtnStyle}
+                        />
+                    ) : null}
+                </div>
+            </div>
+        </>
+    );
+}
 
-        const shownTasks = tasks.filter((t) => t.task_type === type);
-        const baseList = shownTasks.filter((t) => {
-            if (t.task_type === "oneoff") return !doneTaskIdsAnyDay.has(t.id);
-            return true;
-        });
-        const listForRender = baseList.filter((t) => {
-            const hidden = !!(t as any).is_hidden;
-            return subTab === "shown" ? !hidden : hidden;
-        });
+// --- Top Level Extracted Components ---
 
-        return (
-            <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
+function TaskListModal({
+    type,
+    title,
+    tasks,
+    doneTaskIdsAnyDay,
+    setMsg,
+    addTask,
+    updateTask,
+    deleteTaskForever,
+    setOpenModal,
+    modalStyle,
+    closeBtnStyle,
+    overlayStyle,
+    getRowCardStyle
+}: {
+    type: "habit" | "oneoff";
+    title: string;
+    tasks: Task[];
+    doneTaskIdsAnyDay: Set<string>;
+    userId: string;
+    setMsg: (s: string) => void;
+    addTask: (form: any) => Promise<void>;
+    updateTask: (id: string, patch: any) => Promise<void>;
+    deleteTaskForever: (id: string) => Promise<void>;
+    setOpenModal: (m: any) => void;
+    modalStyle: React.CSSProperties;
+    closeBtnStyle: React.CSSProperties;
+    overlayStyle: React.CSSProperties;
+    getRowCardStyle: (accentColor?: string, isDone?: boolean) => React.CSSProperties;
+}) {
+    const [subTab, setSubTab] = useState<SubTab>("shown");
+    const [adding, setAdding] = useState(false);
+    const [editingItem, setEditingItem] = useState<Task | null>(null);
+
+    // Add Form State
+    const [newTitle, setNewTitle] = useState("");
+    const [priority, setPriority] = useState(3);
+    const [volume, setVolume] = useState(5);
+    const [dueDate, setDueDate] = useState("");
+
+    const shownTasks = tasks.filter((t) => t.task_type === type);
+    const baseList = shownTasks.filter((t) => {
+        if (t.task_type === "oneoff") return !doneTaskIdsAnyDay.has(t.id);
+        return true;
+    });
+    const listForRender = baseList.filter((t) => {
+        const hidden = !!(t as any).is_hidden;
+        return subTab === "shown" ? !hidden : hidden;
+    });
+
+    return (
+        <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
+            <div style={{ position: "relative", padding: "24px 16px 16px", flexShrink: 0 }}>
                 <button style={closeBtnStyle} onClick={() => setOpenModal(null)}>×</button>
-                <h2 style={{ marginTop: 0, marginBottom: 16, fontSize: 20 }}>{title}の登録</h2>
+                <h2 style={{ margin: 0, fontSize: 20 }}>{title}の登録</h2>
+            </div>
 
+            <div style={{ padding: "0 16px 24px", overflowY: "auto", flex: 1, display: "flex", flexDirection: "column" }}>
                 <SegmentedBar items={subTabItems as any} value={subTab} onChange={(v: any) => { setSubTab(v); setAdding(false); }} ariaLabel="表示切り替え" />
 
                 <div style={{ marginTop: 16, marginBottom: 16 }}>
@@ -213,137 +328,220 @@ export default function RegisterModals({
 
                 <div style={{ display: "grid", gap: 10 }}>
                     {listForRender.length === 0 && <p style={{ opacity: 0.7, textAlign: "center", margin: "24px 0" }}>項目がありません</p>}
-                    {listForRender.map(t => <TaskRow key={t.id} task={t} />)}
+                    {listForRender.map(t => <TaskRow
+                        key={t.id}
+                        task={t}
+                        type={type}
+                        updateTask={updateTask}
+                        setEditingItem={setEditingItem}
+                        getRowCardStyle={getRowCardStyle}
+                    />)}
                 </div>
 
-                {editingItem && <TaskEditModal item={editingItem} />}
             </div>
-        );
 
-        function TaskRow({ task }: { task: Task }) {
-            const isHidden = !!(task as any).is_hidden;
-            // モーダル内のプレビューでは「完了」状態としての反転はなく、未完了時の「影あり」状態とする
-            const accentColor = type === "habit" ? theme.habit : theme.task;
+            {editingItem && <TaskEditModal
+                item={editingItem}
+                type={type}
+                title={title}
+                setMsg={setMsg}
+                updateTask={updateTask}
+                deleteTaskForever={deleteTaskForever}
+                setEditingItem={setEditingItem}
+                overlayStyle={overlayStyle}
+                modalStyle={modalStyle}
+                closeBtnStyle={closeBtnStyle}
+            />}
+        </div>
+    );
+}
 
-            return (
-                <div
-                    style={{ ...getRowCardStyle(accentColor, false), cursor: "pointer" }}
-                    onClick={() => setEditingItem(task)}
-                    onMouseEnter={(e) => (e.currentTarget.style.transform = "translate(0,0) scale(1.01)")}
-                    onMouseLeave={(e) => (e.currentTarget.style.transform = "translate(0,0) scale(1)")}
-                >
-                    <div style={{ flex: 1, minWidth: 0, display: "grid", gap: 4 }}>
-                        <div style={{ fontWeight: 700, lineHeight: 1.3, wordBreak: "break-word" }}>{task.title}</div>
-                        <div style={{ opacity: 0.75, display: "flex", alignItems: "center", gap: 8 }}>
-                            <PriorityBadge value={(task as any).priority} />
-                            <VolBar value={(task as any).volume} />
-                        </div>
-                        {task.due_date && <div style={{ fontSize: 12, opacity: 0.7 }}>期限：{task.due_date}</div>}
-                    </div>
-                    <div style={{ display: "flex", gap: 6, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
-                        <IconBtn title={isHidden ? "表示する" : "非表示にする"} onClick={() => updateTask(task.id, { is_hidden: !isHidden } as any)}>{isHidden ? "👁️" : "🙈"}</IconBtn>
-                    </div>
+function TaskRow({
+    task,
+    type,
+    updateTask,
+    setEditingItem,
+    getRowCardStyle
+}: {
+    task: Task;
+    type: "habit" | "oneoff";
+    updateTask: (id: string, patch: any) => Promise<void>;
+    setEditingItem: (item: Task) => void;
+    getRowCardStyle: (accentColor?: string, isDone?: boolean) => React.CSSProperties;
+}) {
+    const isHidden = !!(task as any).is_hidden;
+    const accentColor = type === "habit" ? theme.habit : theme.task;
+
+    return (
+        <div
+            style={{ ...getRowCardStyle(accentColor, false), cursor: "pointer" }}
+            onClick={() => setEditingItem(task)}
+            onMouseEnter={(e) => (e.currentTarget.style.transform = "translate(0,0) scale(1.01)")}
+            onMouseLeave={(e) => (e.currentTarget.style.transform = "translate(0,0) scale(1)")}
+        >
+            <div style={{ flex: 1, minWidth: 0, display: "grid", gap: 4 }}>
+                <div style={{ fontWeight: 700, lineHeight: 1.3, wordBreak: "break-word" }}>{task.title}</div>
+                <div style={{ opacity: 0.75, display: "flex", alignItems: "center", gap: 8 }}>
+                    <PriorityBadge value={(task as any).priority} />
+                    <VolBar value={(task as any).volume} />
                 </div>
-            );
+                {task.due_date && <div style={{ fontSize: 12, opacity: 0.7 }}>期限：{task.due_date}</div>}
+            </div>
+            <div style={{ display: "flex", gap: 6, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+                <IconBtn title={isHidden ? "表示する" : "非表示にする"} onClick={() => updateTask(task.id, { is_hidden: !isHidden } as any)}>{isHidden ? "👁️" : "🙈"}</IconBtn>
+            </div>
+        </div>
+    );
+}
+
+function TaskEditModal({
+    item,
+    type,
+    title,
+    setMsg,
+    updateTask,
+    deleteTaskForever,
+    setEditingItem,
+    overlayStyle,
+    modalStyle,
+    closeBtnStyle
+}: {
+    item: Task;
+    type: "habit" | "oneoff";
+    title: string;
+    setMsg: (s: string) => void;
+    updateTask: (id: string, patch: any) => Promise<void>;
+    deleteTaskForever: (id: string) => Promise<void>;
+    setEditingItem: (item: Task | null) => void;
+    overlayStyle: React.CSSProperties;
+    modalStyle: React.CSSProperties;
+    closeBtnStyle: React.CSSProperties;
+}) {
+    const [tTitle, setTTitle] = useState(item.title);
+    const [tPriority, setTPriority] = useState((item as any).priority ?? 3);
+    const [tVolume, setTVolume] = useState((item as any).volume ?? 5);
+    const [tDueDate, setTDueDate] = useState(item.due_date ?? "");
+
+    const handleSave = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setMsg("");
+        try {
+            await updateTask(item.id, {
+                title: tTitle.trim() || item.title,
+                priority: tPriority, volume: tVolume,
+                due_date: type === "oneoff" && tDueDate ? tDueDate : null
+            } as any);
+            setEditingItem(null);
+            setMsg("更新しました。");
+        } catch (err: any) {
+            setMsg(err?.message ?? "更新エラー");
         }
+    };
 
-        function TaskEditModal({ item }: { item: Task }) {
-            const [tTitle, setTTitle] = useState(item.title);
-            const [tPriority, setTPriority] = useState((item as any).priority ?? 3);
-            const [tVolume, setTVolume] = useState((item as any).volume ?? 5);
-            const [tDueDate, setTDueDate] = useState(item.due_date ?? "");
-
-            const handleSave = async (e: React.FormEvent) => {
-                e.preventDefault();
-                setMsg("");
-                try {
-                    await updateTask(item.id, {
-                        title: tTitle.trim() || item.title,
-                        priority: tPriority, volume: tVolume,
-                        due_date: type === "oneoff" && tDueDate ? tDueDate : null
-                    } as any);
-                    setEditingItem(null);
-                    setMsg("更新しました。");
-                } catch (err: any) {
-                    setMsg(err?.message ?? "更新エラー");
-                }
-            };
-
-            const handleDelete = async () => {
-                if (!confirm("本当に削除しますか？")) return;
-                setMsg("");
-                try {
-                    await deleteTaskForever(item.id);
-                    setEditingItem(null);
-                    setMsg("削除しました。");
-                } catch (err: any) {
-                    setMsg(err?.message ?? "削除エラー");
-                }
-            };
-
-            return (
-                <div style={{ ...overlayStyle, zIndex: 110 }} onClick={() => setEditingItem(null)}>
-                    <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
-                        <button style={closeBtnStyle} onClick={() => setEditingItem(null)}>×</button>
-                        <h2 style={{ marginTop: 0, marginBottom: 20, fontSize: 20 }}>{title}の編集</h2>
-
-                        <form onSubmit={handleSave} style={{ display: "grid", gap: 16 }}>
-                            <label>
-                                タイトル
-                                <TextInput value={tTitle} onChange={(e) => setTTitle(e.target.value)} fullWidth required />
-                            </label>
-                            <label>
-                                優先度（1-5）: <b>{tPriority}</b>
-                                <Slider min="1" max="5" step="1" value={tPriority} onChange={(e) => setTPriority(Number(e.target.value))} fullWidth />
-                            </label>
-                            <label>
-                                ボリューム（1-10）: <b>{tVolume}</b>
-                                <Slider min="1" max="10" step="1" value={tVolume} onChange={(e) => setTVolume(Number(e.target.value))} fullWidth />
-                            </label>
-                            {type === "oneoff" && (
-                                <label>
-                                    期限（任意）
-                                    <TextInput type="date" value={tDueDate} onChange={(e) => setTDueDate(e.target.value)} fullWidth />
-                                </label>
-                            )}
-
-                            <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-                                <div style={{ flex: 1 }}>
-                                    <PrimaryBtn type="submit" fullWidth>保存</PrimaryBtn>
-                                </div>
-                                <div style={{ flex: 1 }}>
-                                    <SecondaryBtn type="button" onClick={() => setEditingItem(null)} fullWidth>キャンセル</SecondaryBtn>
-                                </div>
-                            </div>
-                            <div style={{ textAlign: "center", marginTop: 8 }}>
-                                <button type="button" onClick={handleDelete} style={{ background: "none", border: "none", color: theme.danger, cursor: "pointer", textDecoration: "underline", fontSize: 14 }}>
-                                    このアイテムを削除
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            );
+    const handleDelete = async () => {
+        if (!confirm("本当に削除しますか？")) return;
+        setMsg("");
+        try {
+            await deleteTaskForever(item.id);
+            setEditingItem(null);
+            setMsg("削除しました。");
+        } catch (err: any) {
+            setMsg(err?.message ?? "削除エラー");
         }
-    }
+    };
 
-    function ActionCategoryModal() {
-        const [subTab, setSubTab] = useState<SubTab>("shown");
-        const [adding, setAdding] = useState(false);
-        const [editingItem, setEditingItem] = useState<Action | null>(null);
-
-        const [kind, setKind] = useState("");
-        const [category, setCategory] = useState("other");
-
-        const shownActions = actions.filter((a) => !a.is_hidden);
-        const hiddenActions = actions.filter((a) => a.is_hidden);
-        const listForRender = subTab === "shown" ? shownActions : hiddenActions;
-
-        return (
+    return (
+        <div style={{ ...overlayStyle, zIndex: 110 }} onClick={() => setEditingItem(null)}>
             <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
-                <button style={closeBtnStyle} onClick={() => setCategoryModalOpen(false)}>×</button>
-                <h2 style={{ marginTop: 0, marginBottom: 16, fontSize: 20 }}>行動の種類の管理</h2>
+                <div style={{ position: "relative", padding: "24px 16px 16px", flexShrink: 0 }}>
+                    <button style={closeBtnStyle} onClick={() => setEditingItem(null)}>×</button>
+                    <h2 style={{ margin: 0, fontSize: 20 }}>{title}の編集</h2>
+                </div>
 
+                <div style={{ padding: "0 16px 24px", overflowY: "auto", flex: 1 }}>
+                    <form onSubmit={handleSave} style={{ display: "grid", gap: 16 }}>
+                        <label>
+                            タイトル
+                            <TextInput value={tTitle} onChange={(e) => setTTitle(e.target.value)} fullWidth required />
+                        </label>
+                        <label>
+                            優先度（1-5）: <b>{tPriority}</b>
+                            <Slider min="1" max="5" step="1" value={tPriority} onChange={(e) => setTPriority(Number(e.target.value))} fullWidth />
+                        </label>
+                        <label>
+                            ボリューム（1-10）: <b>{tVolume}</b>
+                            <Slider min="1" max="10" step="1" value={tVolume} onChange={(e) => setTVolume(Number(e.target.value))} fullWidth />
+                        </label>
+                        {type === "oneoff" && (
+                            <label>
+                                期限（任意）
+                                <TextInput type="date" value={tDueDate} onChange={(e) => setTDueDate(e.target.value)} fullWidth />
+                            </label>
+                        )}
+
+                        <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+                            <div style={{ flex: 1 }}>
+                                <PrimaryBtn type="submit" fullWidth>保存</PrimaryBtn>
+                            </div>
+                            <div style={{ flex: 1 }}>
+                                <SecondaryBtn type="button" onClick={() => setEditingItem(null)} fullWidth>キャンセル</SecondaryBtn>
+                            </div>
+                        </div>
+                        <div style={{ textAlign: "center", marginTop: 8 }}>
+                            <button type="button" onClick={handleDelete} style={{ background: "none", border: "none", color: theme.danger, cursor: "pointer", textDecoration: "underline", fontSize: 14 }}>
+                                このアイテムを削除
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function ActionCategoryModal({
+    actions,
+    setMsg,
+    addAction,
+    updateAction,
+    deleteActionForever,
+    setCategoryModalOpen,
+    modalStyle,
+    closeBtnStyle,
+    overlayStyle,
+    getRowCardStyle
+}: {
+    actions: Action[];
+    userId: string;
+    setMsg: (s: string) => void;
+    addAction: (form: any) => Promise<void>;
+    updateAction: (id: string, patch: any) => Promise<void>;
+    deleteActionForever: (id: string) => Promise<void>;
+    setCategoryModalOpen: (b: boolean) => void;
+    modalStyle: React.CSSProperties;
+    closeBtnStyle: React.CSSProperties;
+    overlayStyle: React.CSSProperties;
+    getRowCardStyle: (accentColor?: string, isDone?: boolean) => React.CSSProperties;
+}) {
+    const [subTab, setSubTab] = useState<SubTab>("shown");
+    const [adding, setAdding] = useState(false);
+    const [editingItem, setEditingItem] = useState<Action | null>(null);
+
+    const [kind, setKind] = useState("");
+    const [category, setCategory] = useState("other");
+
+    const shownActions = actions.filter((a) => !a.is_hidden);
+    const hiddenActions = actions.filter((a) => a.is_hidden);
+    const listForRender = subTab === "shown" ? shownActions : hiddenActions;
+
+    return (
+        <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
+            <div style={{ position: "relative", padding: "24px 16px 16px", flexShrink: 0 }}>
+                <button style={closeBtnStyle} onClick={() => setCategoryModalOpen(false)}>×</button>
+                <h2 style={{ margin: 0, fontSize: 20 }}>行動の種類の管理</h2>
+            </div>
+
+            <div style={{ padding: "0 16px 24px", overflowY: "auto", flex: 1, display: "flex", flexDirection: "column" }}>
                 <SegmentedBar items={subTabItems as any} value={subTab} onChange={(v: any) => { setSubTab(v); setAdding(false); }} ariaLabel="表示切り替え" />
 
                 <div style={{ marginTop: 16, marginBottom: 16 }}>
@@ -390,137 +588,207 @@ export default function RegisterModals({
 
                 <div style={{ display: "grid", gap: 10 }}>
                     {listForRender.length === 0 && <p style={{ opacity: 0.7, textAlign: "center", margin: "24px 0" }}>項目がありません</p>}
-                    {listForRender.map(a => <ActionRow key={a.id} actionItem={a} />)}
+                    {listForRender.map(a => <ActionRow
+                        key={a.id}
+                        actionItem={a}
+                        updateAction={updateAction}
+                        setEditingItem={setEditingItem}
+                        getRowCardStyle={getRowCardStyle}
+                    />)}
                 </div>
 
-                {editingItem && <ActionEditModal item={editingItem} />}
             </div>
-        );
 
-        function ActionRow({ actionItem }: { actionItem: Action }) {
-            const isHidden = !!actionItem.is_hidden;
-            // Actionは常にDone(完了)状態の反転カラーと沈み込み表現とする
-            return (
-                <div
-                    style={{ ...getRowCardStyle(theme.action, true), cursor: "pointer" }}
-                    onClick={() => setEditingItem(actionItem)}
-                    onMouseEnter={(e) => (e.currentTarget.style.transform = "translate(3px,3px) scale(1.01)")}
-                    onMouseLeave={(e) => (e.currentTarget.style.transform = "translate(3px,3px) scale(1)")}
-                >
-                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        <div style={{ fontWeight: 700 }}>{(actionItem as any).kind}</div>
-                        <CategoryBadge category={actionItem.category} />
-                    </div>
-                    <div style={{ display: "flex", gap: 6, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
-                        <IconBtn title={isHidden ? "表示する" : "非表示にする"} onClick={() => updateAction(actionItem.id, { is_hidden: !isHidden } as any)}>{isHidden ? "👁️" : "🙈"}</IconBtn>
-                    </div>
-                </div>
-            );
+            {editingItem && <ActionEditModal
+                item={editingItem}
+                setMsg={setMsg}
+                updateAction={updateAction}
+                deleteActionForever={deleteActionForever}
+                setEditingItem={setEditingItem}
+                overlayStyle={overlayStyle}
+                modalStyle={modalStyle}
+                closeBtnStyle={closeBtnStyle}
+            />}
+        </div>
+    );
+}
+
+function ActionRow({
+    actionItem,
+    updateAction,
+    setEditingItem,
+    getRowCardStyle
+}: {
+    actionItem: Action;
+    updateAction: (id: string, patch: any) => Promise<void>;
+    setEditingItem: (item: Action) => void;
+    getRowCardStyle: (accentColor?: string, isDone?: boolean) => React.CSSProperties;
+}) {
+    const isHidden = !!actionItem.is_hidden;
+    return (
+        <div
+            style={{ ...getRowCardStyle(theme.action, true), cursor: "pointer" }}
+            onClick={() => setEditingItem(actionItem)}
+            onMouseEnter={(e) => (e.currentTarget.style.transform = "translate(3px,3px) scale(1.01)")}
+            onMouseLeave={(e) => (e.currentTarget.style.transform = "translate(3px,3px) scale(1)")}
+        >
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <div style={{ fontWeight: 700 }}>{(actionItem as any).kind}</div>
+                <CategoryBadge category={actionItem.category} />
+            </div>
+            <div style={{ display: "flex", gap: 6, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+                <IconBtn title={isHidden ? "表示する" : "非表示にする"} onClick={() => updateAction(actionItem.id, { is_hidden: !isHidden } as any)}>{isHidden ? "👁️" : "🙈"}</IconBtn>
+            </div>
+        </div>
+    );
+}
+
+function ActionEditModal({
+    item,
+    setMsg,
+    updateAction,
+    deleteActionForever,
+    setEditingItem,
+    overlayStyle,
+    modalStyle,
+    closeBtnStyle
+}: {
+    item: Action;
+    setMsg: (s: string) => void;
+    updateAction: (id: string, patch: any) => Promise<void>;
+    deleteActionForever: (id: string) => Promise<void>;
+    setEditingItem: (item: Action | null) => void;
+    overlayStyle: React.CSSProperties;
+    modalStyle: React.CSSProperties;
+    closeBtnStyle: React.CSSProperties;
+}) {
+    const [editKind, setEditKind] = useState((item as any).kind || "");
+    const [editCategory, setEditCategory] = useState(item.category || "other");
+
+    const handleSave = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setMsg("");
+        try {
+            const finalKind = editKind.trim();
+            if (!finalKind) return;
+            await updateAction(item.id, { kind: finalKind, category: editCategory } as any);
+            setEditingItem(null);
+            setMsg("更新しました。");
+        } catch (err: any) {
+            setMsg(err?.message ?? "更新エラー");
         }
+    };
 
-        function ActionEditModal({ item }: { item: Action }) {
-            const [editKind, setEditKind] = useState((item as any).kind || "");
-            const [editCategory, setEditCategory] = useState(item.category || "other");
-
-            const handleSave = async (e: React.FormEvent) => {
-                e.preventDefault();
-                setMsg("");
-                try {
-                    const finalKind = editKind.trim();
-                    if (!finalKind) return;
-                    await updateAction(item.id, { kind: finalKind, category: editCategory } as any);
-                    setEditingItem(null);
-                    setMsg("更新しました。");
-                } catch (err: any) {
-                    setMsg(err?.message ?? "更新エラー");
-                }
-            };
-
-            const handleDelete = async () => {
-                if (!confirm("本当に削除しますか？\n(既に記録しているログにも影響が出る場合があります)")) return;
-                setMsg("");
-                try {
-                    await deleteActionForever(item.id);
-                    setEditingItem(null);
-                    setMsg("削除しました。");
-                } catch (err: any) {
-                    setMsg(err?.message ?? "削除エラー");
-                }
-            };
-
-            return (
-                <div style={{ ...overlayStyle, zIndex: 110 }} onClick={() => setEditingItem(null)}>
-                    <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
-                        <button style={closeBtnStyle} onClick={() => setEditingItem(null)}>×</button>
-                        <h2 style={{ marginTop: 0, marginBottom: 20, fontSize: 20 }}>行動の種類の編集</h2>
-
-                        <form onSubmit={handleSave} style={{ display: "grid", gap: 16 }}>
-                            <label>
-                                種類
-                                <TextInput value={editKind} onChange={(e) => setEditKind(e.target.value)} fullWidth required />
-                            </label>
-                            <label>
-                                カテゴリ
-                                <Select value={editCategory} onChange={(e) => setEditCategory(e.target.value)} fullWidth>
-                                    <option value="hobby">趣味</option>
-                                    <option value="recovery">回復</option>
-                                    <option value="growth">成長</option>
-                                    <option value="lifework">生活</option>
-                                    <option value="other">その他</option>
-                                </Select>
-                            </label>
-
-                            <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-                                <div style={{ flex: 1 }}>
-                                    <PrimaryBtn type="submit" fullWidth>保存</PrimaryBtn>
-                                </div>
-                                <div style={{ flex: 1 }}>
-                                    <SecondaryBtn type="button" onClick={() => setEditingItem(null)} fullWidth>キャンセル</SecondaryBtn>
-                                </div>
-                            </div>
-                            <div style={{ textAlign: "center", marginTop: 8 }}>
-                                <button type="button" onClick={handleDelete} style={{ background: "none", border: "none", color: theme.danger, cursor: "pointer", textDecoration: "underline", fontSize: 14 }}>
-                                    この種類を削除
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            );
+    const handleDelete = async () => {
+        if (!confirm("本当に削除しますか？\n(既に記録しているログにも影響が出る場合があります)")) return;
+        setMsg("");
+        try {
+            await deleteActionForever(item.id);
+            setEditingItem(null);
+            setMsg("削除しました。");
+        } catch (err: any) {
+            setMsg(err?.message ?? "削除エラー");
         }
-    }
+    };
 
-    function ActionEntryModal() {
-        const activeActions = actions.filter((a) => (a as any).is_active !== false && !a.is_hidden);
-        const [actionId, setActionId] = useState<string>(activeActions[0]?.id ?? "");
-        const [detail, setDetail] = useState<string>("");
-        const [volume, setVolume] = useState<number>(5);
-
-        useEffect(() => {
-            if (!actionId && activeActions.length > 0) {
-                setActionId(activeActions[0].id);
-            }
-        }, [activeActions.length, actionId]);
-
-        return (
+    return (
+        <div style={{ ...overlayStyle, zIndex: 110 }} onClick={() => setEditingItem(null)}>
             <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
-                <button style={closeBtnStyle} onClick={() => setOpenModal(null)}>×</button>
-                <div style={{ marginBottom: 16 }}>
-                    <h2 style={{ margin: 0, fontSize: 20 }}>行動の登録</h2>
+                <div style={{ position: "relative", padding: "24px 16px 16px", flexShrink: 0 }}>
+                    <button style={closeBtnStyle} onClick={() => setEditingItem(null)}>×</button>
+                    <h2 style={{ margin: 0, fontSize: 20 }}>行動の種類の編集</h2>
                 </div>
 
+                <div style={{ padding: "0 16px 24px", overflowY: "auto", flex: 1 }}>
+                    <form onSubmit={handleSave} style={{ display: "grid", gap: 16 }}>
+                        <label>
+                            種類
+                            <TextInput value={editKind} onChange={(e) => setEditKind(e.target.value)} fullWidth required />
+                        </label>
+                        <label>
+                            カテゴリ
+                            <Select value={editCategory} onChange={(e) => setEditCategory(e.target.value)} fullWidth>
+                                <option value="hobby">趣味</option>
+                                <option value="recovery">回復</option>
+                                <option value="growth">成長</option>
+                                <option value="lifework">生活</option>
+                                <option value="other">その他</option>
+                            </Select>
+                        </label>
+
+                        <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+                            <div style={{ flex: 1 }}>
+                                <PrimaryBtn type="submit" fullWidth>保存</PrimaryBtn>
+                            </div>
+                            <div style={{ flex: 1 }}>
+                                <SecondaryBtn type="button" onClick={() => setEditingItem(null)} fullWidth>キャンセル</SecondaryBtn>
+                            </div>
+                        </div>
+                        <div style={{ textAlign: "center", marginTop: 8 }}>
+                            <button type="button" onClick={handleDelete} style={{ background: "none", border: "none", color: theme.danger, cursor: "pointer", textDecoration: "underline", fontSize: 14 }}>
+                                この種類を削除
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function ActionEntryModal({
+    actions,
+    userId,
+    day,
+    setMsg,
+    loadTodayEntries,
+    setOpenModal,
+    setCategoryModalOpen,
+    modalStyle,
+    closeBtnStyle
+}: {
+    actions: Action[];
+    userId: string;
+    day: string;
+    setMsg: (s: string) => void;
+    loadTodayEntries: () => Promise<void>;
+    setOpenModal: (m: any) => void;
+    setCategoryModalOpen: (b: boolean) => void;
+    modalStyle: React.CSSProperties;
+    closeBtnStyle: React.CSSProperties;
+}) {
+    const activeActions = actions.filter((a) => (a as any).is_active !== false && !a.is_hidden);
+    const [actionId, setActionId] = useState<string>(activeActions[0]?.id ?? "");
+    const [detail, setDetail] = useState<string>("");
+    const [volume, setVolume] = useState<number>(5);
+
+    useEffect(() => {
+        if (!actionId && activeActions.length > 0) {
+            setActionId(activeActions[0].id);
+        }
+    }, [activeActions.length, actionId]);
+
+    return (
+        <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
+            <div style={{ position: "relative", padding: "24px 16px 16px", flexShrink: 0 }}>
+                <button style={closeBtnStyle} onClick={() => setOpenModal(null)}>×</button>
+                <h2 style={{ margin: 0, fontSize: 20 }}>行動の登録</h2>
+            </div>
+
+            <div style={{ padding: "0 16px 24px", overflowY: "auto", flex: 1 }}>
                 <form onSubmit={async (e) => {
                     e.preventDefault();
                     setMsg("");
                     try {
-                        const { error } = await supabase.from("action_entries").insert({
+                        await sqliteRepo.createActionEntry({
+                            id: "",
                             user_id: userId,
                             day,
                             action_id: actionId,
                             note: detail.trim() ? detail.trim() : null,
                             volume: Math.min(10, Math.max(1, Number(volume))),
+                            created_at: new Date().toISOString(),
                         });
-                        if (error) throw error;
 
                         setDetail("");
                         setVolume(5);
@@ -559,36 +827,6 @@ export default function RegisterModals({
                     </div>
                 </form>
             </div>
-        );
-    }
-
-    // --- Render logic ---
-    if (!openModal && !categoryModalOpen) return null;
-
-    return (
-        <>
-            <style>{`
-        @keyframes slideUp {
-          from { transform: translateY(100%); opacity: 0; }
-          to { transform: translateY(0); opacity: 1; }
-        }
-      `}</style>
-            <div style={overlayStyle} onClick={() => {
-                if (categoryModalOpen) setCategoryModalOpen(false);
-                else setOpenModal(null);
-            }}>
-                <div style={{ position: "relative", width: "100%", maxWidth: 720, margin: "0 auto", display: "flex", justifyContent: "center" }}>
-                    {categoryModalOpen ? (
-                        <ActionCategoryModal />
-                    ) : openModal === "habit" ? (
-                        <TaskListModal type="habit" title="習慣" />
-                    ) : openModal === "oneoff" ? (
-                        <TaskListModal type="oneoff" title="タスク" />
-                    ) : openModal === "action" ? (
-                        <ActionEntryModal />
-                    ) : null}
-                </div>
-            </div>
-        </>
+        </div>
     );
 }

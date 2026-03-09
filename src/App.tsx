@@ -1,17 +1,20 @@
-import { useEffect, useState } from "react";
-import { supabase } from "./lib/supabase";
+import { useEffect, useState, useRef } from "react";
 import { todayJST } from "./lib/day";
 import { clampDayToToday, addDaysJST, canGoNextDay } from "./lib/dayNav";
 import type { Action, Task } from "./lib/types";
-import AuthView from "./views/AuthView";
 import AppShell from "./views/AppShell";
 import WeekView from "./views/WeekView";
 import ReviewView from "./views/ReviewView";
 import TodayView from "./views/TodayView";
 import FABMenu from "./components/features/register/FABMenu";
 import RegisterModals from "./components/features/register/RegisterModals";
-import { fetchTodayEntries } from "./lib/api/today";
-import { fetchBase } from "./lib/api/base";
+import { initSqlite } from "./lib/db/initSqlite";
+import { getLocalUserId } from "./lib/db/localUser";
+import { Capacitor } from "@capacitor/core";
+import { AdMob } from "@capacitor-community/admob";
+import BannerAd from "./components/ui/BannerAd";
+import { supabase } from "./lib/supabase";
+import { sqliteRepo } from "./lib/db/instance";
 import {
   cardStyle,
   layoutStyle,
@@ -20,8 +23,9 @@ import {
   toastStyle,
 } from "./lib/ui/style";
 
+// グローバルなリポジトリインスタンスは ./lib/db/instance.ts へ移動しました
+
 type Tab = "today" | "review" | "week";
-type Mode = "signIn" | "signUp";
 
 function toHeaderDateLabel(dayISO: string) {
   const [y, m, d] = dayISO.split("-");
@@ -30,12 +34,10 @@ function toHeaderDateLabel(dayISO: string) {
 
 export default function App() {
   // ------- Auth -------
-  const [mode, setMode] = useState<Mode>("signIn");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [userId, setUserId] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
+  const [adHeight, setAdHeight] = useState(0);
 
   useEffect(() => {
     if (!msg) return;
@@ -77,75 +79,175 @@ export default function App() {
   // ------- Modals -------
   const [openModal, setOpenModal] = useState<"habit" | "oneoff" | "action" | null>(null);
 
-  // ------- Auth init -------
+  const prevUserIdRef = useRef<string | null>(null);
+
+  // 一体化した初期化フロー
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      const u = data.session?.user ?? null;
-      setUserId(u?.id ?? null);
-      setUserEmail(u?.email ?? null);
-    });
+    let sub: any;
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      const u = session?.user ?? null;
-      setUserId(u?.id ?? null);
-      setUserEmail(u?.email ?? null);
-    });
+    const setupApp = async () => {
+      try {
+        console.log("[App] Starting initialization...");
 
-    return () => sub.subscription.unsubscribe();
-  }, []);
+        // 1. 基本的な初期化（AdMob / SQL）
+        if (Capacitor.getPlatform() !== 'web') {
+          if (Capacitor.getPlatform() === 'ios') {
+            try { await AdMob.requestTrackingAuthorization(); } catch (e) { }
+          }
+          await AdMob.initialize();
+        }
 
-  useEffect(() => {
-    const handler = (e: any) => safeSetDay(e.detail);
-    window.addEventListener("lifeos:setDay", handler);
-    return () => window.removeEventListener("lifeos:setDay", handler);
-  }, []);
+        console.log("[App] Initializing SQL...");
+        await initSqlite();
+        console.log("[App] SQL Initialized.");
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setMsg("");
+        // 2. セッション情報の取得（getSessionはタイムアウト付きで安全に）
+        console.log("[App] Fetching Supabase session...");
+        const sessionPromise = supabase.auth.getSession();
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Supabase Timeout")), 5000));
 
-    try {
-      if (mode === "signUp") {
-        const { error } = await supabase.auth.signUp({ email, password });
-        if (error) throw error;
-        setMsg("登録しました。");
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        setMsg("ログインしました。");
+        let initialSession: any = null;
+        try {
+          const res: any = await Promise.race([sessionPromise, timeoutPromise]);
+          initialSession = res.data?.session;
+          console.log("[App] Supabase session fetch result:", initialSession ? "session found" : "no session");
+        } catch (e) {
+          console.warn("[App] Supabase session fetch timed out or failed, proceeding as local.", e);
+        }
+
+        // 3. 初期IDの設定
+        let initialId: string;
+        if (initialSession?.user) {
+          initialId = initialSession.user.id;
+          setUserEmail(initialSession.user.email ?? "");
+          console.log("[App] Initial ID from Supabase session:", initialId);
+        } else {
+          initialId = await getLocalUserId();
+          setUserEmail("offline-user@local");
+          console.log("[App] Initial ID from local storage:", initialId);
+        }
+
+        console.log("[App] Setting initial ID:", initialId);
+        prevUserIdRef.current = initialId;
+        setUserId(initialId);
+
+        // 4. 認証リスナーの登録
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+          console.log("[App] Auth Event:", event, session?.user?.id ? `User ID: ${session.user.id}` : "No user in session");
+          const newUserId = session?.user?.id;
+          const oldUserId = prevUserIdRef.current;
+
+          if (session?.user && newUserId) {
+            setUserEmail(session.user.email ?? "");
+            if (newUserId !== oldUserId) {
+              console.log(`[App] User ID changed from ${oldUserId} to ${newUserId}.`);
+              if (oldUserId && oldUserId.includes("-")) {
+                console.log("[App] Migrating data from local to new cloud user.");
+                setMsg("データを統合中...");
+                await sqliteRepo.migrate(oldUserId, newUserId);
+              }
+              console.log("[App] Syncing data from cloud.");
+              setMsg("クラウドから同期中...");
+              const res = await sqliteRepo.sync(newUserId);
+              setMsg(res.success ? "同期完了" : res.message);
+              prevUserIdRef.current = newUserId;
+              setUserId(newUserId);
+              loadBase();
+              loadTodayEntries();
+            } else if (event === "SIGNED_IN") {
+              console.log("[App] SIGNED_IN event for existing user. Syncing data.");
+              setMsg("同期中...");
+              const res = await sqliteRepo.sync(newUserId);
+              setMsg(res.success ? "同期完了" : res.message);
+              loadBase();
+              loadTodayEntries();
+            }
+          } else if (event === "SIGNED_OUT") {
+            console.log("[App] SIGNED_OUT event.");
+            const localId = await getLocalUserId();
+            if (prevUserIdRef.current !== localId) {
+              console.log(`[App] Switching to local ID ${localId} after sign out.`);
+              prevUserIdRef.current = localId;
+              setUserId(localId);
+              setUserEmail("offline-user@local");
+              setMsg("ログアウトしました");
+            } else {
+              console.log("[App] Already using local ID after sign out.");
+            }
+          }
+        });
+        sub = subscription;
+        console.log("[App] Auth listener registered.");
+
+      } catch (err: any) {
+        console.error("[App] CRITICAL Error during setup:", err);
+        setMsg(`初期化エラー: ${err.message || err}`);
+        // エラーでもローカルIDで動かせるように試行
+        getLocalUserId().then(id => {
+          if (!prevUserIdRef.current) {
+            console.log("[App] Falling back to local ID due to critical error:", id);
+            setUserId(id);
+          }
+        });
       }
-    } catch (err: any) {
-      setMsg(err?.message ?? "エラーが発生しました。");
-    }
+    };
+
+    setupApp();
+    return () => {
+      if (sub) {
+        console.log("[App] Unsubscribing auth listener.");
+        sub.unsubscribe();
+      }
+    };
+  }, []);
+
+  async function signInWithGoogle() {
+    const { supabase } = await import("./lib/supabase");
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: Capacitor.isNativePlatform() ? 'habitas://login-callback' : window.location.origin
+      }
+    });
+    if (error) setMsg(`エラー: ${error.message}`);
   }
 
   async function signOut() {
-    setMsg("");
+    const { supabase } = await import("./lib/supabase");
     await supabase.auth.signOut();
-  }
-
-  async function signInWithGoogle() {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: window.location.origin },
-    });
-    if (error) throw error;
   }
 
   // ------- Load base -------
   async function loadBase() {
     if (!userId) return;
-    const res = await fetchBase({ supabase, userId });
-    setTasks(res.tasks);
-    setActions(res.actions);
+    try {
+      const dbTasks = await sqliteRepo.getTasks(userId);
+      const dbActions = await sqliteRepo.getActions(userId);
+      setTasks(dbTasks);
+      setActions(dbActions);
+    } catch (err: any) {
+      setMsg(err?.message ?? "読み込みエラー");
+    }
   }
 
   async function loadTodayEntries() {
     if (!userId) return;
-    const res = await fetchTodayEntries({ supabase, userId, day });
-    setDoneTaskIds(res.doneTaskIds);
-    setDoneTaskIdsAnyDay(res.doneTaskIdsAnyDay);
-    setTodayActionEntries(res.todayActionEntries);
+    try {
+      const ae = await sqliteRepo.getTodayActionEntries(userId, day);
+      const doneIds = await sqliteRepo.getDoneTaskEntryIds(userId);
+
+      const teToday = await sqliteRepo.getTodayTaskEntries(userId, day);
+      const doneToday = new Set<string>();
+      for (const t of teToday) {
+        if (t.status === "done") doneToday.add(t.task_id);
+      }
+
+      setDoneTaskIds(doneToday);
+      setDoneTaskIdsAnyDay(new Set(doneIds));
+      setTodayActionEntries(ae);
+    } catch (err: any) {
+      setMsg(err?.message ?? "読み込みエラー");
+    }
   }
 
   useEffect(() => {
@@ -161,22 +263,25 @@ export default function App() {
   // ------- Render -------
   if (!userId) {
     return (
-      <AuthView
-        mode={mode}
-        setMode={setMode}
-        email={email}
-        setEmail={setEmail}
-        password={password}
-        setPassword={setPassword}
-        onSubmit={onSubmit}
-        signInWithGoogle={signInWithGoogle}
-        layoutStyle={layoutStyle}
-        containerStyle={containerStyle}
-      />
+      <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", height: "100vh", background: "var(--bg)", color: "var(--text)", gap: "16px" }}>
+        <p>Initializing Local Database...</p>
+        {msg && <p style={{ color: "var(--accent)", fontSize: "0.9em" }}>{msg}</p>}
+      </div>
     );
   }
 
   const headerDateLabel = toHeaderDateLabel(day);
+
+  async function handleSync() {
+    if (!userId) return;
+    setMsg("同期中...");
+    const res = await sqliteRepo.sync(userId);
+    setMsg(res.message);
+    if (res.success) {
+      await loadBase();
+      await loadTodayEntries();
+    }
+  }
 
   return (
     <AppShell
@@ -193,6 +298,10 @@ export default function App() {
       onPrevDay={() => safeShiftDay(-1)}
       onNextDay={canNext ? () => safeShiftDay(1) : undefined}
       canGoNext={canNext}
+      onSync={handleSync}
+      adHeight={adHeight}
+      onSignInWithGoogle={signInWithGoogle}
+      onDateSelect={safeSetDay}
     >
       {tab === "today" && (
         <TodayView
@@ -206,7 +315,6 @@ export default function App() {
           doneTaskIdsAnyDay={doneTaskIdsAnyDay}
           todayActionEntries={todayActionEntries}
           setMsg={setMsg}
-          supabase={supabase}
           cardStyle={cardStyle}
           loadTodayEntries={loadTodayEntries}
           loadBase={loadBase}
@@ -229,7 +337,6 @@ export default function App() {
           fulfillment={fulfillment}
           setFulfillment={setFulfillment}
           setMsg={setMsg}
-          supabase={supabase}
           cardStyle={cardStyle}
         />
       )}
@@ -242,7 +349,6 @@ export default function App() {
           setDay={safeSetDay}
           setTab={setTab}
           setMsg={setMsg}
-          supabase={supabase}
           cardStyle={cardStyle}
 
         />
@@ -261,10 +367,12 @@ export default function App() {
         actions={actions}
         doneTaskIdsAnyDay={doneTaskIdsAnyDay}
         setMsg={setMsg}
-        supabase={supabase}
         loadBase={loadBase}
         loadTodayEntries={loadTodayEntries}
       />
+
+      {/* AdMob Banner */}
+      <BannerAd onStatusChange={setAdHeight} />
     </AppShell>
   );
 }
