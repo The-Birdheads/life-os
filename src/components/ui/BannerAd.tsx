@@ -42,8 +42,8 @@ export default function BannerAd({ onStatusChange }: Props) {
                         ? 'ca-app-pub-3940256099942544/6300978111'
                         : 'ca-app-pub-3940256099942544/2934735716',
                     adSize: BannerAdSize.ADAPTIVE_BANNER,
-                    position: BannerAdPosition.TOP_CENTER,
-                    margin: 0, // マージンは0にし、JS側でヘッダー位置を制御する
+                    position: BannerAdPosition.BOTTOM_CENTER,
+                    margin: 0, // マージンは0にし、JS側で位置を制御する
                     isTesting: true,
                 });
             } catch (err) {

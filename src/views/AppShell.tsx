@@ -74,7 +74,6 @@ export default function AppShell({
     paddingRight: 12,
     boxSizing: "border-box",
     minWidth: 0,
-    fontFamily: "sans-serif",
   };
 
   useEffect(() => {
@@ -134,7 +133,7 @@ export default function AppShell({
             boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)", /* 落ちる影 */
             paddingTop: "calc(env(safe-area-inset-top, 0px) + 24px)", /* ステータスバー分の余白を明示的に確保 */
             color: theme.surfaceDarkText, /* テキストを白系に */
-            top: adHeight,
+            top: 0,
           }}
         >
           <div style={{
@@ -345,7 +344,7 @@ export default function AppShell({
           style={{
             ...railStyle,
             minHeight: `calc(100vh - ${topBarHeight}px - ${bottomNavHeight}px)`,
-            paddingTop: `calc(env(safe-area-inset-top, 0px) + ${topBarHeight + adHeight + 20}px)`, /* 20pxの追加余白で重なりを確実に回避 */
+            paddingTop: `calc(env(safe-area-inset-top, 0px) + ${topBarHeight + 20}px)`, /* 広告が下に移動したため adHeight を削除 */
             paddingBottom: 120,
             display: "flex",
             flexDirection: "column",
@@ -361,7 +360,7 @@ export default function AppShell({
             position: "fixed",
             left: 0,
             right: 0,
-            bottom: 0,
+            bottom: adHeight,
             zIndex: 60,
             background: theme.surfaceDark, /* ヘッダーと同じダークカラー */
             backdropFilter: "blur(12px) saturate(180%)",
