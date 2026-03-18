@@ -415,10 +415,9 @@ export class SqliteRepository implements Repository {
 
     // --- Cloud Sync ---
     async sync(userId: string): Promise<{ success: boolean; message: string }> {
-        const { supabase } = await import("../supabase");
-        const db = await this.getDb();
-
         try {
+            const { supabase } = await import("../supabase");
+            const db = await this.getDb();
             // 1. 各テーブルのデータを取得
             const tables = ["tasks", "actions", "task_entries", "action_entries", "daily_logs", "notification_settings"];
 

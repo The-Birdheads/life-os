@@ -25,12 +25,7 @@ export default function Tabs({ tab, setTab }: Props) {
   const wrapStyle: React.CSSProperties = {
     width: "100%",
     boxSizing: "border-box",
-    padding: "6px",
-    borderRadius: "16px",
-    background: "rgba(255, 255, 255, 0.1)", /* ダーク背景用透け感 */
-    backdropFilter: "blur(4px)",
-    border: `1px solid rgba(255,255,255,0.1)`,
-    boxShadow: "inset 0 1px 1px rgba(255,255,255,0.05)",
+    padding: "0px",
   };
 
   const rowStyle: React.CSSProperties = {

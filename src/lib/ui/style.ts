@@ -25,7 +25,7 @@ export const containerStyle: React.CSSProperties = {
 
 export const toastWrapStyle: React.CSSProperties = {
   position: "fixed",
-  top: 12,
+  top: "calc(env(safe-area-inset-top, 0px) + 64px)", // ヘッダー(56px)の少し下
   insetInline: 0,       // left/right の代わり（安定）
   display: "flex",
   justifyContent: "center",

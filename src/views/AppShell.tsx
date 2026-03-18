@@ -360,16 +360,16 @@ export default function AppShell({
             position: "fixed",
             left: 0,
             right: 0,
-            bottom: adHeight > 0 ? adHeight + 10 : 0, /* 重なりを防ぎつつ隙間を最小限(10px)にする */
+            bottom: adHeight > 0 ? adHeight + 5 : 0, /* 重なりを防ぎつつ隙間を最小限にする */
             zIndex: 60,
             background: theme.surfaceDark, /* ヘッダーと同じダークカラー */
             backdropFilter: "blur(12px) saturate(180%)",
             WebkitBackdropFilter: "blur(12px) saturate(180%)",
             borderTop: `1px solid rgba(255,255,255,0.05)`,
-            paddingBottom: "max(env(safe-area-inset-bottom, 0px), 12px)", /* 広告がある場合でも最低限の余白 */
+            paddingBottom: "max(env(safe-area-inset-bottom, 0px), 8px)", /* 枠を消したので余白を少し詰める */
           }}
         >
-          <div style={{ ...railStyle, padding: "8px 8px 4px 8px" }}>
+          <div style={{ ...railStyle, padding: "8px 12px" }}>
             <Tabs tab={tab} setTab={setTab} />
           </div>
         </div>
