@@ -10,6 +10,7 @@ import VolBar from "../components/badges/VolBar";
 import PrimaryBtn from "../components/ui/PrimaryBtn";
 import SegmentedBar from "../components/ui/SegmentedBar";
 import SectionTitle from "../components/ui/SectionTitle";
+import { RepeatIcon, CheckIcon, ZapIcon, PencilIcon } from "../components/ui/Icon";
 import { space } from "../lib/ui/spacing";
 import { theme } from "../lib/ui/theme";
 import TextInput from "../components/ui/TextInput";
@@ -263,7 +264,7 @@ export default function ReviewView({
             right={
               hasSavedReview && !isEditingReview ? (
                 <IconBtn title="編集" onClick={() => setIsEditingReview(true)}>
-                  ✏️
+                  <PencilIcon size={18} />
                 </IconBtn>
               ) : null
             }
@@ -367,7 +368,10 @@ export default function ReviewView({
                     title="キャンセル"
                     onClick={() => setIsEditingReview(false)}
                   >
-                    ✖️
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
                   </IconBtn>
 
                   <PrimaryBtn onClick={saveReview}>保存</PrimaryBtn>
@@ -428,7 +432,7 @@ export default function ReviewView({
           <div>
             <SectionTitle
               title="習慣"
-              icon="🔁"
+              icon={<RepeatIcon size={18} />}
               accentColor={theme.habit}
               right={
                 <div style={sectionStats}>
@@ -468,7 +472,7 @@ export default function ReviewView({
           <div>
             <SectionTitle
               title="タスク"
-              icon="✅"
+              icon={<CheckIcon size={18} />}
               accentColor={theme.task}
               right={
                 <div style={sectionStats}>
@@ -516,7 +520,7 @@ export default function ReviewView({
           <div>
             <SectionTitle
               title="行動"
-              icon="⚡"
+              icon={<ZapIcon size={18} />}
               accentColor={theme.action}
               right={
                 <div style={sectionStats}>

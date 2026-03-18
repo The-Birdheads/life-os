@@ -1,6 +1,7 @@
 import React from "react";
 import { theme } from "../../lib/ui/theme";
 import { radius } from "../../lib/ui/radius";
+import { PencilIcon, SearchIcon, CalendarIcon } from "./Icon";
 
 type Tab = "today" | "review" | "week";
 
@@ -12,12 +13,12 @@ type Props = {
 type TabItem = {
   key: Tab;
   label: string;
-  emoji: string;
+  icon: React.ReactNode;
 };
 const items: TabItem[] = [
-  { key: "today", label: "記録", emoji: "📝" },
-  { key: "review", label: "振り返り", emoji: "🔎" },
-  { key: "week", label: "週", emoji: "📅" },
+  { key: "today", label: "記録", icon: <PencilIcon size={20} /> },
+  { key: "review", label: "振り返り", icon: <SearchIcon size={20} /> },
+  { key: "week", label: "週", icon: <CalendarIcon size={20} /> },
 ];
 
 export default function Tabs({ tab, setTab }: Props) {
@@ -56,8 +57,10 @@ export default function Tabs({ tab, setTab }: Props) {
   };
 
   const iconStyle: React.CSSProperties = {
-    fontSize: 16,
-    lineHeight: "16px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    height: 20,
   };
 
   const labelStyle: React.CSSProperties = {
@@ -107,9 +110,9 @@ export default function Tabs({ tab, setTab }: Props) {
               }}
             >
               <div style={{ display: "grid", justifyItems: "center", minWidth: 0 }}>
-                <span style={iconStyle} aria-hidden="true">
-                  {it.emoji}
-                </span>
+                <div style={iconStyle} aria-hidden="true">
+                  {it.icon}
+                </div>
                 <span style={labelStyle}>{it.label}</span>
               </div>
             </button>

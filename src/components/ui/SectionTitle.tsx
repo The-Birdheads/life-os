@@ -2,7 +2,7 @@ import React from "react";
 
 type Props = {
   title: string;
-  icon?: string;
+  icon?: React.ReactNode;
   accentColor?: string;
   right?: React.ReactNode;
   style?: React.CSSProperties;
@@ -76,7 +76,11 @@ export default function SectionTitle({
     <div style={{ ...wrap }}>
       <div style={innerWrap}>
         <div style={left}>
-          {icon && <span style={{ fontSize: 16, lineHeight: 1 }}>{icon}</span>}
+          {icon && (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 20, height: 20 }}>
+              {icon}
+            </div>
+          )}
           <h3 style={titleStyle}>{title}</h3>
         </div>
 

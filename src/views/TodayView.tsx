@@ -9,6 +9,7 @@ import PriorityBadge from "../components/badges/PriorityBadge";
 import VolBar from "../components/badges/VolBar";
 import SegmentedBar from "../components/ui/SegmentedBar";
 import SectionTitle from "../components/ui/SectionTitle";
+import { RepeatIcon, CheckIcon, ZapIcon } from "../components/ui/Icon";
 import { space } from "../lib/ui/spacing";
 import Checkbox from "../components/ui/Checkbox";
 import Select from "../components/ui/Select";
@@ -463,7 +464,7 @@ export default function TodayView({
             <div style={{ display: "grid", gap: space.lg, marginTop: space.md }}>
                 {(filter === "all" || filter === "habit") && (
                     <div>
-                        <SectionTitle title="習慣" icon="🔁" accentColor={theme.habit} style={{ marginBottom: 8 }} />
+                        <SectionTitle title="習慣" icon={<RepeatIcon size={18} />} accentColor={theme.habit} style={{ marginBottom: 8 }} />
                         <Card style={cardStyle}>
                             {sortedHabits.length === 0 ? (
                                 <p>まだありません（タスクタブで追加）</p>
@@ -513,7 +514,7 @@ export default function TodayView({
 
                 {(filter === "all" || filter === "task") && (
                     <div>
-                        <SectionTitle title="タスク" icon="✅" accentColor={theme.task} style={{ marginBottom: 8 }} />
+                        <SectionTitle title="タスク" icon={<CheckIcon size={18} />} accentColor={theme.task} style={{ marginBottom: 8 }} />
                         <Card style={cardStyle}>
                             {sortedOneoffs.length === 0 ? (
                                 <p>タスクがありません（タスクタブで追加）</p>
@@ -569,7 +570,7 @@ export default function TodayView({
                     <div>
 
 
-                        <SectionTitle title="行動" icon="⚡" accentColor={theme.action} style={{ marginBottom: 8 }} />
+                        <SectionTitle title="行動" icon={<ZapIcon size={18} />} accentColor={theme.action} style={{ marginBottom: 8 }} />
                         <Card style={cardStyle}>
                             <div style={{ marginTop: 0 }}>
                                 {todayActionEntries.length === 0 ? (

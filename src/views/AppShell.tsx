@@ -360,7 +360,7 @@ export default function AppShell({
             position: "fixed",
             left: 0,
             right: 0,
-            bottom: adHeight > 0 ? adHeight + 20 : 0, /* 広告がある場合はさらに20px浮かせる */
+            bottom: adHeight > 0 ? adHeight + 10 : 0, /* 重なりを防ぎつつ隙間を最小限(10px)にする */
             zIndex: 60,
             background: theme.surfaceDark, /* ヘッダーと同じダークカラー */
             backdropFilter: "blur(12px) saturate(180%)",

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { theme } from "../../../lib/ui/theme";
+import { RepeatIcon, CheckIcon, ZapIcon } from "../../ui/Icon";
 
 type Props = {
     onSelect: (type: "habit" | "oneoff" | "action") => void;
@@ -111,7 +112,7 @@ export default function FABMenu({ onSelect, adHeight = 0 }: Props) {
                         setOpen(false);
                     }}
                 >
-                    <div style={iconWrapStyle}>🔁</div>
+                    <div style={iconWrapStyle}><RepeatIcon size={18} color={theme.primary} /></div>
                     習慣の登録
                 </button>
                 <button
@@ -121,7 +122,7 @@ export default function FABMenu({ onSelect, adHeight = 0 }: Props) {
                         setOpen(false);
                     }}
                 >
-                    <div style={iconWrapStyle}>✅</div>
+                    <div style={iconWrapStyle}><CheckIcon size={18} color={theme.primary} /></div>
                     タスクの登録
                 </button>
                 <button
@@ -131,7 +132,7 @@ export default function FABMenu({ onSelect, adHeight = 0 }: Props) {
                         setOpen(false);
                     }}
                 >
-                    <div style={iconWrapStyle}>⚡</div>
+                    <div style={iconWrapStyle}><ZapIcon size={18} color={theme.primary} /></div>
                     行動の登録
                 </button>
             </div>
