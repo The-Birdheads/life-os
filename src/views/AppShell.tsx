@@ -366,10 +366,10 @@ export default function AppShell({
             backdropFilter: "blur(12px) saturate(180%)",
             WebkitBackdropFilter: "blur(12px) saturate(180%)",
             borderTop: `1px solid rgba(255,255,255,0.05)`,
-            paddingBottom: "max(env(safe-area-inset-bottom, 0px), 12px)", /* 広告がある場合でも最低限の余白 */
+            paddingBottom: "env(safe-area-inset-bottom, 0px)", /* 広告オフセット(bottom)があるため、ここは最小限に */
           }}
         >
-          <div style={{ ...railStyle, padding: 8 }}>
+          <div style={{ ...railStyle, padding: "8px 8px 4px 8px" }}>
             <Tabs tab={tab} setTab={setTab} />
           </div>
         </div>
