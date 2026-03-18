@@ -496,7 +496,7 @@ export default function TodayView({
 
                                                         <div style={metaLineStyle}>
                                                             <PriorityBadge value={(t as any).priority} />
-                                                            <VolBar value={(t as any).volume} isReverse={checked || isPastDone} />
+                                                            <VolBar value={(t as any).volume} isReverse={checked} />
                                                             {isHidden && (checked || isPastDone) ? (
                                                                 <small style={{ opacity: 0.6 }}>（非表示・履歴のため表示）</small>
                                                             ) : null}
