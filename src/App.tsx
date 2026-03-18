@@ -12,6 +12,7 @@ import NotificationSettingsModal from "./components/features/settings/Notificati
 import { initSqlite } from "./lib/db/initSqlite";
 import { getLocalUserId } from "./lib/db/localUser";
 import { Capacitor } from "@capacitor/core";
+import { App as CapApp } from "@capacitor/app";
 import { AdMob } from "@capacitor-community/admob";
 import BannerAd from "./components/ui/BannerAd";
 import { supabase } from "./lib/supabase";
@@ -107,6 +108,36 @@ export default function App() {
     };
     window.addEventListener("lifeos:notificationClick", handleNotifClick);
     return () => window.removeEventListener("lifeos:notificationClick", handleNotifClick);
+  }, []);
+
+  // ------- Deep Links (OAuth Callback) -------
+  useEffect(() => {
+    CapApp.addListener('appUrlOpen', async (data: any) => {
+      console.log('App opened with URL:', data.url);
+      const url = new URL(data.url);
+      
+      // habitas://login-callback#access_token=... 形式を処理
+      if (url.host === 'login-callback') {
+        const hash = url.hash.substring(1); // # を除く
+        const params = new URLSearchParams(hash);
+        const accessToken = params.get('access_token');
+        const refreshToken = params.get('refresh_token');
+
+        if (accessToken && refreshToken) {
+          console.log('[App] Deep link login-callback detected. Setting session...');
+          const { error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          if (error) {
+            console.error('[App] Failed to set session from deep link:', error.message);
+            setMsg(`ログインエラー: ${error.message}`);
+          } else {
+            setMsg('ログインしました');
+          }
+        }
+      }
+    });
   }, []);
 
   // ------- Data -------
