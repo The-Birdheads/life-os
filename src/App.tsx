@@ -356,8 +356,20 @@ export default function App() {
         <p style={{ fontWeight: 700 }}>Initialzing LifeOS...</p>
         <p style={{ opacity: 0.7, fontSize: "0.9em" }}>Database is being prepared...</p>
         {msg && (
-          <div style={{ textAlign: "center", background: "rgba(255,255,255,0.05)", padding: 16, borderRadius: 12, width: "100%", maxWidth: 300 }}>
+          <div style={{ textAlign: "center", background: "rgba(255,255,255,0.05)", padding: 16, borderRadius: 12, width: "100%", maxWidth: 320 }}>
              <p style={{ color: "var(--accent)", fontSize: "0.85em", marginBottom: 12, wordBreak: "break-all" }}>{msg}</p>
+             
+             {(msg.includes("UNIMPLEMENTED") || msg.includes("cap sync")) && (
+               <div style={{ background: "rgba(0,0,0,0.2)", padding: 10, borderRadius: 8, textAlign: "left", fontSize: "0.75em", marginBottom: 16, borderLeft: "4px solid var(--accent)" }}>
+                 <p style={{ fontWeight: 700, marginBottom: 4 }}>🔧 ネイティブ同期が必要です:</p>
+                 <ol style={{ paddingLeft: 18, margin: 0 }}>
+                   <li>Macのターミナルで <code>npx cap sync ios</code> を実行</li>
+                   <li>Xcodeで <code>Product {' > '} Clean Build Folder</code></li>
+                   <li>Xcodeで <code>Run</code> (再ビルド)</li>
+                 </ol>
+               </div>
+             )}
+
              <button 
                onClick={() => window.dispatchEvent(new CustomEvent("lifeos:retryInit"))}
                style={{

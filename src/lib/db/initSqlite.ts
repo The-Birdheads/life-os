@@ -49,7 +49,15 @@ export function initSqlite(): Promise<SQLiteDBConnection> {
     } catch (err: any) {
       console.error("[initSqlite] CRITICAL ERROR during initialization:", err);
       initPromise = null; // リセットして次回呼び出し時にリトライ可能にする
-      throw err;
+
+      let message = err.message || JSON.stringify(err);
+      if (message.includes("UNIMPLEMENTED")) {
+        message = "Capacitor plugin not synced. Please run 'npx cap sync ios' on your Mac terminal and rebuild in Xcode.";
+      }
+      
+      const enhancedError = new Error(message);
+      (enhancedError as any).code = err.code || "UNKNOWN";
+      throw enhancedError;
     }
   })();
 
