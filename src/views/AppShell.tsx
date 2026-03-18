@@ -131,7 +131,7 @@ export default function AppShell({
             WebkitBackdropFilter: "blur(12px) saturate(180%)",
             borderBottom: `1px solid rgba(255,255,255,0.05)`, /* ダーク用ボーダー */
             boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)", /* 落ちる影 */
-            paddingTop: "calc(env(safe-area-inset-top, 0px) + 24px)", /* ステータスバー分の余白を明示的に確保 */
+            paddingTop: "max(env(safe-area-inset-top, 0px), 32px)", /* ノッチを確実に避ける余裕を確保 */
             color: theme.surfaceDarkText, /* テキストを白系に */
             top: 0,
           }}
@@ -366,7 +366,7 @@ export default function AppShell({
             backdropFilter: "blur(12px) saturate(180%)",
             WebkitBackdropFilter: "blur(12px) saturate(180%)",
             borderTop: `1px solid rgba(255,255,255,0.05)`,
-            paddingBottom: "env(safe-area-inset-bottom, 24px)", /* 標準の余白に戻す */
+            paddingBottom: "max(env(safe-area-inset-bottom, 0px), 12px)", /* 広告がある場合でも最低限の余白 */
           }}
         >
           <div style={{ ...railStyle, padding: 8 }}>

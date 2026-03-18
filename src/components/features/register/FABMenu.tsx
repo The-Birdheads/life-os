@@ -3,11 +3,11 @@ import { theme } from "../../../lib/ui/theme";
 
 type Props = {
     onSelect: (type: "habit" | "oneoff" | "action") => void;
+    adHeight?: number;
 };
 
-export default function FABMenu({ onSelect }: Props) {
+export default function FABMenu({ onSelect, adHeight = 0 }: Props) {
     const [open, setOpen] = useState(false);
-    const adHeight = 0; // 広告が上部に移動したため、下部の回避ロジックは不要になりました
 
 
 

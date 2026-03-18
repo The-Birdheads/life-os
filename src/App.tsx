@@ -399,7 +399,7 @@ export default function App() {
       )}
 
       {tab === "today" && (
-        <FABMenu onSelect={(type) => setOpenModal(type)} />
+        <FABMenu onSelect={(type) => setOpenModal(type)} adHeight={adHeight} />
       )}
 
       <RegisterModals
