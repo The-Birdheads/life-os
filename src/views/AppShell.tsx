@@ -143,7 +143,7 @@ export default function AppShell({
           }}>
             {/* LEFT */}
             <div style={{ justifySelf: "start", fontWeight: 900, fontSize: 18 }}>
-              Habitas
+              {/* Logo text removed */}
             </div>
 
             {/* CENTER */}
