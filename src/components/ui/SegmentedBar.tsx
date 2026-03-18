@@ -77,7 +77,6 @@ export default function SegmentedBar<K extends string>({
 
                 fontWeight: active ? "bold" : 600,
                 fontSize: 14,
-                letterSpacing: "0.02em",
 
                 display: "flex",
                 alignItems: "center",
