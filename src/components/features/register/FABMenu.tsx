@@ -136,7 +136,7 @@ export default function FABMenu({ onSelect }: Props) {
                 </button>
             </div>
             <button style={fabStyle} onClick={() => setOpen(!open)}>
-                ＋
+                +
             </button>
         </>
     );
