@@ -12,6 +12,7 @@ import SegmentedBar from "../../ui/SegmentedBar";
 import TextInput from "../../ui/TextInput";
 import Slider from "../../ui/Slider";
 import Select from "../../ui/Select";
+import { PlusIcon, CloseIcon, EyeIcon, EyeOffIcon } from "../../ui/Icon";
 
 type SubTab = "shown" | "hidden";
 const subTabItems = [
@@ -273,7 +274,9 @@ function TaskListModal({
     return (
         <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
             <div style={{ position: "relative", padding: "24px 16px 16px", flexShrink: 0 }}>
-                <button style={closeBtnStyle} onClick={() => setOpenModal(null)}>×</button>
+                <button style={{ ...closeBtnStyle, padding: 0 }} onClick={() => setOpenModal(null)}>
+                    <CloseIcon size={20} />
+                </button>
                 <h2 style={{ margin: 0, fontSize: 20 }}>{title}の登録</h2>
             </div>
 
@@ -282,7 +285,12 @@ function TaskListModal({
 
                 <div style={{ marginTop: 16, marginBottom: 16 }}>
                     {!adding ? (
-                        <PrimaryBtn fullWidth onClick={() => setAdding(true)}>＋ 新しい{title}を追加</PrimaryBtn>
+                        <PrimaryBtn fullWidth onClick={() => setAdding(true)}>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                                <PlusIcon size={18} />
+                                <span>新しい{title}を追加</span>
+                            </div>
+                        </PrimaryBtn>
                     ) : (
                         <Card style={{ padding: 16 }}>
                             <form onSubmit={async (e) => {
@@ -390,7 +398,9 @@ function TaskRow({
                 {task.due_date && <div style={{ fontSize: 12, opacity: 0.7 }}>期限：{task.due_date}</div>}
             </div>
             <div style={{ display: "flex", gap: 6, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
-                <IconBtn title={isHidden ? "表示する" : "非表示にする"} onClick={() => updateTask(task.id, { is_hidden: !isHidden } as any)}>{isHidden ? "👁️" : "🙈"}</IconBtn>
+                <IconBtn title={isHidden ? "表示する" : "非表示にする"} onClick={() => updateTask(task.id, { is_hidden: !isHidden } as any)}>
+                    {isHidden ? <EyeIcon size={18} /> : <EyeOffIcon size={18} />}
+                </IconBtn>
             </div>
         </div>
     );
@@ -456,7 +466,9 @@ function TaskEditModal({
         <div style={{ ...overlayStyle, zIndex: 110 }} onClick={() => setEditingItem(null)}>
             <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
                 <div style={{ position: "relative", padding: "24px 16px 16px", flexShrink: 0 }}>
-                    <button style={closeBtnStyle} onClick={() => setEditingItem(null)}>×</button>
+                    <button style={{ ...closeBtnStyle, padding: 0 }} onClick={() => setEditingItem(null)}>
+                        <CloseIcon size={20} />
+                    </button>
                     <h2 style={{ margin: 0, fontSize: 20 }}>{title}の編集</h2>
                 </div>
 
@@ -539,7 +551,9 @@ function ActionCategoryModal({
     return (
         <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
             <div style={{ position: "relative", padding: "24px 16px 16px", flexShrink: 0 }}>
-                <button style={closeBtnStyle} onClick={() => setCategoryModalOpen(false)}>×</button>
+                <button style={{ ...closeBtnStyle, padding: 0 }} onClick={() => setCategoryModalOpen(false)}>
+                    <CloseIcon size={20} />
+                </button>
                 <h2 style={{ margin: 0, fontSize: 20 }}>行動の種類の管理</h2>
             </div>
 
@@ -548,7 +562,12 @@ function ActionCategoryModal({
 
                 <div style={{ marginTop: 16, marginBottom: 16 }}>
                     {!adding ? (
-                        <PrimaryBtn fullWidth onClick={() => setAdding(true)}>＋ 新しい行動の種類を追加</PrimaryBtn>
+                        <PrimaryBtn fullWidth onClick={() => setAdding(true)}>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                                <PlusIcon size={18} />
+                                <span>新しい行動の種類を追加</span>
+                            </div>
+                        </PrimaryBtn>
                     ) : (
                         <Card style={{ padding: 16 }}>
                             <form onSubmit={async (e) => {
@@ -639,7 +658,9 @@ function ActionRow({
                 <CategoryBadge category={actionItem.category} />
             </div>
             <div style={{ display: "flex", gap: 6, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
-                <IconBtn title={isHidden ? "表示する" : "非表示にする"} onClick={() => updateAction(actionItem.id, { is_hidden: !isHidden } as any)}>{isHidden ? "👁️" : "🙈"}</IconBtn>
+                <IconBtn title={isHidden ? "表示する" : "非表示にする"} onClick={() => updateAction(actionItem.id, { is_hidden: !isHidden } as any)}>
+                    {isHidden ? <EyeIcon size={18} /> : <EyeOffIcon size={18} />}
+                </IconBtn>
             </div>
         </div>
     );
@@ -697,7 +718,9 @@ function ActionEditModal({
         <div style={{ ...overlayStyle, zIndex: 110 }} onClick={() => setEditingItem(null)}>
             <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
                 <div style={{ position: "relative", padding: "24px 16px 16px", flexShrink: 0 }}>
-                    <button style={closeBtnStyle} onClick={() => setEditingItem(null)}>×</button>
+                    <button style={{ ...closeBtnStyle, padding: 0 }} onClick={() => setEditingItem(null)}>
+                        <CloseIcon size={20} />
+                    </button>
                     <h2 style={{ margin: 0, fontSize: 20 }}>行動の種類の編集</h2>
                 </div>
 
@@ -773,7 +796,9 @@ function ActionEntryModal({
     return (
         <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
             <div style={{ position: "relative", padding: "24px 16px 16px", flexShrink: 0 }}>
-                <button style={closeBtnStyle} onClick={() => setOpenModal(null)}>×</button>
+                <button style={{ ...closeBtnStyle, padding: 0 }} onClick={() => setOpenModal(null)}>
+                    <CloseIcon size={20} />
+                </button>
                 <h2 style={{ margin: 0, fontSize: 20 }}>行動の登録</h2>
             </div>
 
