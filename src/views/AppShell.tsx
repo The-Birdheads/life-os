@@ -360,13 +360,13 @@ export default function AppShell({
             position: "fixed",
             left: 0,
             right: 0,
-            bottom: adHeight, /* 広告位置に密着させる */
+            bottom: adHeight > 0 ? adHeight + 20 : 0, /* 広告がある場合はさらに20px浮かせる */
             zIndex: 60,
             background: theme.surfaceDark, /* ヘッダーと同じダークカラー */
             backdropFilter: "blur(12px) saturate(180%)",
             WebkitBackdropFilter: "blur(12px) saturate(180%)",
             borderTop: `1px solid rgba(255,255,255,0.05)`,
-            paddingBottom: adHeight > 0 ? 0 : "env(safe-area-inset-bottom, 0px)", /* 広告がある場合は二重の余白を避ける */
+            paddingBottom: "max(env(safe-area-inset-bottom, 0px), 12px)", /* 広告がある場合でも最低限の余白 */
           }}
         >
           <div style={{ ...railStyle, padding: "8px 8px 4px 8px" }}>
