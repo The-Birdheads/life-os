@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { APP_VERSION, RELEASE_NOTES } from "../lib/releaseNotes";
+import { Capacitor } from "@capacitor/core";
 
 import Toast from "../components/ui/Toast";
 import Tabs from "../components/ui/Tabs";
@@ -33,6 +34,7 @@ type Props = {
   adHeight: number;
   onSignInWithGoogle?: () => void;
   onDateSelect?: (dateStr: string) => void;
+  onOpenNotificationSettings?: () => void;
 };
 
 export default function AppShell({
@@ -54,6 +56,7 @@ export default function AppShell({
   adHeight,
   onSignInWithGoogle,
   onDateSelect,
+  onOpenNotificationSettings,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -276,6 +279,18 @@ export default function AppShell({
                       リリースノート
                     </PrimaryBtn>
 
+                    {Capacitor.isNativePlatform() && onOpenNotificationSettings && (
+                      <>
+                        <div style={{ height: 8 }} />
+                        <PrimaryBtn fullWidth onClick={() => {
+                          setMenuOpen(false);
+                          onOpenNotificationSettings();
+                        }}>
+                          通知設定
+                        </PrimaryBtn>
+                      </>
+                    )}
+
                     <div style={{ height: 8 }} />
 
                     {userEmail === "offline-user@local" || !userEmail ? (
@@ -330,9 +345,8 @@ export default function AppShell({
           style={{
             ...railStyle,
             minHeight: `calc(100vh - ${topBarHeight}px - ${bottomNavHeight}px)`,
-            paddingTop: topBarHeight + adHeight + 40, /* ヘッダー分＋広告分＋余白 */
-            paddingBottom: 120, /* ボトムは標準に戻す */
-            marginTop: "env(safe-area-inset-top, 0px)",
+            paddingTop: `calc(env(safe-area-inset-top, 0px) + ${topBarHeight + adHeight + 20}px)`, /* 20pxの追加余白で重なりを確実に回避 */
+            paddingBottom: 120,
             display: "flex",
             flexDirection: "column",
             alignItems: "stretch",

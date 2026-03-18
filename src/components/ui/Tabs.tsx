@@ -62,7 +62,7 @@ export default function Tabs({ tab, setTab }: Props) {
 
   const labelStyle: React.CSSProperties = {
     fontSize: 12,
-    fontWeight: 800,
+    fontWeight: "bold",
     lineHeight: 1.1,
     marginTop: 4,
   };

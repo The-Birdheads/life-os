@@ -75,7 +75,7 @@ export default function SegmentedBar<K extends string>({
                 color: active ? "#111111" : theme.surfaceDarkText,
                 opacity: active ? 1 : 0.7,
 
-                fontWeight: active ? 800 : 600,
+                fontWeight: active ? "bold" : 600,
                 fontSize: 14,
                 letterSpacing: "0.02em",
 

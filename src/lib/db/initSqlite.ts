@@ -114,6 +114,19 @@ async function createTables(db: SQLiteDBConnection) {
         fulfillment REAL DEFAULT 0,
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP
       );
+
+      CREATE TABLE IF NOT EXISTS notification_settings (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL UNIQUE,
+        habit_remind_on INTEGER DEFAULT 1,
+        habit_remind_hour INTEGER DEFAULT 18,
+        task_remind_on INTEGER DEFAULT 1,
+        task_remind_hour INTEGER DEFAULT 10,
+        task_remind_timing TEXT DEFAULT '[1,2,3]',
+        review_remind_on INTEGER DEFAULT 1,
+        review_remind_hour INTEGER DEFAULT 21,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+      );
     `;
 
   try {
@@ -129,7 +142,7 @@ async function createTables(db: SQLiteDBConnection) {
     await db.execute(schema);
 
     // 2. updated_at カラムの欠落を補完
-    const tables = ['tasks', 'actions', 'task_entries', 'action_entries', 'daily_logs'];
+    const tables = ['tasks', 'actions', 'task_entries', 'action_entries', 'daily_logs', 'notification_settings'];
     for (const table of tables) {
       try {
         const info = await db.query(`PRAGMA table_info(${table});`);

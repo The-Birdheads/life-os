@@ -1,4 +1,4 @@
-import type { Task, Action, TaskEntry, ActionEntry, DailyLog } from "../types";
+import type { Task, Action, TaskEntry, ActionEntry, DailyLog, NotificationSettings } from "../types";
 import type { Repository } from "./repository";
 import { Capacitor } from "@capacitor/core";
 import { initSqlite, DB_NAME, sqlite } from "./initSqlite";
@@ -286,6 +286,60 @@ export class SqliteRepository implements Repository {
         await this.save();
     }
 
+    // --- Notification Settings ---
+    async getNotificationSettings(userId: string): Promise<NotificationSettings | null> {
+        const db = await this.getDb();
+        const res = await db.query(
+            `SELECT * FROM notification_settings WHERE user_id = ?`,
+            [userId]
+        );
+        if (!res.values || res.values.length === 0) return null;
+        const raw = res.values[0];
+        return {
+            ...raw,
+            habit_remind_on: raw.habit_remind_on === 1,
+            task_remind_on: raw.task_remind_on === 1,
+            review_remind_on: raw.review_remind_on === 1,
+        } as NotificationSettings;
+    }
+
+    async upsertNotificationSettings(settings: NotificationSettings): Promise<void> {
+        const db = await this.getDb();
+        const now = new Date().toISOString();
+        const existing = await db.query(`SELECT id FROM notification_settings WHERE user_id = ?`, [settings.user_id]);
+
+        if (existing.values && existing.values.length > 0) {
+            await db.run(
+                `UPDATE notification_settings SET 
+                 habit_remind_on = ?, habit_remind_hour = ?, task_remind_on = ?, task_remind_hour = ?, 
+                 task_remind_timing = ?, review_remind_on = ?, review_remind_hour = ?, updated_at = ?
+                 WHERE user_id = ?`,
+                [
+                    settings.habit_remind_on ? 1 : 0, settings.habit_remind_hour,
+                    settings.task_remind_on ? 1 : 0, settings.task_remind_hour,
+                    settings.task_remind_timing,
+                    settings.review_remind_on ? 1 : 0, settings.review_remind_hour,
+                    now, settings.user_id
+                ]
+            );
+        } else {
+            await db.run(
+                `INSERT INTO notification_settings 
+                 (id, user_id, habit_remind_on, habit_remind_hour, task_remind_on, task_remind_hour, task_remind_timing, review_remind_on, review_remind_hour, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                    settings.id || crypto.randomUUID(), settings.user_id,
+                    settings.habit_remind_on ? 1 : 0, settings.habit_remind_hour,
+                    settings.task_remind_on ? 1 : 0, settings.task_remind_hour,
+                    settings.task_remind_timing,
+                    settings.review_remind_on ? 1 : 0, settings.review_remind_hour,
+                    now
+                ]
+            );
+        }
+        await this.save();
+    }
+
     // --- Data Migration & Deduplication ---
     async migrate(oldUserId: string, newUserId: string): Promise<void> {
         const db = await this.getDb();
@@ -366,7 +420,7 @@ export class SqliteRepository implements Repository {
 
         try {
             // 1. 各テーブルのデータを取得
-            const tables = ["tasks", "actions", "task_entries", "action_entries", "daily_logs"];
+            const tables = ["tasks", "actions", "task_entries", "action_entries", "daily_logs", "notification_settings"];
 
             for (const table of tables) {
                 const localData = (await db.query(`SELECT * FROM ${table} WHERE user_id = ?`, [userId])).values || [];
@@ -427,6 +481,19 @@ export class SqliteRepository implements Repository {
                                 await db.run(`INSERT INTO daily_logs (id, user_id, day, note, satisfaction, task_total, action_total, total_score, task_ratio, action_ratio, balance_factor, fulfillment, updated_at) 
                                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                                     [remote.id, remote.user_id, remote.day, remote.note, remote.satisfaction, remote.task_total, remote.action_total, remote.total_score, remote.task_ratio, remote.action_ratio, remote.balance_factor, remote.fulfillment, remote.updated_at]);
+                            }
+                        } else if (table === "notification_settings") {
+                            const existing = await db.query(`SELECT id FROM notification_settings WHERE user_id = ?`, [remote.user_id]);
+                            if (existing.values && existing.values.length > 0) {
+                                await db.run(`UPDATE notification_settings SET 
+                                    habit_remind_on=?, habit_remind_hour=?, task_remind_on=?, task_remind_hour=?, 
+                                    task_remind_timing=?, review_remind_on=?, review_remind_hour=?, updated_at=?
+                                    WHERE user_id=?`,
+                                    [remote.habit_remind_on, remote.habit_remind_hour, remote.task_remind_on, remote.task_remind_hour, remote.task_remind_timing, remote.review_remind_on, remote.review_remind_hour, remote.updated_at, remote.user_id]);
+                            } else {
+                                await db.run(`INSERT INTO notification_settings (id, user_id, habit_remind_on, habit_remind_hour, task_remind_on, task_remind_hour, task_remind_timing, review_remind_on, review_remind_hour, updated_at) 
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                                    [remote.id, remote.user_id, remote.habit_remind_on, remote.habit_remind_hour, remote.task_remind_on, remote.task_remind_hour, remote.task_remind_timing, remote.review_remind_on, remote.review_remind_hour, remote.updated_at]);
                             }
                         }
                     }

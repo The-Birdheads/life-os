@@ -30,6 +30,7 @@ type Props = {
     setMsg: (s: string) => void;
     loadBase: () => Promise<void>;
     loadTodayEntries: () => Promise<void>;
+    adHeight?: number;
 };
 
 import { sqliteRepo } from "../../../lib/db/instance";
@@ -45,6 +46,7 @@ export default function RegisterModals({
     setMsg,
     loadBase,
     loadTodayEntries,
+    adHeight = 0,
 }: Props) {
     // --- Action Category Modal State ---
     const [categoryModalOpen, setCategoryModalOpen] = useState(false);
@@ -106,7 +108,7 @@ export default function RegisterModals({
         transition: "opacity 0.2s ease",
     };
     const modalStyle: React.CSSProperties = {
-        width: "100%", maxWidth: 600, maxHeight: "calc(100dvh - 24px)",
+        width: "100%", maxWidth: 600, maxHeight: `calc(100dvh - 24px - ${adHeight}px)`,
         background: "var(--bg)", borderTopLeftRadius: 20, borderTopRightRadius: 20,
         display: "flex", flexDirection: "column",
         boxShadow: "0 -4px 20px rgba(0,0,0,0.15)",

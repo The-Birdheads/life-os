@@ -53,3 +53,16 @@ export type DailyLog = {
   balance_factor: number;
   fulfillment: number;
 };
+
+export type NotificationSettings = {
+  id: string; // Primary key e.g. "settings_" + user_id
+  user_id: string;
+  habit_remind_on: boolean;
+  habit_remind_hour: number;
+  task_remind_on: boolean;
+  task_remind_hour: number;
+  task_remind_timing: string; // JSON array of numbers e.g. "[1,2,3]" 
+  review_remind_on: boolean;
+  review_remind_hour: number;
+  updated_at: string;
+};

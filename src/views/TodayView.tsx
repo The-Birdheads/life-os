@@ -67,6 +67,14 @@ export default function TodayView({
     const [filter, setFilter] = useState<Filter>("all");
     const [editingItem, setEditingItem] = useState<{ type: "habit" | "oneoff" | "action"; item: any } | null>(null);
 
+    React.useEffect(() => {
+        const handleSetFilter = (e: Event) => {
+            setFilter((e as CustomEvent).detail);
+        };
+        window.addEventListener("lifeos:setTodayFilter", handleSetFilter);
+        return () => window.removeEventListener("lifeos:setTodayFilter", handleSetFilter);
+    }, []);
+
     const activeHabits = tasks.filter((t) => t.is_active && t.task_type === "habit");
     const activeOneoffs = tasks.filter((t) => t.is_active && t.task_type === "oneoff");
 

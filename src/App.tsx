@@ -8,12 +8,14 @@ import ReviewView from "./views/ReviewView";
 import TodayView from "./views/TodayView";
 import FABMenu from "./components/features/register/FABMenu";
 import RegisterModals from "./components/features/register/RegisterModals";
+import NotificationSettingsModal from "./components/features/settings/NotificationSettingsModal";
 import { initSqlite } from "./lib/db/initSqlite";
 import { getLocalUserId } from "./lib/db/localUser";
 import { Capacitor } from "@capacitor/core";
 import { AdMob } from "@capacitor-community/admob";
 import BannerAd from "./components/ui/BannerAd";
 import { supabase } from "./lib/supabase";
+import { scheduleNotifications, setupNotificationListeners } from "./lib/notifications";
 import { sqliteRepo } from "./lib/db/instance";
 import {
   cardStyle,
@@ -67,6 +69,46 @@ export default function App() {
 
   const canNext = canGoNextDay(day);
 
+  // ------- Notifications -------
+  useEffect(() => {
+    const cleanup = setupNotificationListeners();
+    return cleanup;
+  }, []);
+
+  useEffect(() => {
+    if (!userId) return;
+    const handleSchedule = async () => {
+        try {
+            await scheduleNotifications(userId);
+        } catch (e) {
+            console.error("[App] Failed to schedule notifications, DB might not be ready", e);
+        }
+    };
+    
+    // Initial schedule on load (delay slightly to ensure DB is mounted)
+    setTimeout(handleSchedule, 2000);
+
+    window.addEventListener("lifeos:scheduleNotifications", handleSchedule);
+    return () => window.removeEventListener("lifeos:scheduleNotifications", handleSchedule);
+  }, [userId]);
+
+  useEffect(() => {
+    const handleNotifClick = (e: Event) => {
+      const type = (e as CustomEvent).detail;
+      if (type === 1) {
+        setTab("today");
+        setTimeout(() => window.dispatchEvent(new CustomEvent("lifeos:setTodayFilter", { detail: "habit" })), 100);
+      } else if (type === 2) {
+        setTab("today");
+        setTimeout(() => window.dispatchEvent(new CustomEvent("lifeos:setTodayFilter", { detail: "task" })), 100);
+      } else if (type === 3) {
+        setTab("review");
+      }
+    };
+    window.addEventListener("lifeos:notificationClick", handleNotifClick);
+    return () => window.removeEventListener("lifeos:notificationClick", handleNotifClick);
+  }, []);
+
   // ------- Data -------
   const [tasks, setTasks] = useState<Task[]>([]);
   const [actions, setActions] = useState<Action[]>([]);
@@ -78,6 +120,7 @@ export default function App() {
 
   // ------- Modals -------
   const [openModal, setOpenModal] = useState<"habit" | "oneoff" | "action" | null>(null);
+  const [notifSettingsOpen, setNotifSettingsOpen] = useState(false);
 
   const prevUserIdRef = useRef<string | null>(null);
 
@@ -302,6 +345,7 @@ export default function App() {
       adHeight={adHeight}
       onSignInWithGoogle={signInWithGoogle}
       onDateSelect={safeSetDay}
+      onOpenNotificationSettings={() => setNotifSettingsOpen(true)}
     >
       {tab === "today" && (
         <TodayView
@@ -369,6 +413,15 @@ export default function App() {
         setMsg={setMsg}
         loadBase={loadBase}
         loadTodayEntries={loadTodayEntries}
+        adHeight={adHeight}
+      />
+
+      <NotificationSettingsModal
+        isOpen={notifSettingsOpen}
+        onClose={() => setNotifSettingsOpen(false)}
+        userId={userId}
+        setMsg={setMsg}
+        adHeight={adHeight}
       />
 
       {/* AdMob Banner */}
