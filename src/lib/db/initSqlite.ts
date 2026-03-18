@@ -5,14 +5,14 @@ export const sqlite = new SQLiteConnection(CapacitorSQLite);
 
 export const DB_NAME = "lifeos_db";
 
-let initPromise: Promise<SQLiteDBConnection | null> | null = null;
+let initPromise: Promise<SQLiteDBConnection> | null = null;
 
-export function initSqlite(): Promise<SQLiteDBConnection | null> {
+export function initSqlite(): Promise<SQLiteDBConnection> {
   if (initPromise) return initPromise;
 
   initPromise = (async () => {
     try {
-      console.log("Initializing SQLite...");
+      console.log("[initSqlite] Starting initialization...");
 
       // Web環境(jeep-sqlite)向けのセットアップ
       if (Capacitor.getPlatform() === 'web') {
@@ -25,25 +25,31 @@ export function initSqlite(): Promise<SQLiteDBConnection | null> {
         await sqlite.initWebStore();
       }
 
+      console.log("[initSqlite] Checking connections...");
       const isConnection = await sqlite.checkConnectionsConsistency();
       const isConnected = (await sqlite.isConnection(DB_NAME, false)).result;
 
       let db: SQLiteDBConnection;
       if (isConnection.result && isConnected) {
+        console.log("[initSqlite] Retrieving existing connection...");
         db = await sqlite.retrieveConnection(DB_NAME, false);
       } else {
+        console.log("[initSqlite] Creating new connection...");
         db = await sqlite.createConnection(DB_NAME, false, "no-encryption", 1, false);
       }
 
+      console.log("[initSqlite] Opening database...");
       await db.open();
 
+      console.log("[initSqlite] Verifying/Creating tables...");
       await createTables(db);
 
-      console.log("SQLite initialized successfully.");
+      console.log("[initSqlite] SQLite initialized successfully.");
       return db;
-    } catch (err) {
-      console.error("Error initializing SQLite:", err);
-      return null;
+    } catch (err: any) {
+      console.error("[initSqlite] CRITICAL ERROR during initialization:", err);
+      initPromise = null; // リセットして次回呼び出し時にリトライ可能にする
+      throw err;
     }
   })();
 

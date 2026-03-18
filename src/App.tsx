@@ -255,19 +255,34 @@ export default function App() {
 
       } catch (err: any) {
         console.error("[App] CRITICAL Error during setup:", err);
-        setMsg(`初期化エラー: ${err.message || err}`);
-        // エラーでもローカルIDで動かせるように試行
-        getLocalUserId().then(id => {
+        const errorMsg = err.message || JSON.stringify(err);
+        setMsg(`初期化エラー: ${errorMsg}`);
+        
+        // エラーでもローカルIDで動かせるように試行（ただしDBが壊れている可能性が高い）
+        try {
+          const id = await getLocalUserId();
           if (!prevUserIdRef.current) {
             console.log("[App] Falling back to local ID due to critical error:", id);
             setUserId(id);
           }
-        });
+        } catch (e) {
+          console.error("[App] Failed to get local user ID during error recovery:", e);
+        }
       }
     };
 
     setupApp();
+    
+    // リトライ用のグローバルイベントリスナー
+    const handleRetry = () => {
+      console.log("[App] Retry initialization requested.");
+      setMsg("再試行中...");
+      setupApp();
+    };
+    window.addEventListener("lifeos:retryInit", handleRetry);
+
     return () => {
+      window.removeEventListener("lifeos:retryInit", handleRetry);
       if (sub) {
         console.log("[App] Unsubscribing auth listener.");
         sub.unsubscribe();
@@ -337,9 +352,28 @@ export default function App() {
   // ------- Render -------
   if (!userId) {
     return (
-      <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", height: "100vh", background: "var(--bg)", color: "var(--text)", gap: "16px" }}>
-        <p>Initializing Local Database...</p>
-        {msg && <p style={{ color: "var(--accent)", fontSize: "0.9em" }}>{msg}</p>}
+      <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", height: "100vh", background: "var(--bg)", color: "var(--text)", gap: "16px", padding: 20 }}>
+        <p style={{ fontWeight: 700 }}>Initialzing LifeOS...</p>
+        <p style={{ opacity: 0.7, fontSize: "0.9em" }}>Database is being prepared...</p>
+        {msg && (
+          <div style={{ textAlign: "center", background: "rgba(255,255,255,0.05)", padding: 16, borderRadius: 12, width: "100%", maxWidth: 300 }}>
+             <p style={{ color: "var(--accent)", fontSize: "0.85em", marginBottom: 12, wordBreak: "break-all" }}>{msg}</p>
+             <button 
+               onClick={() => window.dispatchEvent(new CustomEvent("lifeos:retryInit"))}
+               style={{
+                 background: "var(--accent)",
+                 color: "white",
+                 border: "none",
+                 padding: "8px 16px",
+                 borderRadius: 8,
+                 fontWeight: 600,
+                 cursor: "pointer"
+               }}
+             >
+               Retry Initialization
+             </button>
+          </div>
+        )}
       </div>
     );
   }

@@ -5,9 +5,12 @@ import { initSqlite, DB_NAME, sqlite } from "./initSqlite";
 
 export class SqliteRepository implements Repository {
     private async getDb() {
-        const db = await initSqlite();
-        if (!db) throw new Error("SQLite DB not initialized");
-        return db;
+        try {
+            return await initSqlite();
+        } catch (e: any) {
+            console.error("[SqliteRepository] Failed to get database:", e);
+            throw new Error(`SQLite DB not initialized: ${e.message || e}`);
+        }
     }
 
     private async save() {
