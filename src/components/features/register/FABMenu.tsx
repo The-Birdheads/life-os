@@ -26,7 +26,7 @@ export default function FABMenu({ onSelect, adHeight = 0 }: Props) {
     const fabStyle: React.CSSProperties = {
         position: "fixed",
         right: 24,
-        bottom: 104 + adHeight, // Tabs(64px) + 余白バランス (+ 広告50px)
+        bottom: 124 + adHeight, // Tabs(64px) + 余白バランス (+ 広告50px) + 安全マージン 20px
         width: 56,
         height: 56,
         borderRadius: 28,
