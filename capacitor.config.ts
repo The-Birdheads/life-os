@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   appName: 'Habitas',
   webDir: 'dist',
   ios: {
-    useCocoaPods: true
+    dependencyManager: 'cocoapods'
   }
 };
 
