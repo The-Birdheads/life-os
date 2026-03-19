@@ -295,7 +295,7 @@ export default function App() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: Capacitor.isNativePlatform() ? 'habitas://login-callback' : window.location.origin
+        redirectTo: Capacitor.isNativePlatform() ? 'com.morikuma.habitas://login-callback' : window.location.origin
       }
     });
     if (error) setMsg(`エラー: ${error.message}`);
