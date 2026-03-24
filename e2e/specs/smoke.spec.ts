@@ -1,15 +1,13 @@
 import { browser, expect } from '@wdio/globals'
-import { switchToWebView } from '../helpers/context'
-import { sleep } from '../helpers/wait'
+import { waitForAppReady } from '../helpers/context'
 
 describe('スモークテスト', () => {
   before(async () => {
-    await switchToWebView(browser)
+    await waitForAppReady(browser)
   })
 
-  it('アプリが起動してタブが表示されること', async () => {
-    await sleep(2000)
-    const body = await browser.$('body')
-    await expect(body).toBeDisplayed()
+  it('アプリが起動して WebView が表示されること', async () => {
+    const webView = await browser.$('//XCUIElementTypeWebView')
+    await expect(webView).toBeDisplayed()
   })
 })

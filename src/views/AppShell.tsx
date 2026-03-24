@@ -248,7 +248,7 @@ export default function AppShell({
 
             {/* RIGHT */}
             <div ref={menuRef} style={{ justifySelf: "end", position: "relative" }}>
-              <button onClick={() => setMenuOpen(v => !v)} style={{ ...headerIconBtnStyle, width: "40px", height: "40px" }}>
+              <button aria-label="メニュー" onClick={() => setMenuOpen(v => !v)} style={{ ...headerIconBtnStyle, width: "40px", height: "40px" }}>
                 <svg width="20" height="20" viewBox="0 0 24 24">
                   <path
                     d="M4 7h16M4 12h16M4 17h16"
@@ -273,6 +273,7 @@ export default function AppShell({
                   }}
                 >
                   <div
+                    aria-label="ハンバーガーメニュー"
                     style={{
                       pointerEvents: "auto",
                       width: "min(92vw, 340px)",

@@ -1,20 +1,21 @@
 import { browser, expect } from '@wdio/globals'
-import { switchToWebView } from '../helpers/context'
+import { waitForAppReady } from '../helpers/context'
 import { sleep } from '../helpers/wait'
 
 describe('ハンバーガーメニュー', () => {
   before(async () => {
-    await switchToWebView(browser)
-    await sleep(2000)
+    await waitForAppReady(browser)
   })
 
   it('ハンバーガーアイコンをタップするとメニューが開くこと', async () => {
-    const hamburgerBtn = await browser.$('[aria-label="メニュー"]')
+    // aria-label="メニュー" が iOS アクセシビリティラベルとして露出される
+    const hamburgerBtn = await browser.$('~メニュー')
     await hamburgerBtn.waitForDisplayed({ timeout: 10000 })
     await hamburgerBtn.click()
     await sleep(500)
 
-    const menu = await browser.$('[data-testid="hamburger-menu"]')
+    // aria-label="ハンバーガーメニュー" で確認
+    const menu = await browser.$('~ハンバーガーメニュー')
     await expect(menu).toBeDisplayed()
   })
 })
