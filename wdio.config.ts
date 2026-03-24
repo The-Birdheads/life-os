@@ -20,6 +20,8 @@ export const config: WebdriverIO.Config = {
       'appium:wdaLaunchTimeout': 180000,
       'appium:showXcodeLog': true,
       'appium:autoAcceptAlerts': true,
+      'appium:includeSafariInWebviews': true,
+      'appium:webviewConnectTimeout': 30000,
     },
   ],
   logLevel: 'info',
