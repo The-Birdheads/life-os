@@ -19,6 +19,7 @@ export const config: WebdriverIO.Config = {
       'appium:newCommandTimeout': 240,
       'appium:wdaLaunchTimeout': 180000,
       'appium:showXcodeLog': true,
+      'appium:autoAcceptAlerts': true,
     },
   ],
   logLevel: 'info',
