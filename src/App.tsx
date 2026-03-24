@@ -14,6 +14,7 @@ import { getLocalUserId } from "./lib/db/localUser";
 import { Capacitor } from "@capacitor/core";
 import { App as CapApp } from "@capacitor/app";
 import { AdMob } from "@capacitor-community/admob";
+import { StatusBar, Style } from "@capacitor/status-bar";
 import BannerAd from "./components/ui/BannerAd";
 import { supabase } from "./lib/supabase";
 import { scheduleNotifications, setupNotificationListeners } from "./lib/notifications";
@@ -133,7 +134,9 @@ export default function App() {
             console.error('[App] Failed to set session from deep link:', error.message);
             setMsg(`ログインエラー: ${error.message}`);
           } else {
-            setMsg('ログインしました');
+            setMsg('ログイン中...');
+            window.location.hash = ''; // ハッシュを消去
+            setTimeout(() => window.location.reload(), 100);
           }
         }
       }
@@ -154,6 +157,7 @@ export default function App() {
   const [notifSettingsOpen, setNotifSettingsOpen] = useState(false);
 
   const prevUserIdRef = useRef<string | null>(null);
+  const isSyncingRef = useRef(false);
 
   // 一体化した初期化フロー
   useEffect(() => {
@@ -163,12 +167,18 @@ export default function App() {
       try {
         console.log("[App] Starting initialization...");
 
-        // 1. 基本的な初期化（AdMob / SQL）
+        // 1. 基本的な初期化（AdMob / SQL / StatusBar）
         if (Capacitor.getPlatform() !== 'web') {
           if (Capacitor.getPlatform() === 'ios') {
             try { await AdMob.requestTrackingAuthorization(); } catch (e) { }
           }
           await AdMob.initialize();
+          try {
+            await StatusBar.setStyle({ style: Style.Dark });
+            await StatusBar.setBackgroundColor({ color: '#1E293B' });
+          } catch (e) {
+            console.warn("[App] StatusBar setting failed", e);
+          }
         }
 
         console.log("[App] Initializing SQL...");
@@ -221,20 +231,10 @@ export default function App() {
                 await sqliteRepo.migrate(oldUserId, newUserId);
               }
               console.log("[App] Syncing data from cloud.");
-              setMsg("クラウドから同期中...");
-              const res = await sqliteRepo.sync(newUserId);
-              setMsg(res.success ? "同期完了" : res.message);
-              prevUserIdRef.current = newUserId;
-              setUserId(newUserId);
-              loadBase();
-              loadTodayEntries();
-            } else if (event === "SIGNED_IN") {
-              console.log("[App] SIGNED_IN event for existing user. Syncing data.");
-              setMsg("同期中...");
-              const res = await sqliteRepo.sync(newUserId);
-              setMsg(res.success ? "同期完了" : res.message);
-              loadBase();
-              loadTodayEntries();
+              handleSync(newUserId);
+            } else if (event === "SIGNED_IN" || event === "INITIAL_SESSION") {
+              console.log("[App] SIGNED_IN or INITIAL_SESSION event for existing user. Syncing data.");
+              handleSync(newUserId);
             }
           } else if (event === "SIGNED_OUT") {
             console.log("[App] SIGNED_OUT event.");
@@ -307,11 +307,11 @@ export default function App() {
   }
 
   // ------- Load base -------
-  async function loadBase() {
-    if (!userId) return;
+  async function loadBase(targetId: string = userId!) {
+    if (!targetId) return;
     try {
-      const dbTasks = await sqliteRepo.getTasks(userId);
-      const dbActions = await sqliteRepo.getActions(userId);
+      const dbTasks = await sqliteRepo.getTasks(targetId);
+      const dbActions = await sqliteRepo.getActions(targetId);
       setTasks(dbTasks);
       setActions(dbActions);
     } catch (err: any) {
@@ -319,13 +319,13 @@ export default function App() {
     }
   }
 
-  async function loadTodayEntries() {
-    if (!userId) return;
+  async function loadTodayEntries(targetId: string = userId!) {
+    if (!targetId) return;
     try {
-      const ae = await sqliteRepo.getTodayActionEntries(userId, day);
-      const doneIds = await sqliteRepo.getDoneTaskEntryIds(userId);
+      const ae = await sqliteRepo.getTodayActionEntries(targetId, day);
+      const doneIds = await sqliteRepo.getDoneTaskEntryIds(targetId);
 
-      const teToday = await sqliteRepo.getTodayTaskEntries(userId, day);
+      const teToday = await sqliteRepo.getTodayTaskEntries(targetId, day);
       const doneToday = new Set<string>();
       for (const t of teToday) {
         if (t.status === "done") doneToday.add(t.task_id);
@@ -392,14 +392,24 @@ export default function App() {
 
   const headerDateLabel = toHeaderDateLabel(day);
 
-  async function handleSync() {
-    if (!userId) return;
-    setMsg("同期中...");
-    const res = await sqliteRepo.sync(userId);
-    setMsg(res.message);
-    if (res.success) {
-      await loadBase();
-      await loadTodayEntries();
+  async function handleSync(targetId: string = userId!) {
+    if (!targetId) return;
+    if (isSyncingRef.current) {
+      console.log("[App] Sync already in progress.");
+      return;
+    }
+    
+    isSyncingRef.current = true;
+    try {
+      setMsg("同期中...");
+      const res = await sqliteRepo.sync(targetId);
+      setMsg(res.message);
+      if (res.success) {
+        await loadBase(targetId);
+        await loadTodayEntries(targetId);
+      }
+    } finally {
+      isSyncingRef.current = false;
     }
   }
 
@@ -476,7 +486,7 @@ export default function App() {
       )}
 
       {tab === "today" && (
-        <FABMenu onSelect={(type) => setOpenModal(type)} adHeight={adHeight} />
+        <FABMenu onSelect={(type) => setOpenModal(type)} />
       )}
 
       <RegisterModals

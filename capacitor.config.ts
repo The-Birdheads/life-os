@@ -6,6 +6,13 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   ios: {
     dependencyManager: 'cocoapods'
+  },
+  plugins: {
+    StatusBar: {
+      style: 'DARK',
+      backgroundColor: '#1E293B',
+      overlaysWebView: false
+    }
   }
 };
 

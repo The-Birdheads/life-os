@@ -4,10 +4,9 @@ import { RepeatIcon, CheckIcon, ZapIcon } from "../../ui/Icon";
 
 type Props = {
     onSelect: (type: "habit" | "oneoff" | "action") => void;
-    adHeight?: number;
 };
 
-export default function FABMenu({ onSelect, adHeight = 0 }: Props) {
+export default function FABMenu({ onSelect }: Props) {
     const [open, setOpen] = useState(false);
 
 
@@ -27,7 +26,7 @@ export default function FABMenu({ onSelect, adHeight = 0 }: Props) {
     const fabStyle: React.CSSProperties = {
         position: "fixed",
         right: 24,
-        bottom: 124 + adHeight, // Tabs(64px) + 余白バランス (+ 広告50px) + 安全マージン 20px
+        bottom: "calc(env(safe-area-inset-bottom, 0px) + 88px)", // Tab(64px) + 右マージンと同じ24px余白
         width: 56,
         height: 56,
         borderRadius: 28,
@@ -48,7 +47,7 @@ export default function FABMenu({ onSelect, adHeight = 0 }: Props) {
     const menuStyle: React.CSSProperties = {
         position: "fixed",
         right: 24,
-        bottom: 176 + adHeight, // 104 + 56 + 16 (+ 広告50px)
+        bottom: "calc(env(safe-area-inset-bottom, 0px) + 160px)", // FAB(88+56) + 16px余白
         display: "flex",
         flexDirection: "column",
         gap: 12,

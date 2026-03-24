@@ -12,11 +12,10 @@ export default function BannerAd({ onStatusChange }: Props) {
     useEffect(() => {
         // ネイティブ環境（Android/iOS）以外では何もしない
         if (Capacitor.getPlatform() === 'web') return;
-
         const setupListeners = async () => {
             const h1 = await AdMob.addListener(BannerAdPluginEvents.Loaded, () => {
                 console.log('AdMob: Banner loaded');
-                // 初期ロード時はデフォルトの高さを想定（後でSizeChangedで上書きされる）
+                onStatusChange?.(50);
             });
             const h2 = await AdMob.addListener(BannerAdPluginEvents.FailedToLoad, (err) => {
                 console.error('AdMob: Banner failed to load', err);
@@ -36,14 +35,13 @@ export default function BannerAd({ onStatusChange }: Props) {
                 await new Promise(r => setTimeout(r, 800));
 
                 // 広告を表示
-                // ADAPTIVE_BANNER を使用して横幅いっぱいに広げる
                 await AdMob.showBanner({
                     adId: Capacitor.getPlatform() === 'android'
                         ? 'ca-app-pub-3940256099942544/6300978111'
                         : 'ca-app-pub-3940256099942544/2934735716',
                     adSize: BannerAdSize.ADAPTIVE_BANNER,
-                    position: BannerAdPosition.BOTTOM_CENTER,
-                    margin: 0, // マージンは0にし、JS側で位置を制御する
+                    position: BannerAdPosition.TOP_CENTER,
+                    margin: 0,
                     isTesting: true,
                 });
             } catch (err) {

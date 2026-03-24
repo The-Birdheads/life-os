@@ -14,7 +14,7 @@ export class SqliteRepository implements Repository {
     }
 
     private async save() {
-        if (Capacitor.getPlatform() === "web") {
+        if (Capacitor.getPlatform() === "web" || Capacitor.getPlatform() === "ios") {
             await sqlite.saveToStore(DB_NAME);
         }
     }
@@ -455,13 +455,13 @@ export class SqliteRepository implements Repository {
                                 title=excluded.title, task_type=excluded.task_type, due_date=excluded.due_date, 
                                 is_active=excluded.is_active, is_hidden=excluded.is_hidden, priority=excluded.priority, 
                                 volume=excluded.volume, updated_at=excluded.updated_at`,
-                                [remote.id, remote.user_id, remote.title, remote.task_type, remote.due_date, remote.is_active, remote.is_hidden, remote.priority, remote.volume, remote.updated_at]);
+                                [remote.id, remote.user_id, remote.title, remote.task_type, remote.due_date, remote.is_active ? 1 : 0, remote.is_hidden ? 1 : 0, remote.priority, remote.volume, remote.updated_at]);
                         } else if (table === "actions") {
                             await db.run(`INSERT INTO actions (id, user_id, category, kind, is_active, is_hidden, created_at, updated_at) 
                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET 
                                 category=excluded.category, kind=excluded.kind, is_active=excluded.is_active, 
                                 is_hidden=excluded.is_hidden, created_at=excluded.created_at, updated_at=excluded.updated_at`,
-                                [remote.id, remote.user_id, remote.category, remote.kind, remote.is_active, remote.is_hidden, remote.created_at, remote.updated_at]);
+                                [remote.id, remote.user_id, remote.category, remote.kind, remote.is_active ? 1 : 0, remote.is_hidden ? 1 : 0, remote.created_at, remote.updated_at]);
                         } else if (table === "task_entries") {
                             await db.run(`INSERT INTO task_entries (id, user_id, day, task_id, status, updated_at) 
                                 VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(user_id, day, task_id) DO UPDATE SET status=excluded.status, updated_at=excluded.updated_at`,
@@ -491,11 +491,11 @@ export class SqliteRepository implements Repository {
                                     habit_remind_on=?, habit_remind_hour=?, task_remind_on=?, task_remind_hour=?, 
                                     task_remind_timing=?, review_remind_on=?, review_remind_hour=?, updated_at=?
                                     WHERE user_id=?`,
-                                    [remote.habit_remind_on, remote.habit_remind_hour, remote.task_remind_on, remote.task_remind_hour, remote.task_remind_timing, remote.review_remind_on, remote.review_remind_hour, remote.updated_at, remote.user_id]);
+                                    [remote.habit_remind_on ? 1 : 0, remote.habit_remind_hour, remote.task_remind_on ? 1 : 0, remote.task_remind_hour, remote.task_remind_timing, remote.review_remind_on ? 1 : 0, remote.review_remind_hour, remote.updated_at, remote.user_id]);
                             } else {
                                 await db.run(`INSERT INTO notification_settings (id, user_id, habit_remind_on, habit_remind_hour, task_remind_on, task_remind_hour, task_remind_timing, review_remind_on, review_remind_hour, updated_at) 
                                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                                    [remote.id, remote.user_id, remote.habit_remind_on, remote.habit_remind_hour, remote.task_remind_on, remote.task_remind_hour, remote.task_remind_timing, remote.review_remind_on, remote.review_remind_hour, remote.updated_at]);
+                                    [remote.id, remote.user_id, remote.habit_remind_on ? 1 : 0, remote.habit_remind_hour, remote.task_remind_on ? 1 : 0, remote.task_remind_hour, remote.task_remind_timing, remote.review_remind_on ? 1 : 0, remote.review_remind_hour, remote.updated_at]);
                             }
                         }
                     }

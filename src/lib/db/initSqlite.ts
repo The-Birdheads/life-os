@@ -1,7 +1,11 @@
 import { Capacitor } from '@capacitor/core';
 import { CapacitorSQLite, SQLiteConnection, SQLiteDBConnection } from '@capacitor-community/sqlite';
+import { CapacitorSQLiteWeb } from '@capacitor-community/sqlite/dist/esm/web';
 
-export const sqlite = new SQLiteConnection(CapacitorSQLite);
+const isWebOrIos = Capacitor.getPlatform() === 'web' || Capacitor.getPlatform() === 'ios';
+const sqlitePlugin = isWebOrIos ? new CapacitorSQLiteWeb() : CapacitorSQLite;
+
+export const sqlite = new SQLiteConnection(sqlitePlugin);
 
 export const DB_NAME = "lifeos_db";
 
@@ -15,7 +19,7 @@ export function initSqlite(): Promise<SQLiteDBConnection> {
       console.log("[initSqlite] Starting initialization...");
 
       // Web環境(jeep-sqlite)向けのセットアップ
-      if (Capacitor.getPlatform() === 'web') {
+      if (Capacitor.getPlatform() === 'web' || Capacitor.getPlatform() === 'ios') {
         let jeepEl = document.querySelector('jeep-sqlite');
         if (jeepEl == null) {
           jeepEl = document.createElement('jeep-sqlite');
@@ -176,7 +180,7 @@ async function createTables(db: SQLiteDBConnection) {
     await db.execute("PRAGMA user_version = 3;");
 
     // Web版では明示的に保存が必要
-    if (Capacitor.getPlatform() === 'web') {
+    if (Capacitor.getPlatform() === 'web' || Capacitor.getPlatform() === 'ios') {
       await sqlite.saveToStore(DB_NAME);
       console.log("SQLite state saved to store.");
     }

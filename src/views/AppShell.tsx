@@ -119,6 +119,21 @@ export default function AppShell({
   return (
     <div style={layoutStyle}>
       <div style={{ ...containerStyle }}>
+        {/* AdMobとステータスバーの裏の空間（SafeAreaの白い隙間）をヘッダー色で塗りつぶす背景レイヤー */}
+        {adHeight > 0 && (
+          <div
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              height: `calc(env(safe-area-inset-top, 0px) + ${adHeight}px + 20px)`,
+              background: theme.surfaceDark,
+              zIndex: 69, /* ヘッダー(70)の直下 */
+            }}
+          />
+        )}
+
         {/* HEADER */}
         <div
           style={{
@@ -131,9 +146,10 @@ export default function AppShell({
             WebkitBackdropFilter: "blur(12px) saturate(180%)",
             borderBottom: `1px solid rgba(255,255,255,0.05)`, /* ダーク用ボーダー */
             boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)", /* 落ちる影 */
-            paddingTop: "max(env(safe-area-inset-top, 0px), 32px)", /* ノッチを確実に避ける余裕を確保 */
+            paddingTop: adHeight > 0 ? "8px" : "max(env(safe-area-inset-top, 0px), 32px)", /* 広告がある場合は広告自体がノッチを避ける */
             color: theme.surfaceDarkText, /* テキストを白系に */
-            top: 0,
+            top: adHeight > 0 ? `calc(env(safe-area-inset-top, 0px) + ${adHeight}px)` : 0,
+            transition: "top 0.2s ease, padding-top 0.2s ease",
           }}
         >
           <div style={{
@@ -344,7 +360,9 @@ export default function AppShell({
           style={{
             ...railStyle,
             minHeight: `calc(100vh - ${topBarHeight}px - ${bottomNavHeight}px)`,
-            paddingTop: `calc(env(safe-area-inset-top, 0px) + ${topBarHeight + 20}px)`, /* 広告が下に移動したため adHeight を削除 */
+            paddingTop: adHeight > 0 
+                ? `calc(env(safe-area-inset-top, 0px) + ${topBarHeight + 20}px + ${adHeight}px)` 
+                : `calc(env(safe-area-inset-top, 0px) + ${topBarHeight + 20}px)`,
             paddingBottom: 120,
             display: "flex",
             flexDirection: "column",
@@ -360,7 +378,7 @@ export default function AppShell({
             position: "fixed",
             left: 0,
             right: 0,
-            bottom: adHeight > 0 ? adHeight + 5 : 0, /* 重なりを防ぎつつ隙間を最小限にする */
+            bottom: 0,
             zIndex: 60,
             background: theme.surfaceDark, /* ヘッダーと同じダークカラー */
             backdropFilter: "blur(12px) saturate(180%)",
