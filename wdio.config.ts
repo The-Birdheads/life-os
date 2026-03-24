@@ -12,7 +12,7 @@ export const config: WebdriverIO.Config = {
     {
       platformName: 'iOS',
       'appium:deviceName': 'iPhone 17',
-      'appium:platformVersion': '26.2',
+      'appium:platformVersion': '26.3',
       'appium:app': APP_PATH,
       'appium:automationName': 'XCUITest',
       'appium:bundleId': 'com.kanta.lifeos',

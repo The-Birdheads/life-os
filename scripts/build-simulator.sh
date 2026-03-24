@@ -11,7 +11,7 @@ xcodebuild \
   -scheme App \
   -configuration Debug \
   -sdk iphonesimulator \
-  -destination 'platform=iOS Simulator,name=iPhone 17' \
+  -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.3' \
   -derivedDataPath ios/build \
   build \
   CODE_SIGN_IDENTITY="" \
