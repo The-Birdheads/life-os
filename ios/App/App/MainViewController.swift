@@ -7,10 +7,17 @@ import Capacitor
 class MainViewController: CAPBridgeViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
-        #if DEBUG
+        setWebViewInspectable()
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        setWebViewInspectable()
+    }
+
+    private func setWebViewInspectable() {
         if #available(iOS 16.4, *) {
             webView?.isInspectable = true
         }
-        #endif
     }
 }
