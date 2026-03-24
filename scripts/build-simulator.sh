@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+# スクリプトの場所に関わらず、常にプロジェクトルートで実行する
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
 SIMULATOR_NAME="iPhone 17"
 SIMULATOR_OS="26.3.1"
 APP_OUTPUT="ios/build/Build/Products/Debug-iphonesimulator/App.app"
