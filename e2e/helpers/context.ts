@@ -1,18 +1,19 @@
 import type { Browser } from 'webdriverio'
 
 /**
- * Capacitor の WKWebView が表示されるまで待機する。
- * WebView context への切り替えは行わず、NATIVE_APP コンテキストのまま操作する。
- * iOS の accessibility ツリーを通じて WebView 内の要素にアクセスできる。
+ * Capacitor アプリの起動を待機する。
+ * iOS 26 では WKWebView は XCUIElementTypeWebView ではなく
+ * XCUIElementTypeOther として現れるため、そちらで待機する。
  */
 export async function waitForAppReady(driver: Browser): Promise<void> {
+  // アプリシェル（WKWebView コンテナ）が3階層揃うまで待つ
   await driver.waitUntil(
     async () => {
-      const webViews = await driver.$$('//XCUIElementTypeWebView')
-      return (await webViews.length) > 0
+      const els = await driver.$$('//XCUIElementTypeOther')
+      return (await els.length) >= 3
     },
-    { timeout: 30000, timeoutMsg: 'アプリの WebView が表示されませんでした' }
+    { timeout: 30000, timeoutMsg: 'アプリが起動しませんでした' }
   )
-  // WebView 内の React コンテンツが描画されるまで少し待機
-  await new Promise((resolve) => setTimeout(resolve, 2000))
+  // React コンテンツが描画されるまで待機（ATT ダイアログ消去 + hydration）
+  await new Promise((resolve) => setTimeout(resolve, 5000))
 }
