@@ -274,7 +274,7 @@ function TaskListModal({
     return (
         <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
             <div style={{ position: "relative", padding: "24px 16px 16px", flexShrink: 0 }}>
-                <button style={{ ...closeBtnStyle, padding: 0 }} onClick={() => setOpenModal(null)}>
+                <button aria-label="モーダルを閉じる" style={{ ...closeBtnStyle, padding: 0 }} onClick={() => setOpenModal(null)}>
                     <CloseIcon size={20} />
                 </button>
                 <h2 style={{ margin: 0, fontSize: 20 }}>{title}の登録</h2>
@@ -311,7 +311,7 @@ function TaskListModal({
                                 <h3 style={{ margin: 0, fontSize: 16 }}>新規追加 ({subTab === "hidden" ? "非表示" : "表示中"})</h3>
                                 <label>
                                     タイトル
-                                    <TextInput value={newTitle} onChange={(e) => setNewTitle(e.target.value)} fullWidth required />
+                                    <TextInput aria-label="アイテムタイトル入力" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} fullWidth required />
                                 </label>
                                 <label>
                                     優先度（1-5）: <b>{priority}</b>
@@ -796,7 +796,7 @@ function ActionEntryModal({
     return (
         <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
             <div style={{ position: "relative", padding: "24px 16px 16px", flexShrink: 0 }}>
-                <button style={{ ...closeBtnStyle, padding: 0 }} onClick={() => setOpenModal(null)}>
+                <button aria-label="モーダルを閉じる" style={{ ...closeBtnStyle, padding: 0 }} onClick={() => setOpenModal(null)}>
                     <CloseIcon size={20} />
                 </button>
                 <h2 style={{ margin: 0, fontSize: 20 }}>行動の登録</h2>

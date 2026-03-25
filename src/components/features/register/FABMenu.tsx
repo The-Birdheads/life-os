@@ -135,7 +135,7 @@ export default function FABMenu({ onSelect }: Props) {
                     行動の登録
                 </button>
             </div>
-            <button style={fabStyle} onClick={() => setOpen(!open)}>
+            <button aria-label="新規登録" style={fabStyle} onClick={() => setOpen(!open)}>
                 +
             </button>
         </>
