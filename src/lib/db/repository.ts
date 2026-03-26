@@ -27,4 +27,7 @@ export interface Repository {
     // Daily Logs
     getDailyLog(userId: string, day: string): Promise<DailyLog | null>;
     upsertDailyLog(log: DailyLog): Promise<void>;
+
+    // Account Deletion
+    deleteAllUserData(userId: string): Promise<void>;
 }

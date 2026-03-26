@@ -5,6 +5,8 @@ import { Capacitor } from "@capacitor/core";
 import Toast from "../components/ui/Toast";
 import Tabs from "../components/ui/Tabs";
 import PrimaryBtn from "../components/ui/PrimaryBtn";
+import DangerBtn from "../components/ui/DangerBtn";
+import SecondaryBtn from "../components/ui/SecondaryBtn";
 import { theme } from "../lib/ui/theme";
 
 
@@ -35,6 +37,8 @@ type Props = {
   onSignInWithGoogle?: () => void;
   onDateSelect?: (dateStr: string) => void;
   onOpenNotificationSettings?: () => void;
+  onDeleteAccount?: () => Promise<void>;
+  isDeleting?: boolean;
 };
 
 export default function AppShell({
@@ -57,11 +61,14 @@ export default function AppShell({
   onSignInWithGoogle,
   onDateSelect,
   onOpenNotificationSettings,
+  onDeleteAccount,
+  isDeleting,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   const [releaseOpen, setReleaseOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   const bottomNavHeight = 64;
   const topBarHeight = 56;
@@ -98,6 +105,16 @@ export default function AppShell({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [releaseOpen]);
+
+  useEffect(() => {
+    if (!deleteConfirmOpen) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setDeleteConfirmOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [deleteConfirmOpen]);
 
   const headerIconBtnStyle: React.CSSProperties = {
     appearance: "none",
@@ -316,6 +333,18 @@ export default function AppShell({
                         }}>
                           ログアウト
                         </PrimaryBtn>
+
+                        {onDeleteAccount && (
+                          <>
+                            <div style={{ height: 8 }} />
+                            <DangerBtn fullWidth onClick={() => {
+                              setMenuOpen(false);
+                              setDeleteConfirmOpen(true);
+                            }}>
+                              アカウント削除
+                            </DangerBtn>
+                          </>
+                        )}
                       </>
                     )}
 
@@ -420,6 +449,83 @@ export default function AppShell({
           </div>
         )
       }
+      {/* DELETE CONFIRM MODAL */}
+      {deleteConfirmOpen && (
+        <div
+          onClick={() => setDeleteConfirmOpen(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15, 23, 42, 0.4)",
+            backdropFilter: "blur(4px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 100,
+            animation: "fadeIn 0.2s ease",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "min(92vw, 360px)",
+              borderRadius: "20px",
+              background: theme.card,
+              boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)",
+              padding: "24px",
+              animation: "slideUpFade 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
+            }}
+          >
+            <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 12 }}>
+              アカウント削除の確認
+            </div>
+            <div style={{ fontSize: 14, lineHeight: 1.6, marginBottom: 20 }}>
+              登録済みのすべてのデータが削除され、復元することはできませんがよろしいですか？
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <DangerBtn fullWidth onClick={async () => {
+                setDeleteConfirmOpen(false);
+                await onDeleteAccount?.();
+              }}>
+                はい
+              </DangerBtn>
+              <SecondaryBtn fullWidth onClick={() => setDeleteConfirmOpen(false)}>
+                いいえ
+              </SecondaryBtn>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DELETING OVERLAY */}
+      {isDeleting && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15, 23, 42, 0.6)",
+            backdropFilter: "blur(4px)",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 200,
+            gap: 16,
+          }}
+        >
+          <div style={{
+            width: 40,
+            height: 40,
+            border: "3px solid rgba(255,255,255,0.2)",
+            borderTop: "3px solid #fff",
+            borderRadius: "50%",
+            animation: "spin 0.8s linear infinite",
+          }} />
+          <div style={{ color: "#fff", fontWeight: 600, fontSize: 15 }}>
+            削除中...
+          </div>
+        </div>
+      )}
     </div >
   );
 }
