@@ -48,7 +48,7 @@
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
 	<key>GADApplicationIdentifier</key>
-	<string>ca-app-pub-3940256099942544~1458002511</string>
+	<string>ca-app-pub-1540759813512306~1889741949</string>
 	<key>NSUserTrackingUsageDescription</key>
 	<string>より適切な広告を表示するために、トラッキングの許可をお願いします。</string>
 	<key>SKAdNetworkItems</key>
