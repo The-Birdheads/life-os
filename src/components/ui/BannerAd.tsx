@@ -39,7 +39,7 @@ export default function BannerAd({ onStatusChange }: Props) {
                 // ADAPTIVE_BANNER を使用して横幅いっぱいに広げる
                 await AdMob.showBanner({
                     adId: Capacitor.getPlatform() === 'android'
-                        ? 'ca-app-pub-3940256099942544/6300978111'
+                        ? 'ca-app-pub-1540759813512306/2916673146'
                         : 'ca-app-pub-1540759813512306/2335131946',
                     adSize: BannerAdSize.ADAPTIVE_BANNER,
                     position: BannerAdPosition.BOTTOM_CENTER,
