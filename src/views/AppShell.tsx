@@ -173,8 +173,26 @@ export default function AppShell({
             alignItems: "center",
           }}>
             {/* LEFT */}
-            <div style={{ justifySelf: "start", fontWeight: 900, fontSize: 18 }}>
-              {/* Logo text removed */}
+            <div style={{ justifySelf: "start" }}>
+              <button
+                style={{
+                  ...headerIconBtnStyle,
+                  width: "auto",
+                  padding: "0 12px",
+                  fontSize: 13,
+                  fontWeight: 700,
+                }}
+                onClick={() => {
+                  const today = new Date().toISOString().slice(0, 10);
+                  if (onDateSelect) {
+                    onDateSelect(today);
+                  } else {
+                    window.dispatchEvent(new CustomEvent("lifeos:setDay", { detail: today }));
+                  }
+                }}
+              >
+                今日
+              </button>
             </div>
 
             {/* CENTER */}
