@@ -8,6 +8,7 @@ import PrimaryBtn from "../components/ui/PrimaryBtn";
 import DangerBtn from "../components/ui/DangerBtn";
 import SecondaryBtn from "../components/ui/SecondaryBtn";
 import { theme } from "../lib/ui/theme";
+import { todayJST } from "../lib/day";
 
 
 type Tab = "today" | "review" | "week";
@@ -183,7 +184,7 @@ export default function AppShell({
                   fontWeight: 700,
                 }}
                 onClick={() => {
-                  const today = new Date().toISOString().slice(0, 10);
+                  const today = todayJST();
                   if (onDateSelect) {
                     onDateSelect(today);
                   } else {
@@ -229,7 +230,7 @@ export default function AppShell({
                   <input
                     type="date"
                     value={headerDateLabel?.replaceAll(" / ", "-")}
-                    max={new Date().toISOString().slice(0, 10)}
+                    max={todayJST()}
                     onChange={(e) => {
                       const val = e.target.value;
                       console.log("[DatePicker] onChange fired:", val);
