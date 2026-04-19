@@ -173,7 +173,7 @@ export default function App() {
           if (Capacitor.getPlatform() === 'ios') {
             try { await AdMob.requestTrackingAuthorization(); } catch (e) { }
           }
-          await AdMob.initialize();
+          await AdMob.initialize({ initializeForTesting: false });
           try {
             await StatusBar.setStyle({ style: Style.Dark });
             await StatusBar.setBackgroundColor({ color: '#1E293B' });
