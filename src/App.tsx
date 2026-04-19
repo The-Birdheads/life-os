@@ -17,7 +17,7 @@ import { AdMob } from "@capacitor-community/admob";
 import { StatusBar, Style } from "@capacitor/status-bar";
 import BannerAd from "./components/ui/BannerAd";
 import { supabase } from "./lib/supabase";
-import { scheduleNotifications, setupNotificationListeners } from "./lib/notifications";
+import { scheduleNotifications, setupNotificationListeners, cancelAllNotifications } from "./lib/notifications";
 import { sqliteRepo } from "./lib/db/instance";
 import {
   cardStyle,
@@ -42,6 +42,7 @@ export default function App() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
   const [adHeight, setAdHeight] = useState(0);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     if (!msg) return;
@@ -306,6 +307,22 @@ export default function App() {
     await supabase.auth.signOut();
   }
 
+  async function deleteAccount() {
+    if (!userId) return;
+    setIsDeleting(true);
+    try {
+      await cancelAllNotifications();
+      await sqliteRepo.deleteAllUserData(userId);
+      const { supabase } = await import("./lib/supabase");
+      const { error } = await supabase.rpc('delete_user');
+      if (error) throw error;
+      await supabase.auth.signOut();
+    } catch (err: any) {
+      setMsg(`削除エラー: ${err.message}`);
+      setIsDeleting(false);
+    }
+  }
+
   // ------- Load base -------
   async function loadBase(targetId: string = userId!) {
     if (!targetId) return;
@@ -417,6 +434,8 @@ export default function App() {
     <AppShell
       userEmail={userEmail}
       onSignOut={signOut}
+      onDeleteAccount={deleteAccount}
+      isDeleting={isDeleting}
       msg={msg}
       tab={tab}
       setTab={setTab}

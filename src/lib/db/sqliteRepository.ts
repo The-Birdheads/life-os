@@ -343,6 +343,17 @@ export class SqliteRepository implements Repository {
         await this.save();
     }
 
+    // --- Account Deletion ---
+    async deleteAllUserData(userId: string): Promise<void> {
+        const db = await this.getDb();
+        // FK依存順に削除（子テーブル → 親テーブル）
+        const tables = ['task_entries', 'action_entries', 'daily_logs', 'notification_settings', 'tasks', 'actions'];
+        for (const table of tables) {
+            await db.run(`DELETE FROM ${table} WHERE user_id = ?`, [userId]);
+        }
+        await this.save();
+    }
+
     // --- Data Migration & Deduplication ---
     async migrate(oldUserId: string, newUserId: string): Promise<void> {
         const db = await this.getDb();

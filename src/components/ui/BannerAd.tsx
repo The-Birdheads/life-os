@@ -37,12 +37,12 @@ export default function BannerAd({ onStatusChange }: Props) {
                 // 広告を表示
                 await AdMob.showBanner({
                     adId: Capacitor.getPlatform() === 'android'
-                        ? 'ca-app-pub-3940256099942544/6300978111'
-                        : 'ca-app-pub-3940256099942544/2934735716',
+                        ? 'ca-app-pub-1540759813512306/2916673146'
+                        : 'ca-app-pub-1540759813512306/2335131946',
                     adSize: BannerAdSize.ADAPTIVE_BANNER,
-                    position: BannerAdPosition.TOP_CENTER,
-                    margin: 0,
-                    isTesting: true,
+                    position: BannerAdPosition.BOTTOM_CENTER,
+                    margin: 0, // マージンは0にし、JS側で位置を制御する
+                    isTesting: false,
                 });
             } catch (err) {
                 console.error('AdMob show banner error:', err);

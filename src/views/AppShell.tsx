@@ -5,6 +5,8 @@ import { Capacitor } from "@capacitor/core";
 import Toast from "../components/ui/Toast";
 import Tabs from "../components/ui/Tabs";
 import PrimaryBtn from "../components/ui/PrimaryBtn";
+import DangerBtn from "../components/ui/DangerBtn";
+import SecondaryBtn from "../components/ui/SecondaryBtn";
 import { theme } from "../lib/ui/theme";
 
 
@@ -22,7 +24,7 @@ type Props = {
   layoutStyle: React.CSSProperties;
   containerStyle: React.CSSProperties;
   toastWrapStyle: React.CSSProperties;
-  toastStyle: React.CSSProperties;
+  onDismissMsg?: () => void;
 
   children: React.ReactNode;
 
@@ -33,8 +35,15 @@ type Props = {
   onSync?: () => Promise<void>;
   adHeight: number;
   onSignInWithGoogle?: () => void;
+  onSignInWithApple?: () => void;
   onDateSelect?: (dateStr: string) => void;
   onOpenNotificationSettings?: () => void;
+  onOpenUserSettings?: () => void;
+  onOpenOnboarding?: () => void;
+  onOpenHabitTutorial?: () => void;
+  onDeleteAccount?: () => Promise<void>;
+  isDeleting?: boolean;
+  isSyncing?: boolean;
 };
 
 export default function AppShell({
@@ -46,7 +55,7 @@ export default function AppShell({
   layoutStyle,
   containerStyle,
   toastWrapStyle,
-  toastStyle,
+  onDismissMsg,
   children,
   headerDateLabel,
   onPrevDay,
@@ -55,13 +64,25 @@ export default function AppShell({
   onSync,
   adHeight,
   onSignInWithGoogle,
+  onSignInWithApple,
   onDateSelect,
   onOpenNotificationSettings,
+  onOpenUserSettings,
+  onOpenOnboarding,
+  onOpenHabitTutorial,
+  onDeleteAccount,
+  isDeleting,
+  isSyncing,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [tutorialOpen, setTutorialOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [loginOpen, setLoginOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   const [releaseOpen, setReleaseOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   const bottomNavHeight = 64;
   const topBarHeight = 56;
@@ -77,7 +98,7 @@ export default function AppShell({
   };
 
   useEffect(() => {
-    if (!menuOpen) return;
+    if (!menuOpen) { setTutorialOpen(false); setSettingsOpen(false); setAccountOpen(false); setLoginOpen(false); return; }
 
     const onDown = (e: MouseEvent) => {
       const el = menuRef.current;
@@ -98,6 +119,16 @@ export default function AppShell({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [releaseOpen]);
+
+  useEffect(() => {
+    if (!deleteConfirmOpen) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setDeleteConfirmOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [deleteConfirmOpen]);
 
   const headerIconBtnStyle: React.CSSProperties = {
     appearance: "none",
@@ -146,7 +177,7 @@ export default function AppShell({
             WebkitBackdropFilter: "blur(12px) saturate(180%)",
             borderBottom: `1px solid rgba(255,255,255,0.05)`, /* ダーク用ボーダー */
             boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)", /* 落ちる影 */
-            paddingTop: adHeight > 0 ? "8px" : "max(env(safe-area-inset-top, 0px), 32px)", /* 広告がある場合は広告自体がノッチを避ける */
+            paddingTop: `calc(max(env(safe-area-inset-top, 0px), 32px) + ${adHeight}px)`, /* バナー広告 + ノッチ分を確保 */
             color: theme.surfaceDarkText, /* テキストを白系に */
             top: adHeight > 0 ? `calc(env(safe-area-inset-top, 0px) + ${adHeight}px)` : 0,
             transition: "top 0.2s ease, padding-top 0.2s ease",
@@ -248,7 +279,8 @@ export default function AppShell({
 
             {/* RIGHT */}
             <div ref={menuRef} style={{ justifySelf: "end", position: "relative" }}>
-              <button aria-label="メニュー" onClick={() => setMenuOpen(v => !v)} style={{ ...headerIconBtnStyle, width: "40px", height: "40px" }}>
+              <button aria-label="メニュー" data-tutorial="hamburger" onClick={() => setMenuOpen(v => !v)} style={{ ...headerIconBtnStyle, width: "40px", height: "40px" }}>
+
                 <svg width="20" height="20" viewBox="0 0 24 24">
                   <path
                     d="M4 7h16M4 12h16M4 17h16"
@@ -263,7 +295,7 @@ export default function AppShell({
                 <div
                   style={{
                     position: "fixed",
-                    top: topBarHeight + 12,
+                    top: `calc(max(env(safe-area-inset-top, 0px), 32px) + ${adHeight + topBarHeight + 8}px)`,
                     left: 0,
                     right: 0,
                     display: "flex",
@@ -288,53 +320,156 @@ export default function AppShell({
                       animation: "fadeInUp 0.2s cubic-bezier(0.16, 1, 0.3, 1)", /* アニメーション追加 (App.cssで定義必要) */
                     }}
                   >
-                    <PrimaryBtn fullWidth onClick={() => {
-                      setMenuOpen(false);
-                      setReleaseOpen(true);
-                    }}>
-                      リリースノート
-                    </PrimaryBtn>
+                    {(() => {
+                      const isLoggedIn = !!(userEmail && userEmail !== "offline-user@local");
 
-                    {Capacitor.isNativePlatform() && onOpenNotificationSettings && (
-                      <>
-                        <div style={{ height: 8 }} />
-                        <PrimaryBtn fullWidth onClick={() => {
-                          setMenuOpen(false);
-                          onOpenNotificationSettings();
-                        }}>
-                          通知設定
+                      const tutorialBlock = (onOpenOnboarding || onOpenHabitTutorial) ? (
+                        <>
+                          <PrimaryBtn fullWidth onClick={() => setTutorialOpen(o => !o)}>
+                            <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
+                              <span>使い方を見る</span>
+                              <span style={{
+                                display: "inline-block",
+                                transition: "transform 0.2s",
+                                transform: tutorialOpen ? "rotate(180deg)" : "rotate(0deg)",
+                                fontSize: 12,
+                                opacity: 0.7,
+                              }}>▼</span>
+                            </span>
+                          </PrimaryBtn>
+                          {tutorialOpen && (
+                            <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 6 }}>
+                              {onOpenOnboarding && (
+                                <PrimaryBtn fullWidth onClick={() => { setMenuOpen(false); onOpenOnboarding(); }}
+                                  style={{ background: theme.border, color: theme.text }}>
+                                  アプリの基本操作
+                                </PrimaryBtn>
+                              )}
+                              {onOpenHabitTutorial && (
+                                <PrimaryBtn fullWidth onClick={() => { setMenuOpen(false); onOpenHabitTutorial(); }}
+                                  style={{ background: theme.border, color: theme.text }}>
+                                  習慣の追加
+                                </PrimaryBtn>
+                              )}
+                            </div>
+                          )}
+                        </>
+                      ) : null;
+
+                      const settingsBlock = (onOpenUserSettings || (Capacitor.isNativePlatform() && onOpenNotificationSettings)) ? (
+                        <>
+                          <PrimaryBtn fullWidth onClick={() => setSettingsOpen(o => !o)}>
+                            <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
+                              <span>設定</span>
+                              <span style={{
+                                display: "inline-block",
+                                transition: "transform 0.2s",
+                                transform: settingsOpen ? "rotate(180deg)" : "rotate(0deg)",
+                                fontSize: 12,
+                                opacity: 0.7,
+                              }}>▼</span>
+                            </span>
+                          </PrimaryBtn>
+                          {settingsOpen && (
+                            <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 6 }}>
+                              {onOpenUserSettings && (
+                                <PrimaryBtn fullWidth onClick={() => { setMenuOpen(false); onOpenUserSettings(); }}
+                                  style={{ background: theme.border, color: theme.text }}>
+                                  ユーザ設定
+                                </PrimaryBtn>
+                              )}
+                              {Capacitor.isNativePlatform() && onOpenNotificationSettings && (
+                                <PrimaryBtn fullWidth onClick={() => { setMenuOpen(false); onOpenNotificationSettings(); }}
+                                  style={{ background: theme.border, color: theme.text }}>
+                                  通知設定
+                                </PrimaryBtn>
+                              )}
+                            </div>
+                          )}
+                        </>
+                      ) : null;
+
+                      const releaseBlock = (
+                        <PrimaryBtn fullWidth onClick={() => { setMenuOpen(false); setReleaseOpen(true); }}>
+                          リリースノート
                         </PrimaryBtn>
-                      </>
-                    )}
+                      );
 
-                    <div style={{ height: 8 }} />
+                      if (isLoggedIn) {
+                        return (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                            {tutorialBlock}
+                            {settingsBlock}
+                            {releaseBlock}
+                            <PrimaryBtn fullWidth onClick={() => { setMenuOpen(false); if (onSync) onSync(); }}>
+                              クラウド同期
+                            </PrimaryBtn>
+                            <PrimaryBtn fullWidth onClick={() => setAccountOpen(o => !o)}>
+                              <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
+                                <span>アカウント</span>
+                                <span style={{
+                                  display: "inline-block",
+                                  transition: "transform 0.2s",
+                                  transform: accountOpen ? "rotate(180deg)" : "rotate(0deg)",
+                                  fontSize: 12,
+                                  opacity: 0.7,
+                                }}>▼</span>
+                              </span>
+                            </PrimaryBtn>
+                            {accountOpen && (
+                              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                                <PrimaryBtn fullWidth onClick={() => { setMenuOpen(false); onSignOut(); }}
+                                  style={{ background: theme.border, color: theme.text }}>
+                                  ログアウト
+                                </PrimaryBtn>
+                                {onDeleteAccount && (
+                                  <DangerBtn fullWidth onClick={() => { setMenuOpen(false); setDeleteConfirmOpen(true); }}>
+                                    アカウント削除
+                                  </DangerBtn>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      }
 
-                    {userEmail === "offline-user@local" || !userEmail ? (
-                      <PrimaryBtn fullWidth onClick={() => {
-                        setMenuOpen(false);
-                        onSignInWithGoogle?.();
-                      }}>
-                        Googleでログイン
-                      </PrimaryBtn>
-                    ) : (
-                      <>
-                        <PrimaryBtn fullWidth onClick={() => {
-                          setMenuOpen(false);
-                          if (onSync) onSync();
-                        }}>
-                          クラウド同期
-                        </PrimaryBtn>
-
-                        <div style={{ height: 8 }} />
-
-                        <PrimaryBtn fullWidth onClick={() => {
-                          setMenuOpen(false);
-                          onSignOut();
-                        }}>
-                          ログアウト
-                        </PrimaryBtn>
-                      </>
-                    )}
+                      return (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                          {tutorialBlock}
+                          {settingsBlock}
+                          {releaseBlock}
+                          <PrimaryBtn fullWidth onClick={() => setLoginOpen(o => !o)}>
+                            <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
+                              <span>ログイン</span>
+                              <span style={{
+                                display: "inline-block",
+                                transition: "transform 0.2s",
+                                transform: loginOpen ? "rotate(180deg)" : "rotate(0deg)",
+                                fontSize: 12,
+                                opacity: 0.7,
+                              }}>▼</span>
+                            </span>
+                          </PrimaryBtn>
+                          {loginOpen && (
+                            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                              {onSignInWithApple && (
+                                <PrimaryBtn fullWidth onClick={() => { setMenuOpen(false); onSignInWithApple(); }}
+                                  style={{ background: "#000", color: "#fff" }}>
+                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
+                                    <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
+                                  </svg>
+                                  Appleでログイン
+                                </PrimaryBtn>
+                              )}
+                              <PrimaryBtn fullWidth onClick={() => { setMenuOpen(false); onSignInWithGoogle?.(); }}
+                                style={{ background: theme.border, color: theme.text }}>
+                                Googleでログイン
+                              </PrimaryBtn>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                     <div style={{ fontSize: 12, opacity: .7, marginTop: 10 }}>
                       バージョン
@@ -354,16 +489,14 @@ export default function AppShell({
           </div>
         </div>
 
-        <Toast msg={msg} wrapStyle={toastWrapStyle} toastStyle={toastStyle} />
+        <Toast msg={msg} wrapStyle={toastWrapStyle} onDismiss={onDismissMsg} />
 
         {/* MAIN CONTENT AREA */}
         <div
           style={{
             ...railStyle,
             minHeight: `calc(100vh - ${topBarHeight}px - ${bottomNavHeight}px)`,
-            paddingTop: adHeight > 0 
-                ? `calc(env(safe-area-inset-top, 0px) + ${topBarHeight + 20}px + ${adHeight}px)` 
-                : `calc(env(safe-area-inset-top, 0px) + ${topBarHeight + 20}px)`,
+            paddingTop: `calc(env(safe-area-inset-top, 0px) + ${adHeight + topBarHeight + 20}px)`,
             paddingBottom: 120,
             display: "flex",
             flexDirection: "column",
@@ -375,6 +508,7 @@ export default function AppShell({
 
         {/* BOTTOM NAV */}
         <div
+          data-tutorial="bottom-tabs"
           style={{
             position: "fixed",
             left: 0,
@@ -439,6 +573,114 @@ export default function AppShell({
           </div>
         )
       }
+      {/* DELETE CONFIRM MODAL */}
+      {deleteConfirmOpen && (
+        <div
+          onClick={() => setDeleteConfirmOpen(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15, 23, 42, 0.4)",
+            backdropFilter: "blur(4px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 100,
+            animation: "fadeIn 0.2s ease",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "min(92vw, 360px)",
+              borderRadius: "20px",
+              background: theme.card,
+              boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)",
+              padding: "24px",
+              animation: "slideUpFade 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
+            }}
+          >
+            <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 12 }}>
+              アカウント削除の確認
+            </div>
+            <div style={{ fontSize: 14, lineHeight: 1.6, marginBottom: 20 }}>
+              登録済みのすべてのデータが削除され、復元することはできませんがよろしいですか？
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <DangerBtn fullWidth onClick={async () => {
+                setDeleteConfirmOpen(false);
+                await onDeleteAccount?.();
+              }}>
+                はい
+              </DangerBtn>
+              <SecondaryBtn fullWidth onClick={() => setDeleteConfirmOpen(false)}>
+                いいえ
+              </SecondaryBtn>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SYNCING OVERLAY */}
+      {isSyncing && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15, 23, 42, 0.5)",
+            backdropFilter: "blur(4px)",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 200,
+            gap: 16,
+            pointerEvents: "all",
+          }}
+        >
+          <div style={{
+            width: 40,
+            height: 40,
+            border: "3px solid rgba(255,255,255,0.2)",
+            borderTop: "3px solid #fff",
+            borderRadius: "50%",
+            animation: "spin 0.8s linear infinite",
+          }} />
+          <div style={{ color: "#fff", fontWeight: 600, fontSize: 15 }}>
+            同期中...
+          </div>
+        </div>
+      )}
+
+      {/* DELETING OVERLAY */}
+      {isDeleting && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15, 23, 42, 0.6)",
+            backdropFilter: "blur(4px)",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 200,
+            gap: 16,
+          }}
+        >
+          <div style={{
+            width: 40,
+            height: 40,
+            border: "3px solid rgba(255,255,255,0.2)",
+            borderTop: "3px solid #fff",
+            borderRadius: "50%",
+            animation: "spin 0.8s linear infinite",
+          }} />
+          <div style={{ color: "#fff", fontWeight: 600, fontSize: 15 }}>
+            削除中...
+          </div>
+        </div>
+      )}
     </div >
   );
 }
