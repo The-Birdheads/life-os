@@ -9,21 +9,26 @@ import TodayView from "./views/TodayView";
 import FABMenu from "./components/features/register/FABMenu";
 import RegisterModals from "./components/features/register/RegisterModals";
 import NotificationSettingsModal from "./components/features/settings/NotificationSettingsModal";
+import UserSettingsModal from "./components/features/settings/UserSettingsModal";
+import SpotlightTutorial from "./components/features/onboarding/SpotlightTutorial";
+import HabitTutorial from "./components/features/onboarding/HabitTutorial";
+import { UserSettingsContext } from "./lib/context/UserSettingsContext";
 import { initSqlite } from "./lib/db/initSqlite";
 import { getLocalUserId } from "./lib/db/localUser";
 import { Capacitor } from "@capacitor/core";
 import { App as CapApp } from "@capacitor/app";
+import { SplashScreen } from "@capacitor/splash-screen";
 import { AdMob } from "@capacitor-community/admob";
 import BannerAd from "./components/ui/BannerAd";
 import { supabase } from "./lib/supabase";
-import { scheduleNotifications, setupNotificationListeners, cancelAllNotifications } from "./lib/notifications";
+import { scheduleNotifications, setupNotificationListeners, cancelAllNotifications, requestNotificationPermissions } from "./lib/notifications";
+import { syncWidgetData, processPendingCompletions } from "./lib/widgetData";
 import { sqliteRepo } from "./lib/db/instance";
 import {
   cardStyle,
   layoutStyle,
   containerStyle,
   toastWrapStyle,
-  toastStyle,
 } from "./lib/ui/style";
 
 // グローバルなリポジトリインスタンスは ./lib/db/instance.ts へ移動しました
@@ -42,6 +47,7 @@ export default function App() {
   const [msg, setMsg] = useState("");
   const [adHeight, setAdHeight] = useState(0);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
     if (!msg) return;
@@ -126,6 +132,11 @@ export default function App() {
 
         if (accessToken && refreshToken) {
           console.log('[App] Deep link login-callback detected. Setting session...');
+          // SFSafariViewController を閉じる
+          try {
+            const { Browser } = await import("@capacitor/browser");
+            await Browser.close();
+          } catch (_) {}
           const { error } = await supabase.auth.setSession({
             access_token: accessToken,
             refresh_token: refreshToken,
@@ -134,7 +145,8 @@ export default function App() {
             console.error('[App] Failed to set session from deep link:', error.message);
             setMsg(`ログインエラー: ${error.message}`);
           } else {
-            setMsg('ログインしました');
+            // sync は onAuthStateChange リスナーに任せる（二重呼び出し防止）
+            setMsg('ログイン完了。同期中...');
           }
         }
       }
@@ -153,6 +165,11 @@ export default function App() {
   // ------- Modals -------
   const [openModal, setOpenModal] = useState<"habit" | "oneoff" | "action" | null>(null);
   const [notifSettingsOpen, setNotifSettingsOpen] = useState(false);
+  const [userSettingsOpen, setUserSettingsOpen] = useState(false);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [habTutOpen, setHabTutOpen] = useState(false);
+  const [fabForceOpen, setFabForceOpen] = useState(false);
+  const [volumeUnit, setVolumeUnit] = useState("30");
 
   const prevUserIdRef = useRef<string | null>(null);
 
@@ -167,14 +184,26 @@ export default function App() {
         // 1. 基本的な初期化（AdMob / SQL）
         if (Capacitor.getPlatform() !== 'web') {
           if (Capacitor.getPlatform() === 'ios') {
-            try { await AdMob.requestTrackingAuthorization(); } catch (e) { }
+            // 専用ATTプラグインで requestTrackingAuthorization を確実に呼ぶ
+            try {
+              const { AppTrackingTransparency } = await import('capacitor-plugin-app-tracking-transparency');
+              await AppTrackingTransparency.requestPermission();
+            } catch (e) {
+              console.warn('[ATT] requestPermission failed:', e);
+            }
           }
-          await AdMob.initialize();
+          await AdMob.initialize({ initializeForTesting: false });
         }
 
         console.log("[App] Initializing SQL...");
         await initSqlite();
         console.log("[App] SQL Initialized.");
+
+        // 通知権限を起動時に要求（TestFlight/本番向け）
+        if (Capacitor.isNativePlatform()) {
+          console.log("[App] Requesting notification permissions...");
+          await requestNotificationPermissions();
+        }
 
         // 2. セッション情報の取得（getSessionはタイムアウト付きで安全に）
         console.log("[App] Fetching Supabase session...");
@@ -206,6 +235,11 @@ export default function App() {
         prevUserIdRef.current = initialId;
         setUserId(initialId);
 
+        // スプラッシュを非表示（初期化完了）
+        if (Capacitor.isNativePlatform()) {
+          await SplashScreen.hide({ fadeOutDuration: 300 });
+        }
+
         // 4. 認証リスナーの登録
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
           console.log("[App] Auth Event:", event, session?.user?.id ? `User ID: ${session.user.id}` : "No user in session");
@@ -214,6 +248,31 @@ export default function App() {
 
           if (session?.user && newUserId) {
             setUserEmail(session.user.email ?? "");
+
+            const doSync = async (uid: string, delayMs = 0) => {
+              if (delayMs > 0) {
+                console.log(`[App] Waiting ${delayMs}ms before sync (network recovery)...`);
+                await new Promise(r => setTimeout(r, delayMs));
+              }
+              console.log("[App] Starting sync for uid:", uid);
+              setIsSyncing(true);
+              try {
+                const res = await sqliteRepo.sync(uid);
+                console.log("[App] Sync done:", res);
+                setMsg(res.success ? "同期完了" : res.message);
+                if (res.success) {
+                  // uid を明示渡し（stale closure 対策）
+                  await loadBase(uid);
+                  await loadTodayEntries(uid);
+                }
+              } catch (e: any) {
+                console.error("[App] Sync error:", e?.message ?? e);
+                setMsg("同期エラー: " + (e?.message ?? "不明なエラー"));
+              } finally {
+                setIsSyncing(false);
+              }
+            };
+
             if (newUserId !== oldUserId) {
               console.log(`[App] User ID changed from ${oldUserId} to ${newUserId}.`);
               if (oldUserId && oldUserId.includes("-")) {
@@ -221,21 +280,15 @@ export default function App() {
                 setMsg("データを統合中...");
                 await sqliteRepo.migrate(oldUserId, newUserId);
               }
-              console.log("[App] Syncing data from cloud.");
-              setMsg("クラウドから同期中...");
-              const res = await sqliteRepo.sync(newUserId);
-              setMsg(res.success ? "同期完了" : res.message);
               prevUserIdRef.current = newUserId;
               setUserId(newUserId);
-              loadBase();
-              loadTodayEntries();
-            } else if (event === "SIGNED_IN") {
-              console.log("[App] SIGNED_IN event for existing user. Syncing data.");
+              setMsg("クラウドから同期中...");
+              // Safari からの復帰直後はネットワーク復元を 2 秒待ってから sync
+              doSync(newUserId, 2000);
+            } else if (event === "SIGNED_IN" || event === "INITIAL_SESSION") {
+              console.log(`[App] ${event} event for existing user. Syncing data.`);
               setMsg("同期中...");
-              const res = await sqliteRepo.sync(newUserId);
-              setMsg(res.success ? "同期完了" : res.message);
-              loadBase();
-              loadTodayEntries();
+              doSync(newUserId, 0);
             }
           } else if (event === "SIGNED_OUT") {
             console.log("[App] SIGNED_OUT event.");
@@ -258,7 +311,7 @@ export default function App() {
         console.error("[App] CRITICAL Error during setup:", err);
         const errorMsg = err.message || JSON.stringify(err);
         setMsg(`初期化エラー: ${errorMsg}`);
-        
+
         // エラーでもローカルIDで動かせるように試行（ただしDBが壊れている可能性が高い）
         try {
           const id = await getLocalUserId();
@@ -268,6 +321,10 @@ export default function App() {
           }
         } catch (e) {
           console.error("[App] Failed to get local user ID during error recovery:", e);
+        }
+        // エラー時もスプラッシュを必ず非表示に
+        if (Capacitor.isNativePlatform()) {
+          await SplashScreen.hide({ fadeOutDuration: 300 }).catch(() => {});
         }
       }
     };
@@ -293,13 +350,61 @@ export default function App() {
 
   async function signInWithGoogle() {
     const { supabase } = await import("./lib/supabase");
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: Capacitor.isNativePlatform() ? 'com.morikuma.habitas://login-callback' : window.location.origin
+    if (Capacitor.isNativePlatform()) {
+      // iOS/Android: SFSafariViewController でアプリ内ブラウザを使用
+      const { Browser } = await import("@capacitor/browser");
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: 'com.morikuma.habitas://login-callback',
+          skipBrowserRedirect: true,
+        }
+      });
+      if (error) { setMsg(`エラー: ${error.message}`); return; }
+      if (data.url) await Browser.open({ url: data.url });
+    } else {
+      // Web: 通常のリダイレクト
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: window.location.origin }
+      });
+      if (error) setMsg(`エラー: ${error.message}`);
+    }
+  }
+
+  async function signInWithApple() {
+    try {
+      const { SignInWithApple } = await import("@capacitor-community/apple-sign-in");
+      const { supabase } = await import("./lib/supabase");
+
+      // rawNonce を生成 → SHA-256ハッシュ化してAppleに渡す
+      const rawNonce = Math.random().toString(36).substring(2)
+        + Math.random().toString(36).substring(2);
+      const msgBuffer = new TextEncoder().encode(rawNonce);
+      const hashBuffer = await crypto.subtle.digest("SHA-256", msgBuffer);
+      const hashedNonce = Array.from(new Uint8Array(hashBuffer))
+        .map(b => b.toString(16).padStart(2, "0")).join("");
+
+      const result = await SignInWithApple.authorize({
+        clientId: "com.morikuma.habitas",
+        redirectURI: "com.morikuma.habitas://login-callback",
+        scopes: "email name",
+        state: Math.random().toString(36).substring(2),
+        nonce: hashedNonce, // Appleにはハッシュ済みを渡す
+      });
+      const identityToken = result.response.identityToken;
+      if (!identityToken) { setMsg("Apple認証に失敗しました"); return; }
+      const { error } = await supabase.auth.signInWithIdToken({
+        provider: "apple",
+        token: identityToken,
+        nonce: rawNonce, // Supabaseにはrawを渡す（Supabaseがハッシュ照合）
+      });
+      if (error) setMsg(`エラー: ${error.message}`);
+    } catch (e: any) {
+      if (e?.message !== "The operation was cancelled.") {
+        setMsg(`Appleログインエラー: ${e?.message ?? "不明なエラー"}`);
       }
-    });
-    if (error) setMsg(`エラー: ${error.message}`);
+    }
   }
 
   async function signOut() {
@@ -317,6 +422,7 @@ export default function App() {
       const { error } = await supabase.rpc('delete_user');
       if (error) throw error;
       await supabase.auth.signOut();
+      setIsDeleting(false);
     } catch (err: any) {
       setMsg(`削除エラー: ${err.message}`);
       setIsDeleting(false);
@@ -324,11 +430,12 @@ export default function App() {
   }
 
   // ------- Load base -------
-  async function loadBase() {
-    if (!userId) return;
+  async function loadBase(overrideUid?: string) {
+    const uid = overrideUid ?? userId;
+    if (!uid) return;
     try {
-      const dbTasks = await sqliteRepo.getTasks(userId);
-      const dbActions = await sqliteRepo.getActions(userId);
+      const dbTasks = await sqliteRepo.getTasks(uid);
+      const dbActions = await sqliteRepo.getActions(uid);
       setTasks(dbTasks);
       setActions(dbActions);
     } catch (err: any) {
@@ -336,13 +443,14 @@ export default function App() {
     }
   }
 
-  async function loadTodayEntries() {
-    if (!userId) return;
+  async function loadTodayEntries(overrideUid?: string) {
+    const uid = overrideUid ?? userId;
+    if (!uid) return;
     try {
-      const ae = await sqliteRepo.getTodayActionEntries(userId, day);
-      const doneIds = await sqliteRepo.getDoneTaskEntryIds(userId);
+      const ae = await sqliteRepo.getTodayActionEntries(uid, day);
+      const doneIds = await sqliteRepo.getDoneTaskEntryIds(uid);
 
-      const teToday = await sqliteRepo.getTodayTaskEntries(userId, day);
+      const teToday = await sqliteRepo.getTodayTaskEntries(uid, day);
       const doneToday = new Set<string>();
       for (const t of teToday) {
         if (t.status === "done") doneToday.add(t.task_id);
@@ -363,8 +471,76 @@ export default function App() {
 
   useEffect(() => {
     if (!userId) return;
+    sqliteRepo.getNotificationSettings(userId).then(s => {
+      if (s?.volume_unit) setVolumeUnit(s.volume_unit);
+    });
+  }, [userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+    if (!localStorage.getItem("onboarding_done")) setOnboardingOpen(true);
+  }, [userId]);
+
+  const handleOnboardingClose = () => {
+    setOnboardingOpen(false);
+    localStorage.setItem("onboarding_done", "1");
+  };
+
+  const handleHabTutOpen = () => {
+    setFabForceOpen(true);   // チュートリアル開始時はFABメニューを開いた状態にする
+    setHabTutOpen(true);
+  };
+
+  const handleOpenHabitTutorialFromMenu = () => {
+    setTab("today");         // 記録タブに移動
+    setFabForceOpen(true);   // ＋ボタンが押下された状態を再現
+    setHabTutOpen(true);
+  };
+
+  const handleHabTutClose = () => {
+    setHabTutOpen(false);
+    setFabForceOpen(false);
+    localStorage.setItem("fab_tutorial_done", "1");
+  };
+
+  useEffect(() => {
+    if (!userId) return;
     loadTodayEntries().catch((e: any) => setMsg(e?.message ?? "読み込みエラー"));
   }, [userId, day]);
+
+  // ------- Widget Sync -------
+  useEffect(() => {
+    if (!userId || tasks.length === 0) return;
+    syncWidgetData(tasks, doneTaskIds, doneTaskIdsAnyDay);
+  }, [tasks, doneTaskIds, doneTaskIdsAnyDay]);
+
+  // ウィジェットからの習慣完了をフォアグラウンド復帰時に処理
+  useEffect(() => {
+    if (!userId) return;
+    const handleActive = async () => {
+      const pendingIds = await processPendingCompletions();
+      if (pendingIds.length === 0) return;
+      const today = (await import("./lib/day")).todayJST();
+      for (const taskId of pendingIds) {
+        await sqliteRepo.upsertTaskEntry({
+          id: crypto.randomUUID(),
+          user_id: userId,
+          day: today,
+          task_id: taskId,
+          status: "done",
+        });
+      }
+      await loadTodayEntries();
+    };
+
+    // 起動直後にも一度チェック
+    handleActive();
+
+    const listener = CapApp.addListener("appStateChange", (state) => {
+      if (state.isActive) handleActive();
+    });
+    return () => { listener.then(l => l.remove()); };
+  }, [userId]);
 
   // ------- Render -------
   if (!userId) {
@@ -410,10 +586,33 @@ export default function App() {
   const headerDateLabel = toHeaderDateLabel(day);
 
   async function handleSync() {
-    if (!userId) return;
+    if (!userId || isSyncing) return;
     setMsg("同期中...");
+    setIsSyncing(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        setMsg("同期エラー: ログインセッションがありません。再ログインしてください。");
+        return;
+      }
+      const res = await sqliteRepo.sync(userId);
+      setMsg(res.message);
+      if (res.success) {
+        await loadBase();
+        await loadTodayEntries();
+      }
+    } finally {
+      setIsSyncing(false);
+    }
+  }
+
+  // Web版：書き込み後に自動同期（サイレント）
+  async function webAutoSync() {
+    if (Capacitor.getPlatform() !== 'web') return;
+    if (!userId || !userEmail || userEmail === 'offline-user@local' || isSyncing) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
     const res = await sqliteRepo.sync(userId);
-    setMsg(res.message);
     if (res.success) {
       await loadBase();
       await loadTodayEntries();
@@ -421,18 +620,20 @@ export default function App() {
   }
 
   return (
+    <UserSettingsContext.Provider value={{ volumeUnit }}>
     <AppShell
       userEmail={userEmail}
       onSignOut={signOut}
       onDeleteAccount={deleteAccount}
       isDeleting={isDeleting}
+      isSyncing={isSyncing}
       msg={msg}
       tab={tab}
       setTab={setTab}
       layoutStyle={layoutStyle}
       containerStyle={containerStyle}
       toastWrapStyle={toastWrapStyle}
-      toastStyle={toastStyle}
+      onDismissMsg={() => setMsg("")}
       headerDateLabel={headerDateLabel}
       onPrevDay={() => safeShiftDay(-1)}
       onNextDay={canNext ? () => safeShiftDay(1) : undefined}
@@ -440,8 +641,12 @@ export default function App() {
       onSync={handleSync}
       adHeight={adHeight}
       onSignInWithGoogle={signInWithGoogle}
+      onSignInWithApple={Capacitor.getPlatform() === 'ios' ? signInWithApple : undefined}
       onDateSelect={safeSetDay}
       onOpenNotificationSettings={() => setNotifSettingsOpen(true)}
+      onOpenUserSettings={() => setUserSettingsOpen(true)}
+      onOpenOnboarding={() => setOnboardingOpen(true)}
+      onOpenHabitTutorial={handleOpenHabitTutorialFromMenu}
     >
       {tab === "today" && (
         <TodayView
@@ -458,6 +663,7 @@ export default function App() {
           cardStyle={cardStyle}
           loadTodayEntries={loadTodayEntries}
           loadBase={loadBase}
+          onAfterWrite={webAutoSync}
         />
       )}
 
@@ -495,7 +701,11 @@ export default function App() {
       )}
 
       {tab === "today" && (
-        <FABMenu onSelect={(type) => setOpenModal(type)} adHeight={adHeight} />
+        <FABMenu
+            onSelect={(type) => setOpenModal(type)}
+            onFirstPress={handleHabTutOpen}
+            forceOpen={fabForceOpen}
+          />
       )}
 
       <RegisterModals
@@ -509,6 +719,7 @@ export default function App() {
         setMsg={setMsg}
         loadBase={loadBase}
         loadTodayEntries={loadTodayEntries}
+        onAfterWrite={webAutoSync}
         adHeight={adHeight}
       />
 
@@ -520,8 +731,28 @@ export default function App() {
         adHeight={adHeight}
       />
 
+      <UserSettingsModal
+        isOpen={userSettingsOpen}
+        onClose={() => setUserSettingsOpen(false)}
+        userId={userId}
+        setMsg={setMsg}
+        adHeight={adHeight}
+        onVolumeUnitChange={setVolumeUnit}
+      />
+
       {/* AdMob Banner */}
       <BannerAd onStatusChange={setAdHeight} />
     </AppShell>
+
+    <SpotlightTutorial isOpen={onboardingOpen} onClose={handleOnboardingClose} onSetTab={setTab} />
+    <HabitTutorial
+      isOpen={habTutOpen}
+      onClose={handleHabTutClose}
+      callbacks={{
+        closeFABMenu: () => setFabForceOpen(false),
+        openHabitModal: () => setOpenModal("habit"),
+      }}
+    />
+    </UserSettingsContext.Provider>
   );
 }
