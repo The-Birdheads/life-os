@@ -304,32 +304,29 @@ export default function AppShell({
                   >
                     {(() => {
                       const isLoggedIn = !!(userEmail && userEmail !== "offline-user@local");
+                      const btnL: React.CSSProperties = { justifyContent: "flex-start" };
+                      const subL: React.CSSProperties = { background: theme.border, color: theme.text, justifyContent: "flex-start" };
+                      const accordionInner = (label: string, open: boolean) => (
+                        <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
+                          <span>{label}</span>
+                          <span style={{ display: "inline-block", transition: "transform 0.2s", transform: open ? "rotate(180deg)" : "rotate(0deg)", fontSize: 12, opacity: 0.7 }}>▼</span>
+                        </span>
+                      );
 
                       const tutorialBlock = (onOpenOnboarding || onOpenHabitTutorial) ? (
                         <>
-                          <PrimaryBtn fullWidth onClick={() => setTutorialOpen(o => !o)}>
-                            <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
-                              <span>使い方を見る</span>
-                              <span style={{
-                                display: "inline-block",
-                                transition: "transform 0.2s",
-                                transform: tutorialOpen ? "rotate(180deg)" : "rotate(0deg)",
-                                fontSize: 12,
-                                opacity: 0.7,
-                              }}>▼</span>
-                            </span>
+                          <PrimaryBtn fullWidth onClick={() => setTutorialOpen(o => !o)} style={btnL}>
+                            {accordionInner("使い方を見る", tutorialOpen)}
                           </PrimaryBtn>
                           {tutorialOpen && (
                             <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 6 }}>
                               {onOpenOnboarding && (
-                                <PrimaryBtn fullWidth onClick={() => { setMenuOpen(false); onOpenOnboarding(); }}
-                                  style={{ background: theme.border, color: theme.text }}>
+                                <PrimaryBtn fullWidth onClick={() => { setMenuOpen(false); onOpenOnboarding(); }} style={subL}>
                                   アプリの基本操作
                                 </PrimaryBtn>
                               )}
                               {onOpenHabitTutorial && (
-                                <PrimaryBtn fullWidth onClick={() => { setMenuOpen(false); onOpenHabitTutorial(); }}
-                                  style={{ background: theme.border, color: theme.text }}>
+                                <PrimaryBtn fullWidth onClick={() => { setMenuOpen(false); onOpenHabitTutorial(); }} style={subL}>
                                   習慣の追加
                                 </PrimaryBtn>
                               )}
@@ -340,29 +337,18 @@ export default function AppShell({
 
                       const settingsBlock = (onOpenUserSettings || (Capacitor.isNativePlatform() && onOpenNotificationSettings)) ? (
                         <>
-                          <PrimaryBtn fullWidth onClick={() => setSettingsOpen(o => !o)}>
-                            <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
-                              <span>設定</span>
-                              <span style={{
-                                display: "inline-block",
-                                transition: "transform 0.2s",
-                                transform: settingsOpen ? "rotate(180deg)" : "rotate(0deg)",
-                                fontSize: 12,
-                                opacity: 0.7,
-                              }}>▼</span>
-                            </span>
+                          <PrimaryBtn fullWidth onClick={() => setSettingsOpen(o => !o)} style={btnL}>
+                            {accordionInner("設定", settingsOpen)}
                           </PrimaryBtn>
                           {settingsOpen && (
                             <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 6 }}>
                               {onOpenUserSettings && (
-                                <PrimaryBtn fullWidth onClick={() => { setMenuOpen(false); onOpenUserSettings(); }}
-                                  style={{ background: theme.border, color: theme.text }}>
+                                <PrimaryBtn fullWidth onClick={() => { setMenuOpen(false); onOpenUserSettings(); }} style={subL}>
                                   ユーザ設定
                                 </PrimaryBtn>
                               )}
                               {Capacitor.isNativePlatform() && onOpenNotificationSettings && (
-                                <PrimaryBtn fullWidth onClick={() => { setMenuOpen(false); onOpenNotificationSettings(); }}
-                                  style={{ background: theme.border, color: theme.text }}>
+                                <PrimaryBtn fullWidth onClick={() => { setMenuOpen(false); onOpenNotificationSettings(); }} style={subL}>
                                   通知設定
                                 </PrimaryBtn>
                               )}
@@ -372,7 +358,7 @@ export default function AppShell({
                       ) : null;
 
                       const releaseBlock = (
-                        <PrimaryBtn fullWidth onClick={() => { setMenuOpen(false); setReleaseOpen(true); }}>
+                        <PrimaryBtn fullWidth onClick={() => { setMenuOpen(false); setReleaseOpen(true); }} style={btnL}>
                           リリースノート
                         </PrimaryBtn>
                       );
@@ -383,29 +369,19 @@ export default function AppShell({
                             {tutorialBlock}
                             {settingsBlock}
                             {releaseBlock}
-                            <PrimaryBtn fullWidth onClick={() => { setMenuOpen(false); if (onSync) onSync(); }}>
+                            <PrimaryBtn fullWidth onClick={() => { setMenuOpen(false); if (onSync) onSync(); }} style={btnL}>
                               クラウド同期
                             </PrimaryBtn>
-                            <PrimaryBtn fullWidth onClick={() => setAccountOpen(o => !o)}>
-                              <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
-                                <span>アカウント</span>
-                                <span style={{
-                                  display: "inline-block",
-                                  transition: "transform 0.2s",
-                                  transform: accountOpen ? "rotate(180deg)" : "rotate(0deg)",
-                                  fontSize: 12,
-                                  opacity: 0.7,
-                                }}>▼</span>
-                              </span>
+                            <PrimaryBtn fullWidth onClick={() => setAccountOpen(o => !o)} style={btnL}>
+                              {accordionInner("アカウント", accountOpen)}
                             </PrimaryBtn>
                             {accountOpen && (
                               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                                <PrimaryBtn fullWidth onClick={() => { setMenuOpen(false); onSignOut(); }}
-                                  style={{ background: theme.border, color: theme.text }}>
+                                <PrimaryBtn fullWidth onClick={() => { setMenuOpen(false); onSignOut(); }} style={subL}>
                                   ログアウト
                                 </PrimaryBtn>
                                 {onDeleteAccount && (
-                                  <DangerBtn fullWidth onClick={() => { setMenuOpen(false); setDeleteConfirmOpen(true); }}>
+                                  <DangerBtn fullWidth onClick={() => { setMenuOpen(false); setDeleteConfirmOpen(true); }} style={btnL}>
                                     アカウント削除
                                   </DangerBtn>
                                 )}
@@ -420,31 +396,21 @@ export default function AppShell({
                           {tutorialBlock}
                           {settingsBlock}
                           {releaseBlock}
-                          <PrimaryBtn fullWidth onClick={() => setLoginOpen(o => !o)}>
-                            <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
-                              <span>ログイン</span>
-                              <span style={{
-                                display: "inline-block",
-                                transition: "transform 0.2s",
-                                transform: loginOpen ? "rotate(180deg)" : "rotate(0deg)",
-                                fontSize: 12,
-                                opacity: 0.7,
-                              }}>▼</span>
-                            </span>
+                          <PrimaryBtn fullWidth onClick={() => setLoginOpen(o => !o)} style={btnL}>
+                            {accordionInner("ログイン", loginOpen)}
                           </PrimaryBtn>
                           {loginOpen && (
                             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                               {onSignInWithApple && (
                                 <PrimaryBtn fullWidth onClick={() => { setMenuOpen(false); onSignInWithApple(); }}
-                                  style={{ background: "#000", color: "#fff" }}>
+                                  style={{ background: "#000", color: "#fff", justifyContent: "flex-start" }}>
                                   <svg width="16" height="16" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
                                     <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
                                   </svg>
                                   Appleでログイン
                                 </PrimaryBtn>
                               )}
-                              <PrimaryBtn fullWidth onClick={() => { setMenuOpen(false); onSignInWithGoogle?.(); }}
-                                style={{ background: theme.border, color: theme.text }}>
+                              <PrimaryBtn fullWidth onClick={() => { setMenuOpen(false); onSignInWithGoogle?.(); }} style={subL}>
                                 Googleでログイン
                               </PrimaryBtn>
                             </div>
