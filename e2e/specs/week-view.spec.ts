@@ -33,13 +33,13 @@ describe('週表示ビュー', () => {
     await browser.waitUntil(
       async () => {
         const btns = await browser.$$('//XCUIElementTypeButton[contains(@label, "の振り返りを開く")]')
-        return btns.length >= 7
+        return (await btns.length) >= 7
       },
       { timeout: 10000, timeoutMsg: '7日分の行ボタンが表示されませんでした' }
     )
 
     const finalBtns = await browser.$$('//XCUIElementTypeButton[contains(@label, "の振り返りを開く")]')
-    expect(finalBtns.length).toBe(7)
+    expect(await finalBtns.length).toBe(7)
   })
 
   it('週テーブルの行ボタンをタップすると振り返りビューに遷移すること', async () => {
@@ -49,7 +49,7 @@ describe('週表示ビュー', () => {
     await browser.waitUntil(
       async () => {
         const btns = await browser.$$('//XCUIElementTypeButton[contains(@label, "の振り返りを開く")]')
-        return btns.length >= 1
+        return (await btns.length) >= 1
       },
       { timeout: 10000, timeoutMsg: '行ボタンが表示されませんでした' }
     )

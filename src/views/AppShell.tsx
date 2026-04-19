@@ -24,7 +24,7 @@ type Props = {
   layoutStyle: React.CSSProperties;
   containerStyle: React.CSSProperties;
   toastWrapStyle: React.CSSProperties;
-  onDismissMsg?: () => void;
+  toastStyle: React.CSSProperties;
 
   children: React.ReactNode;
 
@@ -55,7 +55,7 @@ export default function AppShell({
   layoutStyle,
   containerStyle,
   toastWrapStyle,
-  onDismissMsg,
+  toastStyle,
   children,
   headerDateLabel,
   onPrevDay,
@@ -489,7 +489,7 @@ export default function AppShell({
           </div>
         </div>
 
-        <Toast msg={msg} wrapStyle={toastWrapStyle} onDismiss={onDismissMsg} />
+        <Toast msg={msg} wrapStyle={toastWrapStyle} toastStyle={toastStyle} />
 
         {/* MAIN CONTENT AREA */}
         <div

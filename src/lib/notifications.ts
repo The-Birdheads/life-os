@@ -127,6 +127,14 @@ async function scheduleForDays(baseId: number, hour: number, getMessage: (daysFr
     }
 }
 
+export async function cancelAllNotifications() {
+    if (Capacitor.getPlatform() === 'web') return;
+    const pending = await LocalNotifications.getPending();
+    if (pending.notifications.length > 0) {
+        await LocalNotifications.cancel(pending);
+    }
+}
+
 export function setupNotificationListeners() {
     if (Capacitor.getPlatform() === 'web') return () => {};
 
