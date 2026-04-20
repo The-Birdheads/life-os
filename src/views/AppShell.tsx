@@ -175,25 +175,33 @@ export default function AppShell({
           }}>
             {/* LEFT */}
             <div style={{ justifySelf: "start" }}>
-              <button
-                style={{
-                  ...headerIconBtnStyle,
-                  width: "auto",
-                  padding: "0 12px",
-                  fontSize: 13,
-                  fontWeight: 700,
-                }}
-                onClick={() => {
-                  const today = todayJST();
-                  if (onDateSelect) {
-                    onDateSelect(today);
-                  } else {
-                    window.dispatchEvent(new CustomEvent("lifeos:setDay", { detail: today }));
-                  }
-                }}
-              >
-                今日
-              </button>
+              {(() => {
+                const isToday = headerDateLabel?.replaceAll(" / ", "-") === todayJST();
+                return (
+                  <button
+                    disabled={isToday}
+                    style={{
+                      ...headerIconBtnStyle,
+                      width: "auto",
+                      padding: "0 12px",
+                      fontSize: 13,
+                      fontWeight: 700,
+                      opacity: isToday ? 0.35 : 1,
+                      cursor: isToday ? "default" : "pointer",
+                    }}
+                    onClick={() => {
+                      const today = todayJST();
+                      if (onDateSelect) {
+                        onDateSelect(today);
+                      } else {
+                        window.dispatchEvent(new CustomEvent("lifeos:setDay", { detail: today }));
+                      }
+                    }}
+                  >
+                    今日
+                  </button>
+                );
+              })()}
             </div>
 
             {/* CENTER */}
