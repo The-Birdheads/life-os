@@ -722,7 +722,7 @@ export default function App() {
       layoutStyle={layoutStyle}
       containerStyle={containerStyle}
       toastWrapStyle={toastWrapStyle}
-      onDismissMsg={() => setMsg("")}
+
       headerDateLabel={headerDateLabel}
       onPrevDay={() => safeShiftDay(-1)}
       onNextDay={canNext ? () => safeShiftDay(1) : undefined}
