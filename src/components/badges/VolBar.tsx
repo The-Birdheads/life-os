@@ -1,3 +1,6 @@
+import { useUserSettings } from "../../lib/context/UserSettingsContext";
+import { formatVolumeLabel } from "../../lib/formatVolume";
+
 type Props = {
   value?: number | null; // 1-10
   max?: number;          // default 10
@@ -6,9 +9,11 @@ type Props = {
 };
 
 export default function VolBar({ value, max = 10, showNumber = true, isReverse = false }: Props) {
+  const { volumeUnit } = useUserSettings();
   const vRaw = Number(value);
   const v = Number.isFinite(vRaw) ? Math.min(max, Math.max(0, vRaw)) : 0;
   const pct = max === 0 ? 0 : (v / max) * 100;
+  const label = formatVolumeLabel(v, volumeUnit);
 
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
@@ -34,7 +39,7 @@ export default function VolBar({ value, max = 10, showNumber = true, isReverse =
         />
       </span>
       {showNumber ? (
-        <small style={{ opacity: isReverse ? 0.9 : 0.75, fontVariantNumeric: "tabular-nums", color: isReverse ? "#ffffff" : "inherit" }}>{v}</small>
+        <small style={{ opacity: isReverse ? 0.9 : 0.75, fontVariantNumeric: "tabular-nums", color: isReverse ? "#ffffff" : "inherit" }}>{label}</small>
       ) : null}
     </span>
   );

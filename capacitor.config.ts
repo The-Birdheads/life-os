@@ -6,6 +6,16 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   ios: {
     dependencyManager: 'cocoapods'
+  },
+  plugins: {
+    SplashScreen: {
+      launchShowDuration: 2000,
+      launchAutoHide: false,
+      backgroundColor: '#6DCAA6',
+      iosSpinnerStyle: 'small',
+      spinnerColor: '#ffffff',
+      showSpinner: false,
+    }
   }
 };
 

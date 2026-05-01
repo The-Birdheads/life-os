@@ -1,14 +1,15 @@
 import React from "react";
 import { space } from "../../lib/ui/spacing";
 
-type Props = {
+type Props = React.HTMLAttributes<HTMLDivElement> & {
   children: React.ReactNode;
   style?: React.CSSProperties;
 };
 
-export default function Card({ children, style }: Props) {
+export default function Card({ children, style, ...rest }: Props) {
   return (
     <div
+      {...rest}
       style={{
         display: "block",
         width: "100%",

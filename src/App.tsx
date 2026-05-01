@@ -13,12 +13,13 @@ import UserSettingsModal from "./components/features/settings/UserSettingsModal"
 import SpotlightTutorial from "./components/features/onboarding/SpotlightTutorial";
 import HabitTutorial from "./components/features/onboarding/HabitTutorial";
 import { UserSettingsContext } from "./lib/context/UserSettingsContext";
+import type { SortRule } from "./lib/context/UserSettingsContext";
 import { initSqlite } from "./lib/db/initSqlite";
 import { getLocalUserId } from "./lib/db/localUser";
 import { Capacitor } from "@capacitor/core";
 import { App as CapApp } from "@capacitor/app";
 import { SplashScreen } from "@capacitor/splash-screen";
-import { AdMob } from "@capacitor-community/admob";
+import { AdMob, AdmobConsentStatus } from "@capacitor-community/admob";
 import BannerAd from "./components/ui/BannerAd";
 import { supabase } from "./lib/supabase";
 import { scheduleNotifications, setupNotificationListeners, cancelAllNotifications, requestNotificationPermissions } from "./lib/notifications";
@@ -46,6 +47,7 @@ export default function App() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
   const [adHeight, setAdHeight] = useState(0);
+  const [noAds, setNoAds] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
 
@@ -161,6 +163,7 @@ export default function App() {
   const [todayActionEntries, setTodayActionEntries] = useState<any[]>([]);
   const [note, setNote] = useState("");
   const [fulfillment, setFulfillment] = useState(0);
+  const [yesterdayGoal, setYesterdayGoal] = useState<string | null>(null);
 
   // ------- Modals -------
   const [openModal, setOpenModal] = useState<"habit" | "oneoff" | "action" | null>(null);
@@ -170,6 +173,9 @@ export default function App() {
   const [habTutOpen, setHabTutOpen] = useState(false);
   const [fabForceOpen, setFabForceOpen] = useState(false);
   const [volumeUnit, setVolumeUnit] = useState("30");
+  const [sortRule, setSortRule] = useState<SortRule>("priority");
+  const [prioritizeDue, setPrioritizeDue] = useState(false);
+  const [dataVersion, setDataVersion] = useState(0);
 
   const prevUserIdRef = useRef<string | null>(null);
 
@@ -192,6 +198,19 @@ export default function App() {
               console.warn('[ATT] requestPermission failed:', e);
             }
           }
+
+          // UMP consent flow（Google Mobile Ads SDK v12+ の必須要件）
+          try {
+            const consentInfo = await AdMob.requestConsentInfo({});
+            console.log('[AdMob] Consent status:', consentInfo.status, 'canRequestAds:', consentInfo.canRequestAds);
+            if (consentInfo.isConsentFormAvailable && consentInfo.status === AdmobConsentStatus.REQUIRED) {
+              console.log('[AdMob] Showing consent form...');
+              await AdMob.showConsentForm();
+            }
+          } catch (e) {
+            console.warn('[AdMob] Consent flow failed:', e);
+          }
+
           await AdMob.initialize({ initializeForTesting: false });
         }
 
@@ -225,6 +244,8 @@ export default function App() {
           initialId = initialSession.user.id;
           setUserEmail(initialSession.user.email ?? "");
           console.log("[App] Initial ID from Supabase session:", initialId);
+          // no_ads フラグをフェッチ（非同期・ノンブロッキング）
+          fetchNoAds(initialId);
         } else {
           initialId = await getLocalUserId();
           setUserEmail("offline-user@local");
@@ -248,28 +269,38 @@ export default function App() {
 
           if (session?.user && newUserId) {
             setUserEmail(session.user.email ?? "");
+            fetchNoAds(newUserId);
 
-            const doSync = async (uid: string, delayMs = 0) => {
+            const doSync = async (uid: string, delayMs = 0, silent = false) => {
               if (delayMs > 0) {
                 console.log(`[App] Waiting ${delayMs}ms before sync (network recovery)...`);
                 await new Promise(r => setTimeout(r, delayMs));
               }
-              console.log("[App] Starting sync for uid:", uid);
-              setIsSyncing(true);
+              console.log(`[App] Starting sync for uid: ${uid} (silent=${silent})`);
+              if (!silent) setIsSyncing(true);
               try {
                 const res = await sqliteRepo.sync(uid);
                 console.log("[App] Sync done:", res);
-                setMsg(res.success ? "同期完了" : res.message);
+                if (!silent) setMsg(res.success ? "同期完了" : res.message);
                 if (res.success) {
                   // uid を明示渡し（stale closure 対策）
                   await loadBase(uid);
                   await loadTodayEntries(uid);
+                  // 同期後のSQLiteデータをReviewViewに反映（振り返りデータはdataVersionで管理）
+                  setDataVersion(v => v + 1);
+                  // 同期後のユーザ設定を再読み込み（ログアウト→ログイン後に設定が反映されない問題の対策）
+                  const s = await sqliteRepo.getNotificationSettings(uid);
+                  if (s) {
+                    setVolumeUnit(s.volume_unit ?? "30");
+                    setSortRule((s.sort_rule as SortRule) ?? "priority");
+                    setPrioritizeDue(!!s.prioritize_due);
+                  }
                 }
               } catch (e: any) {
                 console.error("[App] Sync error:", e?.message ?? e);
-                setMsg("同期エラー: " + (e?.message ?? "不明なエラー"));
+                if (!silent) setMsg("同期エラー: " + (e?.message ?? "不明なエラー"));
               } finally {
-                setIsSyncing(false);
+                if (!silent) setIsSyncing(false);
               }
             };
 
@@ -286,12 +317,26 @@ export default function App() {
               // Safari からの復帰直後はネットワーク復元を 2 秒待ってから sync
               doSync(newUserId, 2000);
             } else if (event === "SIGNED_IN" || event === "INITIAL_SESSION") {
-              console.log(`[App] ${event} event for existing user. Syncing data.`);
-              setMsg("同期中...");
-              doSync(newUserId, 0);
+              // バックグラウンド復帰時も SIGNED_IN が再発行されることがあるため、
+              // INITIAL_SESSION と同様に5分以内ならスキップ、それ以外はバックグラウンドで静かに同期
+              console.log(`[App] ${event} event for existing user. Checking sync cooldown...`);
+              try {
+                const { Preferences } = await import('@capacitor/preferences');
+                const { value: lastSyncStr } = await Preferences.get({ key: `last_sync_at_${newUserId}` });
+                if (lastSyncStr) {
+                  const elapsedMs = Date.now() - new Date(lastSyncStr).getTime();
+                  if (elapsedMs < 5 * 60 * 1000) {
+                    console.log(`[App] ${event}: last sync was ${Math.round(elapsedMs / 1000)}s ago, skipping.`);
+                    return;
+                  }
+                }
+              } catch (_) { /* Preferences 失敗は無視して同期実行 */ }
+              // バックグラウンドで同期（UIをブロックしない）
+              doSync(newUserId, 0, true);
             }
           } else if (event === "SIGNED_OUT") {
             console.log("[App] SIGNED_OUT event.");
+            setNoAds(false);
             const localId = await getLocalUserId();
             if (prevUserIdRef.current !== localId) {
               console.log(`[App] Switching to local ID ${localId} after sign out.`);
@@ -429,6 +474,38 @@ export default function App() {
     }
   }
 
+  // ------- No-Ads フラグ -------
+  // Supabase の user_profiles テーブルから no_ads フラグを取得し、
+  // Capacitor Preferences にキャッシュする（オフライン対応）
+  async function fetchNoAds(uid: string) {
+    // まずキャッシュから即時ロード（起動直後に広告が見えるのを防ぐ）
+    try {
+      const { Preferences } = await import('@capacitor/preferences');
+      const { value: cached } = await Preferences.get({ key: `no_ads_${uid}` });
+      if (cached !== null) setNoAds(cached === 'true');
+    } catch { /* キャッシュなし → そのまま続行 */ }
+
+    // 次にネットワークから最新値を取得してキャッシュを更新
+    try {
+      const { data } = await supabase
+        .from('user_profiles')
+        .select('no_ads')
+        .eq('user_id', uid)
+        .maybeSingle();
+      const value = data?.no_ads === true;
+      setNoAds(value);
+      const { Preferences } = await import('@capacitor/preferences');
+      await Preferences.set({ key: `no_ads_${uid}`, value: String(value) });
+    } catch {
+      // ネットワーク失敗時はキャッシュ値のまま（上で既に設定済み）
+    }
+  }
+
+  // noAds が true になったらバナーエリアも閉じる
+  useEffect(() => {
+    if (noAds) setAdHeight(0);
+  }, [noAds]);
+
   // ------- Load base -------
   async function loadBase(overrideUid?: string) {
     const uid = overrideUid ?? userId;
@@ -459,6 +536,11 @@ export default function App() {
       setDoneTaskIds(doneToday);
       setDoneTaskIdsAnyDay(new Set(doneIds));
       setTodayActionEntries(ae);
+
+      // 前日の目標を取得（同期後も確実に更新されるようApp側で管理）
+      const prevDay = addDaysJST(day, -1);
+      const prevLog = await sqliteRepo.getDailyLog(uid, prevDay).catch(() => null);
+      setYesterdayGoal(prevLog?.tomorrow_note?.trim() || null);
     } catch (err: any) {
       setMsg(err?.message ?? "読み込みエラー");
     }
@@ -473,6 +555,8 @@ export default function App() {
     if (!userId) return;
     sqliteRepo.getNotificationSettings(userId).then(s => {
       if (s?.volume_unit) setVolumeUnit(s.volume_unit);
+      if (s?.sort_rule) setSortRule(s.sort_rule as SortRule);
+      if (typeof s?.prioritize_due === "boolean") setPrioritizeDue(s.prioritize_due);
     });
   }, [userId]);
 
@@ -518,19 +602,24 @@ export default function App() {
   useEffect(() => {
     if (!userId) return;
     const handleActive = async () => {
+      // ウィジェットからの完了を処理
       const pendingIds = await processPendingCompletions();
-      if (pendingIds.length === 0) return;
-      const today = (await import("./lib/day")).todayJST();
-      for (const taskId of pendingIds) {
-        await sqliteRepo.upsertTaskEntry({
-          id: crypto.randomUUID(),
-          user_id: userId,
-          day: today,
-          task_id: taskId,
-          status: "done",
-        });
+      if (pendingIds.length > 0) {
+        const today = (await import("./lib/day")).todayJST();
+        for (const taskId of pendingIds) {
+          await sqliteRepo.upsertTaskEntry({
+            id: crypto.randomUUID(),
+            user_id: userId,
+            day: today,
+            task_id: taskId,
+            status: "done",
+          });
+        }
       }
-      await loadTodayEntries();
+      // フォアグラウンド復帰時は常にデータをリロード（今日の目標・完了状態を最新化）
+      await loadBase(userId);
+      await loadTodayEntries(userId);
+      setDataVersion(v => v + 1);
     };
 
     // 起動直後にも一度チェック
@@ -620,7 +709,7 @@ export default function App() {
   }
 
   return (
-    <UserSettingsContext.Provider value={{ volumeUnit }}>
+    <UserSettingsContext.Provider value={{ volumeUnit, sortRule, prioritizeDue }}>
     <AppShell
       userEmail={userEmail}
       onSignOut={signOut}
@@ -659,8 +748,8 @@ export default function App() {
           setDoneTaskIds={setDoneTaskIds}
           doneTaskIdsAnyDay={doneTaskIdsAnyDay}
           todayActionEntries={todayActionEntries}
+          yesterdayGoal={yesterdayGoal}
           setMsg={setMsg}
-          cardStyle={cardStyle}
           loadTodayEntries={loadTodayEntries}
           loadBase={loadBase}
           onAfterWrite={webAutoSync}
@@ -684,6 +773,7 @@ export default function App() {
           setFulfillment={setFulfillment}
           setMsg={setMsg}
           cardStyle={cardStyle}
+          dataVersion={dataVersion}
         />
       )}
 
@@ -738,10 +828,11 @@ export default function App() {
         setMsg={setMsg}
         adHeight={adHeight}
         onVolumeUnitChange={setVolumeUnit}
+        onSortSettingsChange={(rule, due) => { setSortRule(rule); setPrioritizeDue(due); }}
       />
 
-      {/* AdMob Banner */}
-      <BannerAd onStatusChange={setAdHeight} />
+      {/* AdMob Banner: no_ads フラグが false のときのみ表示 */}
+      {!noAds && <BannerAd onStatusChange={setAdHeight} />}
     </AppShell>
 
     <SpotlightTutorial isOpen={onboardingOpen} onClose={handleOnboardingClose} onSetTab={setTab} />

@@ -22,3 +22,12 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Appium
+appium.log
+ios/build/
+
+# Environment variables (secret keys)
+.env
+.env.local
+.env.*.local

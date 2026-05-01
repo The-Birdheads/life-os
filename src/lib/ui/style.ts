@@ -26,30 +26,11 @@ export const containerStyle: React.CSSProperties = {
 export const toastWrapStyle: React.CSSProperties = {
   position: "fixed",
   top: "calc(env(safe-area-inset-top, 0px) + 64px)", // ヘッダー(56px)の少し下
-  insetInline: 0,       // left/right の代わり（安定）
+  insetInline: 0,
   display: "flex",
   justifyContent: "center",
   pointerEvents: "none",
   zIndex: 9999,
-  paddingInline: 12,    // padding の代わり（安定）
+  paddingInline: 12,
   boxSizing: "border-box",
-
-  // ✅ 追加：トースト起因の横はみ出しを確実に封じる
-  overflow: "hidden",
-};
-
-
-export const toastStyle: React.CSSProperties = {
-  pointerEvents: "auto",
-  maxWidth: 720,
-  width: "100%",
-  padding: "10px 12px",
-  borderRadius: 12,
-  border: "1px solid #e5e7eb",
-  background: theme.toastBg,
-  color: theme.toastText,
-  boxShadow: "0 6px 18px rgba(0,0,0,0.12)",
-  backdropFilter: "blur(6px)",
-  WebkitBackdropFilter: "blur(6px)",
-  fontSize: 14,
 };
