@@ -8,6 +8,10 @@ export type Task = {
   is_hidden: boolean;
   priority: number;
   volume: number;
+  memo?: string | null;
+  remind_on?: boolean;
+  remind_hour?: number;
+  remind_minute?: number;
 };
 
 export type Action = {
@@ -52,6 +56,11 @@ export type DailyLog = {
   action_ratio: number;
   balance_factor: number;
   fulfillment: number;
+
+  /** 翌日への目標（任意） */
+  tomorrow_note: string | null;
+  /** 前日の目標の達成度: "done" | "partial" | "failed" | null */
+  yesterday_achievement: string | null;
 };
 
 export type NotificationSettings = {
@@ -59,10 +68,16 @@ export type NotificationSettings = {
   user_id: string;
   habit_remind_on: boolean;
   habit_remind_hour: number;
+  habit_remind_minute: number;
   task_remind_on: boolean;
   task_remind_hour: number;
-  task_remind_timing: string; // JSON array of numbers e.g. "[1,2,3]" 
+  task_remind_minute: number;
+  task_remind_timing: string; // JSON array of numbers e.g. "[1,2,3]"
   review_remind_on: boolean;
   review_remind_hour: number;
+  review_remind_minute: number;
+  volume_unit: string; // '15' | '30' | '60' | 'none'
+  sort_rule: string; // 'priority' | 'volume_desc' | 'volume_asc'
+  prioritize_due: boolean;
   updated_at: string;
 };

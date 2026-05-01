@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from "react";
 import type { Action, Task } from "../../../lib/types";
 import { theme } from "../../../lib/ui/theme";
+import { useUserSettings } from "../../../lib/context/UserSettingsContext";
+import { sortTasks } from "../../../lib/sortTasks";
+import { formatVolumeLabel } from "../../../lib/formatVolume";
 import Card from "../../ui/Card";
 import IconBtn from "../../ui/IconBtn";
 import PriorityBadge from "../../badges/PriorityBadge";
@@ -12,7 +15,9 @@ import SegmentedBar from "../../ui/SegmentedBar";
 import TextInput from "../../ui/TextInput";
 import Slider from "../../ui/Slider";
 import Select from "../../ui/Select";
-import { PlusIcon, CloseIcon, EyeIcon, EyeOffIcon } from "../../ui/Icon";
+import { PlusIcon, CloseIcon, EyeIcon, EyeOffIcon, MemoIcon, BellIcon } from "../../ui/Icon";
+import ToggleSwitch from "../../ui/ToggleSwitch";
+import { checkOrRequestNotifPermission } from "../../../lib/notifications";
 
 type SubTab = "shown" | "hidden";
 const subTabItems = [
@@ -32,6 +37,7 @@ type Props = {
     loadBase: () => Promise<void>;
     loadTodayEntries: () => Promise<void>;
     adHeight?: number;
+    onAfterWrite?: () => Promise<void>;
 };
 
 import { sqliteRepo } from "../../../lib/db/instance";
@@ -48,12 +54,13 @@ export default function RegisterModals({
     loadBase,
     loadTodayEntries,
     adHeight = 0,
+    onAfterWrite,
 }: Props) {
     // --- Action Category Modal State ---
     const [categoryModalOpen, setCategoryModalOpen] = useState(false);
 
     // --- DB Helpers ---
-    async function addTask(form: { title: string; task_type: "habit" | "oneoff"; priority: number; volume: number; due_date: string | null; is_hidden: boolean; }) {
+    async function addTask(form: { title: string; task_type: "habit" | "oneoff"; priority: number; volume: number; due_date: string | null; is_hidden: boolean; memo?: string | null; remind_on?: boolean; remind_hour?: number; remind_minute?: number; }) {
         await sqliteRepo.createTask({
             id: "", // auto-generated inside createTask
             user_id: userId,
@@ -64,18 +71,26 @@ export default function RegisterModals({
             due_date: form.task_type === "oneoff" ? form.due_date : null,
             is_active: true,
             is_hidden: form.is_hidden,
+            memo: form.memo,
+            remind_on: form.remind_on,
+            remind_hour: form.remind_hour,
+            remind_minute: form.remind_minute,
         });
         await loadBase();
+        onAfterWrite?.();
     }
 
     async function updateTask(taskId: string, patch: Partial<Task>) {
         await sqliteRepo.updateTask(userId, taskId, patch);
         await loadBase();
+        onAfterWrite?.();
+        window.dispatchEvent(new CustomEvent('lifeos:scheduleNotifications'));
     }
 
     async function deleteTaskForever(taskId: string) {
         await sqliteRepo.deleteTask(userId, taskId);
         await loadBase();
+        onAfterWrite?.();
     }
 
     async function addAction(form: { kind: string; category: string; is_hidden?: boolean }) {
@@ -89,16 +104,19 @@ export default function RegisterModals({
             created_at: new Date().toISOString(),
         });
         await loadBase();
+        onAfterWrite?.();
     }
 
     async function updateAction(actionId: string, patch: Partial<Action>) {
         await sqliteRepo.updateAction(userId, actionId, patch);
         await loadBase();
+        onAfterWrite?.();
     }
 
     async function deleteActionForever(actionId: string) {
         await sqliteRepo.deleteAction(userId, actionId);
         await loadBase();
+        onAfterWrite?.();
     }
 
     // --- Styles ---
@@ -109,9 +127,12 @@ export default function RegisterModals({
         transition: "opacity 0.2s ease",
     };
     const modalStyle: React.CSSProperties = {
-        width: "100%", maxWidth: 600, maxHeight: `calc(100dvh - 24px - ${adHeight}px)`,
+        width: "100%", maxWidth: 600,
+        // コンテンツ量に関わらず常にステータスバー直下まで固定高さ
+        height: `calc(100dvh - max(env(safe-area-inset-top, 0px), 24px) - ${adHeight}px)`,
         background: "var(--bg)", borderTopLeftRadius: 20, borderTopRightRadius: 20,
         display: "flex", flexDirection: "column",
+        overflowX: "hidden", // 左右スクロール禁止
         boxShadow: "0 -4px 20px rgba(0,0,0,0.15)",
         animation: "slideUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.2)",
     };
@@ -211,6 +232,7 @@ export default function RegisterModals({
                             setCategoryModalOpen={setCategoryModalOpen}
                             modalStyle={modalStyle}
                             closeBtnStyle={closeBtnStyle}
+                            onAfterWrite={onAfterWrite}
                         />
                     ) : null}
                 </div>
@@ -251,6 +273,7 @@ function TaskListModal({
     overlayStyle: React.CSSProperties;
     getRowCardStyle: (accentColor?: string, isDone?: boolean) => React.CSSProperties;
 }) {
+    const { volumeUnit, sortRule, prioritizeDue } = useUserSettings();
     const [subTab, setSubTab] = useState<SubTab>("shown");
     const [adding, setAdding] = useState(false);
     const [editingItem, setEditingItem] = useState<Task | null>(null);
@@ -260,16 +283,25 @@ function TaskListModal({
     const [priority, setPriority] = useState(3);
     const [volume, setVolume] = useState(5);
     const [dueDate, setDueDate] = useState("");
+    const [newMemo, setNewMemo] = useState("");
+    const [showNewMemo, setShowNewMemo] = useState(false);
+    const [newRemindOn, setNewRemindOn] = useState(false);
+    const [newRemindHour, setNewRemindHour] = useState(8);
+    const [newRemindMinute, setNewRemindMinute] = useState(0);
 
     const shownTasks = tasks.filter((t) => t.task_type === type);
     const baseList = shownTasks.filter((t) => {
         if (t.task_type === "oneoff") return !doneTaskIdsAnyDay.has(t.id);
         return true;
     });
-    const listForRender = baseList.filter((t) => {
-        const hidden = !!(t as any).is_hidden;
-        return subTab === "shown" ? !hidden : hidden;
-    });
+    const listForRender = sortTasks(
+        baseList.filter((t) => {
+            const hidden = !!(t as any).is_hidden;
+            return subTab === "shown" ? !hidden : hidden;
+        }),
+        sortRule,
+        type === "oneoff" ? prioritizeDue : false,
+    );
 
     return (
         <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
@@ -280,12 +312,16 @@ function TaskListModal({
                 <h2 style={{ margin: 0, fontSize: 20 }}>{title}の登録</h2>
             </div>
 
-            <div style={{ padding: "0 16px 24px", overflowY: "auto", flex: 1, display: "flex", flexDirection: "column" }}>
+            <div style={{ padding: "0 16px 24px", overflowY: "auto", overflowX: "hidden", flex: 1, display: "flex", flexDirection: "column" }}>
                 <SegmentedBar items={subTabItems as any} value={subTab} onChange={(v: any) => { setSubTab(v); setAdding(false); }} ariaLabel="表示切り替え" />
 
                 <div style={{ marginTop: 16, marginBottom: 16 }}>
                     {!adding ? (
-                        <PrimaryBtn fullWidth onClick={() => setAdding(true)}>
+                        <PrimaryBtn
+                            fullWidth
+                            onClick={() => setAdding(true)}
+                            data-tutorial={type === "habit" ? "habit-modal-add-btn" : undefined}
+                        >
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
                                 <PlusIcon size={18} />
                                 <span>新しい{title}を追加</span>
@@ -300,32 +336,107 @@ function TaskListModal({
                                     await addTask({
                                         title: newTitle, task_type: type, priority, volume,
                                         due_date: type === "oneoff" && dueDate ? dueDate : null,
-                                        is_hidden: subTab === "hidden", // 追加時のタブ状態で決定
+                                        is_hidden: subTab === "hidden",
+                                        memo: newMemo.trim() || null,
+                                        remind_on: type === "habit" ? newRemindOn : false,
+                                        remind_hour: newRemindHour,
+                                        remind_minute: newRemindMinute,
                                     });
-                                    setNewTitle(""); setDueDate(""); setPriority(3); setVolume(5); setAdding(false);
+                                    setNewTitle(""); setDueDate(""); setPriority(3); setVolume(5);
+                                    setNewMemo(""); setShowNewMemo(false);
+                                    setNewRemindOn(false); setNewRemindHour(8); setNewRemindMinute(0);
+                                    setAdding(false);
                                     setMsg("追加しました。");
                                 } catch (err: any) {
                                     setMsg(err?.message ?? "追加エラー");
                                 }
                             }} style={{ display: "grid", gap: 12 }}>
                                 <h3 style={{ margin: 0, fontSize: 16 }}>新規追加 ({subTab === "hidden" ? "非表示" : "表示中"})</h3>
-                                <label>
+                                <label data-tutorial={type === "habit" ? "habit-title-input" : undefined}>
                                     タイトル
                                     <TextInput aria-label="アイテムタイトル入力" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} fullWidth required />
                                 </label>
-                                <label>
+                                {!showNewMemo ? (
+                                    <button
+                                        type="button"
+                                        data-tutorial={type === "habit" ? "habit-memo" : undefined}
+                                        onClick={() => setShowNewMemo(true)}
+                                        style={{ background: "none", border: `1px dashed ${theme.border}`, borderRadius: 8, padding: "8px 12px", cursor: "pointer", color: theme.subtext, fontSize: 13, display: "flex", alignItems: "center", gap: 6, width: "100%" }}
+                                    >
+                                        <MemoIcon size={14} />
+                                        メモを追加
+                                    </button>
+                                ) : (
+                                    <div>
+                                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                                            <span style={{ fontSize: 13, fontWeight: 600 }}>メモ</span>
+                                            <button type="button" onClick={() => { setShowNewMemo(false); setNewMemo(""); }} style={{ background: "none", border: "none", color: theme.subtext, cursor: "pointer", fontSize: 12, padding: 0 }}>削除</button>
+                                        </div>
+                                        <textarea
+                                            value={newMemo}
+                                            onChange={(e) => setNewMemo(e.target.value)}
+                                            placeholder="メモを入力..."
+                                            rows={3}
+                                            style={{ width: "100%", boxSizing: "border-box", borderRadius: 8, border: `1px solid ${theme.border}`, padding: "8px 10px", fontSize: 14, resize: "vertical", fontFamily: "inherit", background: "var(--bg)", color: "var(--text)" }}
+                                        />
+                                    </div>
+                                )}
+                                <label data-tutorial={type === "habit" ? "habit-priority" : undefined}>
                                     優先度（1-5）: <b>{priority}</b>
                                     <Slider min="1" max="5" step="1" value={priority} onChange={(e) => setPriority(Number(e.target.value))} fullWidth />
                                 </label>
-                                <label>
-                                    ボリューム（1-10）: <b>{volume}</b>
+                                <label data-tutorial={type === "habit" ? "habit-volume" : undefined}>
+                                    ボリューム（1-10）: <b>{volume}{volumeUnit !== "none" ? ` (${formatVolumeLabel(volume, volumeUnit)})` : ""}</b>
                                     <Slider min="1" max="10" step="1" value={volume} onChange={(e) => setVolume(Number(e.target.value))} fullWidth />
                                 </label>
+                                {type === "habit" && (
+                                    <div data-tutorial="habit-remind" style={{ display: "grid", gap: 8 }}>
+                                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                            <ToggleSwitch
+                                                checked={newRemindOn}
+                                                onChange={async (next) => {
+                                                    if (next) {
+                                                        const granted = await checkOrRequestNotifPermission();
+                                                        if (!granted) {
+                                                            setMsg("通知を有効にするには、設定アプリから通知を許可してください");
+                                                            return;
+                                                        }
+                                                    }
+                                                    setNewRemindOn(next);
+                                                }}
+                                                color={theme.habit}
+                                            />
+                                            <span style={{ fontSize: 14 }}>リマインド通知</span>
+                                        </div>
+                                        {newRemindOn && (
+                                            <div style={{ display: "flex", alignItems: "center", gap: 8, paddingLeft: 54 }}>
+                                                <span style={{ fontSize: 14 }}>時間:</span>
+                                                <Select value={String(newRemindHour)} onChange={(e) => setNewRemindHour(parseInt(e.target.value))} style={{ width: 82 }}>
+                                                    {Array.from({length: 24}, (_, i) => i).map(h => <option key={h} value={h}>{String(h).padStart(2, "0")}</option>)}
+                                                </Select>
+                                                <span style={{ fontSize: 14, opacity: 0.7 }}>時</span>
+                                                <Select value={String(newRemindMinute)} onChange={(e) => setNewRemindMinute(parseInt(e.target.value))} style={{ width: 82 }}>
+                                                    {Array.from({length: 60}, (_, i) => i).map(m => <option key={m} value={m}>{String(m).padStart(2, "0")}</option>)}
+                                                </Select>
+                                                <span style={{ fontSize: 14, opacity: 0.7 }}>分</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                                 {type === "oneoff" && (
-                                    <label>
-                                        期限（任意）
+                                    <div>
+                                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                                            <span style={{ fontSize: 14 }}>期限（任意）</span>
+                                            {dueDate && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setDueDate("")}
+                                                    style={{ background: "none", border: "none", cursor: "pointer", color: theme.subtext, fontSize: 13, padding: "2px 4px" }}
+                                                >クリア</button>
+                                            )}
+                                        </div>
                                         <TextInput type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} fullWidth />
-                                    </label>
+                                    </div>
                                 )}
                                 <div style={{ display: "flex", gap: 8 }}>
                                     <PrimaryBtn type="submit" disabled={!newTitle.trim()}>追加</PrimaryBtn>
@@ -390,7 +501,15 @@ function TaskRow({
             onMouseLeave={(e) => (e.currentTarget.style.transform = "translate(0,0) scale(1)")}
         >
             <div style={{ flex: 1, minWidth: 0, display: "grid", gap: 4 }}>
-                <div style={{ fontWeight: 700, lineHeight: 1.3, wordBreak: "break-word" }}>{task.title}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <div style={{ fontWeight: 700, lineHeight: 1.3, wordBreak: "break-word" }}>{task.title}</div>
+                    {task.remind_on && <BellIcon size={13} color={accentColor} style={{ flexShrink: 0, opacity: 0.8 }} />}
+                </div>
+                {task.memo && (
+                    <div style={{ fontSize: 12, opacity: 0.6, lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as any, overflow: "hidden" }}>
+                        {task.memo}
+                    </div>
+                )}
                 <div style={{ opacity: 0.75, display: "flex", alignItems: "center", gap: 8 }}>
                     <PriorityBadge value={(task as any).priority} />
                     <VolBar value={(task as any).volume} />
@@ -429,10 +548,17 @@ function TaskEditModal({
     modalStyle: React.CSSProperties;
     closeBtnStyle: React.CSSProperties;
 }) {
+    const { volumeUnit } = useUserSettings();
     const [tTitle, setTTitle] = useState(item.title);
     const [tPriority, setTPriority] = useState((item as any).priority ?? 3);
     const [tVolume, setTVolume] = useState((item as any).volume ?? 5);
     const [tDueDate, setTDueDate] = useState(item.due_date ?? "");
+    const [tDueDateCleared, setTDueDateCleared] = useState(false);
+    const [tMemo, setTMemo] = useState(item.memo ?? "");
+    const [showTMemo, setShowTMemo] = useState(!!(item.memo));
+    const [tRemindOn, setTRemindOn] = useState(item.remind_on ?? false);
+    const [tRemindHour, setTRemindHour] = useState(item.remind_hour ?? 8);
+    const [tRemindMinute, setTRemindMinute] = useState(item.remind_minute ?? 0);
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -441,7 +567,11 @@ function TaskEditModal({
             await updateTask(item.id, {
                 title: tTitle.trim() || item.title,
                 priority: tPriority, volume: tVolume,
-                due_date: type === "oneoff" && tDueDate ? tDueDate : null
+                due_date: type === "oneoff"
+                    ? tDueDateCleared ? null : (tDueDate || item.due_date || null)
+                    : null,
+                memo: tMemo.trim() || null,
+                ...(type === "habit" ? { remind_on: tRemindOn, remind_hour: tRemindHour, remind_minute: tRemindMinute } : {}),
             } as any);
             setEditingItem(null);
             setMsg("更新しました。");
@@ -462,6 +592,17 @@ function TaskEditModal({
         }
     };
 
+    const handleToggleHidden = async () => {
+        setMsg("");
+        try {
+            await updateTask(item.id, { is_hidden: !item.is_hidden } as any);
+            setEditingItem(null);
+            setMsg(item.is_hidden ? "表示に戻しました。" : "非表示にしました。");
+        } catch (err: any) {
+            setMsg(err?.message ?? "更新エラー");
+        }
+    };
+
     return (
         <div style={{ ...overlayStyle, zIndex: 110 }} onClick={() => setEditingItem(null)}>
             <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
@@ -472,25 +613,92 @@ function TaskEditModal({
                     <h2 style={{ margin: 0, fontSize: 20 }}>{title}の編集</h2>
                 </div>
 
-                <div style={{ padding: "0 16px 24px", overflowY: "auto", flex: 1 }}>
+                <div style={{ padding: "0 16px 24px", overflowY: "auto", overflowX: "hidden", flex: 1 }}>
                     <form onSubmit={handleSave} style={{ display: "grid", gap: 16 }}>
                         <label>
                             タイトル
                             <TextInput value={tTitle} onChange={(e) => setTTitle(e.target.value)} fullWidth required />
                         </label>
+                        {!showTMemo ? (
+                            <button
+                                type="button"
+                                onClick={() => setShowTMemo(true)}
+                                style={{ background: "none", border: `1px dashed ${theme.border}`, borderRadius: 8, padding: "8px 12px", cursor: "pointer", color: theme.subtext, fontSize: 13, display: "flex", alignItems: "center", gap: 6, width: "100%" }}
+                            >
+                                <MemoIcon size={14} />
+                                メモを追加
+                            </button>
+                        ) : (
+                            <div>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                                    <span style={{ fontSize: 13, fontWeight: 600 }}>メモ</span>
+                                    <button type="button" onClick={() => { setShowTMemo(false); setTMemo(""); }} style={{ background: "none", border: "none", color: theme.subtext, cursor: "pointer", fontSize: 12, padding: 0 }}>削除</button>
+                                </div>
+                                <textarea
+                                    value={tMemo}
+                                    onChange={(e) => setTMemo(e.target.value)}
+                                    placeholder="メモを入力..."
+                                    rows={3}
+                                    style={{ width: "100%", boxSizing: "border-box", borderRadius: 8, border: `1px solid ${theme.border}`, padding: "8px 10px", fontSize: 14, resize: "vertical", fontFamily: "inherit", background: "var(--bg)", color: "var(--text)" }}
+                                />
+                            </div>
+                        )}
                         <label>
                             優先度（1-5）: <b>{tPriority}</b>
                             <Slider min="1" max="5" step="1" value={tPriority} onChange={(e) => setTPriority(Number(e.target.value))} fullWidth />
                         </label>
                         <label>
-                            ボリューム（1-10）: <b>{tVolume}</b>
+                            ボリューム（1-10）: <b>{tVolume}{volumeUnit !== "none" ? ` (${formatVolumeLabel(tVolume, volumeUnit)})` : ""}</b>
                             <Slider min="1" max="10" step="1" value={tVolume} onChange={(e) => setTVolume(Number(e.target.value))} fullWidth />
                         </label>
+                        {type === "habit" && (
+                            <div style={{ display: "grid", gap: 8 }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                    <ToggleSwitch
+                                        checked={tRemindOn}
+                                        onChange={async (next) => {
+                                            if (next) {
+                                                const granted = await checkOrRequestNotifPermission();
+                                                if (!granted) {
+                                                    setMsg("通知を有効にするには、設定アプリから通知を許可してください");
+                                                    return;
+                                                }
+                                            }
+                                            setTRemindOn(next);
+                                        }}
+                                        color={theme.habit}
+                                    />
+                                    <span style={{ fontSize: 14 }}>リマインド通知</span>
+                                </div>
+                                {tRemindOn && (
+                                    <div style={{ display: "flex", alignItems: "center", gap: 8, paddingLeft: 54 }}>
+                                        <span style={{ fontSize: 14 }}>時間:</span>
+                                        <Select value={String(tRemindHour)} onChange={(e) => setTRemindHour(parseInt(e.target.value))} style={{ width: 82 }}>
+                                            {Array.from({length: 24}, (_, i) => i).map(h => <option key={h} value={h}>{String(h).padStart(2, "0")}</option>)}
+                                        </Select>
+                                        <span style={{ fontSize: 14, opacity: 0.7 }}>時</span>
+                                        <Select value={String(tRemindMinute)} onChange={(e) => setTRemindMinute(parseInt(e.target.value))} style={{ width: 82 }}>
+                                            {Array.from({length: 60}, (_, i) => i).map(m => <option key={m} value={m}>{String(m).padStart(2, "0")}</option>)}
+                                        </Select>
+                                        <span style={{ fontSize: 14, opacity: 0.7 }}>分</span>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                         {type === "oneoff" && (
-                            <label>
-                                期限（任意）
+                            <div>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                                    <span style={{ fontSize: 14 }}>期限（任意）</span>
+                                    {!tDueDateCleared && (tDueDate || item.due_date) && (
+                                        <button
+                                            type="button"
+                                            onClick={() => { setTDueDate(""); setTDueDateCleared(true); }}
+                                            style={{ background: "none", border: "none", color: theme.subtext, cursor: "pointer", fontSize: 12, padding: 0 }}
+                                        >削除</button>
+                                    )}
+                                </div>
                                 <TextInput type="date" value={tDueDate} onChange={(e) => setTDueDate(e.target.value)} fullWidth />
-                            </label>
+                            </div>
                         )}
 
                         <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
@@ -501,9 +709,12 @@ function TaskEditModal({
                                 <SecondaryBtn type="button" onClick={() => setEditingItem(null)} fullWidth>キャンセル</SecondaryBtn>
                             </div>
                         </div>
-                        <div style={{ textAlign: "center", marginTop: 8 }}>
+                        <div style={{ display: "flex", justifyContent: "center", gap: 24, marginTop: 8 }}>
+                            <button type="button" onClick={handleToggleHidden} style={{ background: "none", border: "none", color: theme.subtext, cursor: "pointer", textDecoration: "underline", fontSize: 14 }}>
+                                {item.is_hidden ? "表示に戻す" : "非表示にする"}
+                            </button>
                             <button type="button" onClick={handleDelete} style={{ background: "none", border: "none", color: theme.danger, cursor: "pointer", textDecoration: "underline", fontSize: 14 }}>
-                                このアイテムを削除
+                                削除する
                             </button>
                         </div>
                     </form>
@@ -557,7 +768,7 @@ function ActionCategoryModal({
                 <h2 style={{ margin: 0, fontSize: 20 }}>行動の種類の管理</h2>
             </div>
 
-            <div style={{ padding: "0 16px 24px", overflowY: "auto", flex: 1, display: "flex", flexDirection: "column" }}>
+            <div style={{ padding: "0 16px 24px", overflowY: "auto", overflowX: "hidden", flex: 1, display: "flex", flexDirection: "column" }}>
                 <SegmentedBar items={subTabItems as any} value={subTab} onChange={(v: any) => { setSubTab(v); setAdding(false); }} ariaLabel="表示切り替え" />
 
                 <div style={{ marginTop: 16, marginBottom: 16 }}>
@@ -724,7 +935,7 @@ function ActionEditModal({
                     <h2 style={{ margin: 0, fontSize: 20 }}>行動の種類の編集</h2>
                 </div>
 
-                <div style={{ padding: "0 16px 24px", overflowY: "auto", flex: 1 }}>
+                <div style={{ padding: "0 16px 24px", overflowY: "auto", overflowX: "hidden", flex: 1 }}>
                     <form onSubmit={handleSave} style={{ display: "grid", gap: 16 }}>
                         <label>
                             種類
@@ -770,7 +981,8 @@ function ActionEntryModal({
     setOpenModal,
     setCategoryModalOpen,
     modalStyle,
-    closeBtnStyle
+    closeBtnStyle,
+    onAfterWrite,
 }: {
     actions: Action[];
     userId: string;
@@ -781,7 +993,9 @@ function ActionEntryModal({
     setCategoryModalOpen: (b: boolean) => void;
     modalStyle: React.CSSProperties;
     closeBtnStyle: React.CSSProperties;
+    onAfterWrite?: () => Promise<void>;
 }) {
+    const { volumeUnit } = useUserSettings();
     const activeActions = actions.filter((a) => (a as any).is_active !== false && !a.is_hidden);
     const [actionId, setActionId] = useState<string>(activeActions[0]?.id ?? "");
     const [detail, setDetail] = useState<string>("");
@@ -802,7 +1016,7 @@ function ActionEntryModal({
                 <h2 style={{ margin: 0, fontSize: 20 }}>行動の登録</h2>
             </div>
 
-            <div style={{ padding: "0 16px 24px", overflowY: "auto", flex: 1 }}>
+            <div style={{ padding: "0 16px 24px", overflowY: "auto", overflowX: "hidden", flex: 1 }}>
                 <form onSubmit={async (e) => {
                     e.preventDefault();
                     setMsg("");
@@ -820,6 +1034,7 @@ function ActionEntryModal({
                         setDetail("");
                         setVolume(5);
                         await loadTodayEntries();
+                        onAfterWrite?.();
                         setOpenModal(null);
                         setMsg("行動ログを追加しました。");
                     } catch (err: any) {
@@ -843,7 +1058,7 @@ function ActionEntryModal({
                         <TextInput value={detail} onChange={(e) => setDetail(e.target.value)} fullWidth placeholder="自由入力" />
                     </label>
                     <label>
-                        ボリューム（1-10）: <b>{volume}</b>
+                        ボリューム（1-10）: <b>{volume}{volumeUnit !== "none" ? ` (${formatVolumeLabel(volume, volumeUnit)})` : ""}</b>
                         <Slider min="1" max="10" step="1" value={volume} onChange={(e) => setVolume(Number(e.target.value))} fullWidth />
                         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, opacity: 0.7 }}>
                             {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => <span key={n}>{n}</span>)}

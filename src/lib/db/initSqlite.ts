@@ -80,6 +80,10 @@ async function createTables(db: SQLiteDBConnection) {
         is_hidden INTEGER DEFAULT 0,
         priority INTEGER DEFAULT 3,
         volume INTEGER DEFAULT 5,
+        memo TEXT,
+        remind_on INTEGER DEFAULT 0,
+        remind_hour INTEGER DEFAULT 8,
+        remind_minute INTEGER DEFAULT 0,
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP
       );
 
@@ -138,11 +142,17 @@ async function createTables(db: SQLiteDBConnection) {
         user_id TEXT NOT NULL UNIQUE,
         habit_remind_on INTEGER DEFAULT 1,
         habit_remind_hour INTEGER DEFAULT 18,
+        habit_remind_minute INTEGER DEFAULT 0,
         task_remind_on INTEGER DEFAULT 1,
         task_remind_hour INTEGER DEFAULT 10,
+        task_remind_minute INTEGER DEFAULT 0,
         task_remind_timing TEXT DEFAULT '[1,2,3]',
         review_remind_on INTEGER DEFAULT 1,
         review_remind_hour INTEGER DEFAULT 21,
+        review_remind_minute INTEGER DEFAULT 0,
+        volume_unit TEXT DEFAULT '30',
+        sort_rule TEXT DEFAULT 'priority',
+        prioritize_due INTEGER DEFAULT 0,
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP
       );
     `;
@@ -177,7 +187,115 @@ async function createTables(db: SQLiteDBConnection) {
       }
     }
 
-    await db.execute("PRAGMA user_version = 3;");
+    // 3. tasks.memo カラムの追加（v4マイグレーション）
+    try {
+      const tasksInfo = await db.query(`PRAGMA table_info(tasks);`);
+      const tasksColumns = tasksInfo.values || [];
+      if (!tasksColumns.some((c: any) => c.name === 'memo')) {
+        console.log('Adding memo column to tasks...');
+        await db.execute(`ALTER TABLE tasks ADD COLUMN memo TEXT;`);
+      }
+    } catch (e) {
+      console.warn('Migration/Check failed for tasks.memo', e);
+    }
+
+    // 5. tasks の remind カラム追加（v6マイグレーション）
+    try {
+      const tasksInfo2 = await db.query(`PRAGMA table_info(tasks);`);
+      const tasksColumns2 = (tasksInfo2.values || []).map((c: any) => c.name);
+      const remindCols = [
+        { name: 'remind_on',     def: '0' },
+        { name: 'remind_hour',   def: '8' },
+        { name: 'remind_minute', def: '0' },
+      ];
+      for (const col of remindCols) {
+        if (!tasksColumns2.includes(col.name)) {
+          console.log(`Adding ${col.name} column to tasks...`);
+          await db.execute(`ALTER TABLE tasks ADD COLUMN ${col.name} INTEGER DEFAULT ${col.def};`);
+        }
+      }
+    } catch (e) {
+      console.warn('Migration/Check failed for tasks remind columns', e);
+    }
+
+    // 4. notification_settings の分カラム追加（v5マイグレーション）
+    try {
+      const nsInfo = await db.query(`PRAGMA table_info(notification_settings);`);
+      const nsColumns = (nsInfo.values || []).map((c: any) => c.name);
+      const minuteCols = [
+        { name: 'habit_remind_minute', default: 0 },
+        { name: 'task_remind_minute',  default: 0 },
+        { name: 'review_remind_minute', default: 0 },
+      ];
+      for (const col of minuteCols) {
+        if (!nsColumns.includes(col.name)) {
+          console.log(`Adding ${col.name} column to notification_settings...`);
+          await db.execute(`ALTER TABLE notification_settings ADD COLUMN ${col.name} INTEGER DEFAULT ${col.default};`);
+        }
+      }
+    } catch (e) {
+      console.warn('Migration/Check failed for notification_settings minute columns', e);
+    }
+
+    // 6. notification_settings の volume_unit カラム追加（v7マイグレーション）
+    try {
+      const nsInfo2 = await db.query(`PRAGMA table_info(notification_settings);`);
+      const nsColumns2 = (nsInfo2.values || []).map((c: any) => c.name);
+      if (!nsColumns2.includes('volume_unit')) {
+        console.log('Adding volume_unit column to notification_settings...');
+        await db.execute(`ALTER TABLE notification_settings ADD COLUMN volume_unit TEXT DEFAULT '30';`);
+      }
+    } catch (e) {
+      console.warn('Migration/Check failed for notification_settings.volume_unit', e);
+    }
+
+    // 7. daily_logs の tomorrow_note / yesterday_achievement カラム追加（v8マイグレーション）
+    try {
+      const dlInfo = await db.query(`PRAGMA table_info(daily_logs);`);
+      const dlColumns = (dlInfo.values || []).map((c: any) => c.name);
+      if (!dlColumns.includes('tomorrow_note')) {
+        console.log('Adding tomorrow_note column to daily_logs...');
+        await db.execute(`ALTER TABLE daily_logs ADD COLUMN tomorrow_note TEXT;`);
+      }
+      if (!dlColumns.includes('yesterday_achievement')) {
+        console.log('Adding yesterday_achievement column to daily_logs...');
+        await db.execute(`ALTER TABLE daily_logs ADD COLUMN yesterday_achievement TEXT;`);
+      }
+    } catch (e) {
+      console.warn('Migration/Check failed for daily_logs new columns', e);
+    }
+
+    // 8. tasks / actions / action_entries に deleted_at カラム追加（v9マイグレーション・ソフトデリート）
+    try {
+      for (const t of ['tasks', 'actions', 'action_entries']) {
+        const info = await db.query(`PRAGMA table_info(${t});`);
+        const cols = (info.values || []).map((c: any) => c.name);
+        if (!cols.includes('deleted_at')) {
+          console.log(`Adding deleted_at column to ${t}...`);
+          await db.execute(`ALTER TABLE ${t} ADD COLUMN deleted_at TEXT;`);
+        }
+      }
+    } catch (e) {
+      console.warn('Migration/Check failed for deleted_at columns', e);
+    }
+
+    // 9. notification_settings の sort_rule / prioritize_due カラム追加（v10マイグレーション）
+    try {
+      const nsInfo3 = await db.query(`PRAGMA table_info(notification_settings);`);
+      const nsColumns3 = (nsInfo3.values || []).map((c: any) => c.name);
+      if (!nsColumns3.includes('sort_rule')) {
+        console.log('Adding sort_rule column to notification_settings...');
+        await db.execute(`ALTER TABLE notification_settings ADD COLUMN sort_rule TEXT DEFAULT 'priority';`);
+      }
+      if (!nsColumns3.includes('prioritize_due')) {
+        console.log('Adding prioritize_due column to notification_settings...');
+        await db.execute(`ALTER TABLE notification_settings ADD COLUMN prioritize_due INTEGER DEFAULT 0;`);
+      }
+    } catch (e) {
+      console.warn('Migration/Check failed for notification_settings sort columns', e);
+    }
+
+    await db.execute("PRAGMA user_version = 10;");
 
     // Web版では明示的に保存が必要
     if (Capacitor.getPlatform() === 'web' || Capacitor.getPlatform() === 'ios') {

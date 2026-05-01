@@ -30,10 +30,10 @@ export default function SegmentedBar<K extends string>({
       role="tablist"
       aria-label={ariaLabel}
       style={{
-        padding: "8px 12px",
+        padding: "8px 24px",
 
-        // コンテナのpadding:12pxを打ち消して画面いっぱいにする
-        margin: "0 -12px",
+        // コンテナの padding (containerStyle 12px + railStyle 12px = 24px) を打ち消して画面いっぱいにする
+        margin: "0 -24px",
         background: "#64748b", // Slate 500 (12:00更新)
         color: theme.surfaceDarkText,
 
@@ -41,7 +41,6 @@ export default function SegmentedBar<K extends string>({
         ...(stickyTop !== undefined ? {
           position: "sticky",
           top: stickyTop,
-          marginTop: -16, // AppShell側の paddingTop16px によるヘッダーとの隙間を埋める
           zIndex: 60,
           boxShadow: "0 2px 4px rgba(0,0,0,0.1)", // ヘッダーと同じ階層感の影
         } : {}),

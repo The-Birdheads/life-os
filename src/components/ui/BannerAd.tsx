@@ -18,11 +18,20 @@ export default function BannerAd({ onStatusChange }: Props) {
         let cancelled = false;
 
         const run = async () => {
+            // MobileAds.shared.start() はコールバックなしで呼ばれるため、
+            // SDK の初期化完了を少し待ってからバナーを要求する
+            await new Promise(r => setTimeout(r, 1500));
+            if (cancelled) return;
+
             // 1. リスナーを先に登録してからバナーを表示する
-            const h1 = await AdMob.addListener(BannerAdPluginEvents.Loaded, () => {
+            const h1 = await AdMob.addListener(BannerAdPluginEvents.Loaded, async () => {
                 console.log('AdMob: Banner loaded');
-                // SizeChanged が遅延した場合のフォールバック高さを設定
+                // フォールバック高さを設定（レイアウト完了前の一時値）
                 if (!cancelled) onStatusChange?.(FALLBACK_BANNER_HEIGHT);
+                // iOS のレイアウトパス完了後に resumeBanner() を呼ぶと
+                // SizeChanged が実際のフレームサイズで再発火する
+                await new Promise(r => setTimeout(r, 500));
+                if (!cancelled) await AdMob.resumeBanner().catch(() => {});
             });
             const h2 = await AdMob.addListener(BannerAdPluginEvents.FailedToLoad, (err) => {
                 console.error('AdMob: Banner failed to load', err);
@@ -30,8 +39,8 @@ export default function BannerAd({ onStatusChange }: Props) {
             });
             const h3 = await AdMob.addListener(BannerAdPluginEvents.SizeChanged, (info) => {
                 console.log('AdMob: Banner size changed', info);
-                // 実際の高さで上書き
-                if (!cancelled) onStatusChange?.(info.height);
+                // height=0 は iOS レイアウト未完了による誤報なので無視
+                if (!cancelled && info.height > 0) onStatusChange?.(info.height);
             });
             handles.current = [h1, h2, h3];
 

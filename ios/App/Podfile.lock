@@ -1,0 +1,100 @@
+PODS:
+  - Capacitor (8.1.0):
+    - CapacitorCordova
+  - CapacitorApp (8.0.1):
+    - Capacitor
+  - CapacitorBrowser (8.0.3):
+    - Capacitor
+  - CapacitorCommunityAdmob (8.0.0):
+    - Capacitor
+    - Google-Mobile-Ads-SDK (~> 12.14)
+    - GoogleUserMessagingPlatform (~> 3.1)
+  - CapacitorCommunityAppleSignIn (7.1.0):
+    - Capacitor
+  - CapacitorCommunitySqlite (8.0.0):
+    - Capacitor
+    - SQLCipher
+    - ZIPFoundation
+  - CapacitorCordova (8.1.0)
+  - CapacitorLocalNotifications (8.0.2):
+    - Capacitor
+  - CapacitorPluginAppTrackingTransparency (3.0.0):
+    - Capacitor
+  - CapacitorPreferences (8.0.1):
+    - Capacitor
+  - CapacitorSplashScreen (8.0.1):
+    - Capacitor
+  - Google-Mobile-Ads-SDK (12.14.0):
+    - GoogleUserMessagingPlatform (>= 1.1)
+  - GoogleUserMessagingPlatform (3.1.0)
+  - SQLCipher (4.10.0):
+    - SQLCipher/standard (= 4.10.0)
+  - SQLCipher/common (4.10.0)
+  - SQLCipher/standard (4.10.0):
+    - SQLCipher/common
+  - ZIPFoundation (0.9.20)
+
+DEPENDENCIES:
+  - "Capacitor (from `../../node_modules/@capacitor/ios`)"
+  - "CapacitorApp (from `../../node_modules/@capacitor/app`)"
+  - "CapacitorBrowser (from `../../node_modules/@capacitor/browser`)"
+  - "CapacitorCommunityAdmob (from `../../node_modules/@capacitor-community/admob`)"
+  - "CapacitorCommunityAppleSignIn (from `../../node_modules/@capacitor-community/apple-sign-in`)"
+  - "CapacitorCommunitySqlite (from `../../node_modules/@capacitor-community/sqlite`)"
+  - "CapacitorCordova (from `../../node_modules/@capacitor/ios`)"
+  - "CapacitorLocalNotifications (from `../../node_modules/@capacitor/local-notifications`)"
+  - CapacitorPluginAppTrackingTransparency (from `../../node_modules/capacitor-plugin-app-tracking-transparency`)
+  - "CapacitorPreferences (from `../../node_modules/@capacitor/preferences`)"
+  - "CapacitorSplashScreen (from `../../node_modules/@capacitor/splash-screen`)"
+
+SPEC REPOS:
+  trunk:
+    - Google-Mobile-Ads-SDK
+    - GoogleUserMessagingPlatform
+    - SQLCipher
+    - ZIPFoundation
+
+EXTERNAL SOURCES:
+  Capacitor:
+    :path: "../../node_modules/@capacitor/ios"
+  CapacitorApp:
+    :path: "../../node_modules/@capacitor/app"
+  CapacitorBrowser:
+    :path: "../../node_modules/@capacitor/browser"
+  CapacitorCommunityAdmob:
+    :path: "../../node_modules/@capacitor-community/admob"
+  CapacitorCommunityAppleSignIn:
+    :path: "../../node_modules/@capacitor-community/apple-sign-in"
+  CapacitorCommunitySqlite:
+    :path: "../../node_modules/@capacitor-community/sqlite"
+  CapacitorCordova:
+    :path: "../../node_modules/@capacitor/ios"
+  CapacitorLocalNotifications:
+    :path: "../../node_modules/@capacitor/local-notifications"
+  CapacitorPluginAppTrackingTransparency:
+    :path: "../../node_modules/capacitor-plugin-app-tracking-transparency"
+  CapacitorPreferences:
+    :path: "../../node_modules/@capacitor/preferences"
+  CapacitorSplashScreen:
+    :path: "../../node_modules/@capacitor/splash-screen"
+
+SPEC CHECKSUMS:
+  Capacitor: 47b825120c6b8b6d6f9f053e9350a8960d436710
+  CapacitorApp: 942306cd1acf7774a00e89a3986af3a67c8cad7a
+  CapacitorBrowser: c987c73d09d8bd3b5ec13f06338b1e14d5d2be69
+  CapacitorCommunityAdmob: 9c36b466f46da413e5c105f7484e7603178c6223
+  CapacitorCommunityAppleSignIn: 271cb2860576fd2961508bbfa7a82117d93eadca
+  CapacitorCommunitySqlite: 8a61c1d599927d4321c13b28f132de8ca94b6d95
+  CapacitorCordova: e8b76fd95fc1e157775abc484c59cc0de464095d
+  CapacitorLocalNotifications: 4db83a7f6bdd2f30dcedf5c6f92c415065467a24
+  CapacitorPluginAppTrackingTransparency: f0df8fe65d07d3854de3dad832caf192262bbaa5
+  CapacitorPreferences: cca2021f386efb75947c850334447d9ff22b14f1
+  CapacitorSplashScreen: 4b46c72298db552b3c57ce021ef028b6dc7f1fa7
+  Google-Mobile-Ads-SDK: 4534fd2dfcd3f705c5485a6633c5188d03d4eed2
+  GoogleUserMessagingPlatform: befe603da6501006420c206222acd449bba45a9c
+  SQLCipher: eb79c64049cb002b4e9fcb30edb7979bf4706dfc
+  ZIPFoundation: dfd3d681c4053ff7e2f7350bc4e53b5dba3f5351
+
+PODFILE CHECKSUM: bc1acc1243cbc77f9484a05d7ac8347f46e3c218
+
+COCOAPODS: 1.16.2

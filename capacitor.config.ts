@@ -5,13 +5,16 @@ const config: CapacitorConfig = {
   appName: 'Habitas',
   webDir: 'dist',
   ios: {
-    webContentsDebuggingEnabled: true
+    dependencyManager: 'cocoapods'
   },
   plugins: {
-    StatusBar: {
-      style: 'DARK',
-      backgroundColor: '#1E293B',
-      overlaysWebView: false
+    SplashScreen: {
+      launchShowDuration: 2000,
+      launchAutoHide: false,
+      backgroundColor: '#6DCAA6',
+      iosSpinnerStyle: 'small',
+      spinnerColor: '#ffffff',
+      showSpinner: false,
     }
   }
 };

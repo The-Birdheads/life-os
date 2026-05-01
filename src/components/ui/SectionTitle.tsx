@@ -22,16 +22,16 @@ export default function SectionTitle({
   const defaultTextColor = isLarge ? "#ffffff" : "#111827"; // 中見出しは黒/濃いグレー
 
   const wrap: React.CSSProperties = {
-    // コンテナ(padding: 12px)の端まで背景色を塗るためにネガティブマージンを使用
-    margin: "0 -12px",
-    padding: "0 12px",
-    boxSizing: "border-box", // Widthが100% + paddingにならないよう調整
-    width: "calc(100% + 24px)", // ネガティブマージン分を相殺して横幅ピッタリにする
+    // コンテナの padding (containerStyle 12px + railStyle 12px = 24px) を打ち消して画面いっぱいにする
+    margin: "0 -24px",
+    padding: "0 24px",
+    boxSizing: "border-box",
+    width: "calc(100% + 48px)", // ネガティブマージン分を相殺して横幅ピッタリにする
 
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    height: isLarge ? 56 : 44,
+    height: isLarge ? 48 : 36,
 
     background: accentColor ? `${accentColor}15` : defaultBgColor,
     color: defaultTextColor,

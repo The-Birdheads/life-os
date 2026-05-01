@@ -81,6 +81,7 @@ export default function AppShell({
   const [accountOpen, setAccountOpen] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
 
   const [releaseOpen, setReleaseOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -97,6 +98,17 @@ export default function AppShell({
     boxSizing: "border-box",
     minWidth: 0,
   };
+
+  // キーボード表示検出: visualViewport が縮んだら底部ナビを隠す
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const handler = () => {
+      setIsKeyboardVisible(vv.height < window.innerHeight * 0.85);
+    };
+    vv.addEventListener("resize", handler);
+    return () => vv.removeEventListener("resize", handler);
+  }, []);
 
   useEffect(() => {
     if (!menuOpen) { setTutorialOpen(false); setSettingsOpen(false); setAccountOpen(false); setLoginOpen(false); return; }
@@ -489,7 +501,7 @@ export default function AppShell({
           style={{
             ...railStyle,
             minHeight: `calc(100vh - ${topBarHeight}px - ${bottomNavHeight}px)`,
-            paddingTop: `calc(env(safe-area-inset-top, 0px) + ${adHeight + topBarHeight + 20}px)`,
+            paddingTop: `calc(env(safe-area-inset-top, 0px) + ${adHeight + topBarHeight + 8}px)`,
             paddingBottom: 120,
             display: "flex",
             flexDirection: "column",
@@ -508,6 +520,7 @@ export default function AppShell({
             right: 0,
             bottom: 0,
             zIndex: 60,
+            display: isKeyboardVisible ? "none" : undefined,
             background: theme.surfaceDark, /* ヘッダーと同じダークカラー */
             backdropFilter: "blur(12px) saturate(180%)",
             WebkitBackdropFilter: "blur(12px) saturate(180%)",

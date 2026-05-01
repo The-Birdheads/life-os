@@ -1,5 +1,8 @@
 import React, { useEffect, useState, useRef } from "react";
 import type { Action, Task } from "../lib/types";
+import { addDaysJST } from "../lib/dayNav";
+import { useUserSettings } from "../lib/context/UserSettingsContext";
+import { sortTasks } from "../lib/sortTasks";
 
 import Card from "../components/ui/Card";
 import IconBtn from "../components/ui/IconBtn";
@@ -42,6 +45,7 @@ type Props = {
   setMsg: (s: string) => void;
 
   cardStyle: React.CSSProperties; // ✅ App.tsx の cardStyle を渡して見た目維持
+  dataVersion?: number; // フォアグラウンド復帰時の再取得トリガー
 };
 
 import { sqliteRepo } from "../lib/db/instance";
@@ -59,7 +63,9 @@ export default function ReviewView({
   setFulfillment,
   setMsg,
   cardStyle,
+  dataVersion,
 }: Props) {
+  const { sortRule, prioritizeDue } = useUserSettings();
   const [reviewLoading, setReviewLoading] = useState(false);
   const reqIdRef = useRef(0);
 
@@ -70,6 +76,12 @@ export default function ReviewView({
   const [hasSavedReview, setHasSavedReview] = useState(false);
   const [isEditingReview, setIsEditingReview] = useState(true);
 
+  // --- 明日の目標 / 前日の目標 ---
+  const [tomorrowNote, setTomorrowNote] = useState("");
+  const [yesterdayNote, setYesterdayNote] = useState<string | null>(null);
+  const [achievement, setAchievement] = useState<"done" | "partial" | "failed" | "">("");
+  const [isEditingAchievement, setIsEditingAchievement] = useState(false);
+
   useEffect(() => {
     if (!userId) return;
 
@@ -78,18 +90,32 @@ export default function ReviewView({
 
     (async () => {
       try {
+        // 当日のログ
         const log = await sqliteRepo.getDailyLog(userId, day);
+        // 前日のログ（明日の目標表示用）
+        const prevDay = addDaysJST(day, -1);
+        const prevLog = await sqliteRepo.getDailyLog(userId, prevDay);
 
-        // ✅ 古いリクエスト結果は捨てる
         if (reqId !== reqIdRef.current) return;
 
-        // ✅ その日の保存有無で初期表示を決める
-        const saved = !!log; // レコードがある＝一度でも保存された
+        // 充実度・メモ・明日の目標のいずれかに内容があれば「登録済み」とみなす
+        // （達成度のみ保存されたレコードは未入力扱い）
+        const saved = !!(log && (
+          log.fulfillment != null ||
+          log.note?.trim() ||
+          log.tomorrow_note?.trim()
+        ));
         setHasSavedReview(saved);
-        setIsEditingReview(false); // ✅ 追加要望11: 未保存でもすぐフォームは出さず、ボタンだけ見せる
+        setIsEditingReview(false);
 
         setNote(log?.note ?? "");
         setFulfillment(typeof log?.fulfillment === "number" ? log.fulfillment : 0);
+        setTomorrowNote(log?.tomorrow_note ?? "");
+        setAchievement((log?.yesterday_achievement as any) ?? "");
+        setIsEditingAchievement(false);
+
+        // 前日の「明日の目標」が入力されていた場合のみ表示
+        setYesterdayNote(prevLog?.tomorrow_note?.trim() || null);
 
       } catch (error: any) {
         if (reqId !== reqIdRef.current) return;
@@ -100,11 +126,17 @@ export default function ReviewView({
         }
       }
     })();
-  }, [userId, day, setMsg, setNote, setFulfillment]);
+  }, [userId, day, dataVersion, setMsg, setNote, setFulfillment]);
 
   // ✅ その日完了したもの（表示用）
-  const doneHabits = tasks.filter((t) => t.task_type === "habit" && doneTaskIds.has(t.id));
-  const doneOneoffs = tasks.filter((t) => t.task_type === "oneoff" && doneTaskIds.has(t.id));
+  const doneHabits = sortTasks(
+    tasks.filter((t) => t.task_type === "habit" && doneTaskIds.has(t.id)),
+    sortRule, false,
+  );
+  const doneOneoffs = sortTasks(
+    tasks.filter((t) => t.task_type === "oneoff" && doneTaskIds.has(t.id)),
+    sortRule, prioritizeDue,
+  );
 
   // ✅ 行動（その日のログを表示）
   const actionById = new Map(actions.map((a) => [a.id, a]));
@@ -145,6 +177,8 @@ export default function ReviewView({
         action_ratio: 0,
         balance_factor: 0,
         fulfillment: f,
+        tomorrow_note: tomorrowNote.trim() ? tomorrowNote.trim() : null,
+        yesterday_achievement: (yesterdayNote && achievement) ? achievement : null,
       } as any);
     } catch (error: any) {
       setMsg(error?.message || "保存エラー");
@@ -158,10 +192,36 @@ export default function ReviewView({
     setIsEditingReview(false);
   }
 
+  // --- 達成度の即時保存 ---
+  async function saveAchievement(newAchievement: "done" | "partial" | "failed" | "") {
+    if (!userId || !yesterdayNote) return;
+    const fNum = Number(fulfillment);
+    const f = Number.isFinite(fNum) && fNum >= 1 && fNum <= 100 ? Math.trunc(fNum) : null;
+    try {
+      await sqliteRepo.upsertDailyLog({
+        user_id: userId,
+        day,
+        note: note.trim() ? note.trim() : null,
+        satisfaction: null,
+        task_total: habitsCount + tasksCount,
+        action_total: actionsCount,
+        total_score: habitsVol + tasksVol + actionsVol,
+        task_ratio: 0,
+        action_ratio: 0,
+        balance_factor: 0,
+        fulfillment: f,
+        tomorrow_note: tomorrowNote.trim() ? tomorrowNote.trim() : null,
+        yesterday_achievement: newAchievement || null,
+      } as any);
+    } catch (error: any) {
+      setMsg(error?.message || "保存エラー");
+    }
+  }
+
   // --- UI parts style (Today/Registerと揃える) ---
   const listWrap: React.CSSProperties = {
     display: "grid",
-    gap: 10,
+    gap: 8,
   };
 
   const getItemCardStyle = (accentColor: string): React.CSSProperties => ({
@@ -170,6 +230,7 @@ export default function ReviewView({
     padding: "10px 12px",
     background: accentColor,
     color: "#ffffff",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06)",
     display: "flex",
     justifyContent: "space-between",
     gap: 10,
@@ -196,11 +257,6 @@ export default function ReviewView({
   const smallLabel: React.CSSProperties = {
     fontSize: 12,
     opacity: 0.7,
-  };
-
-  const sectionCardBody: React.CSSProperties = {
-    display: "grid",
-    gap: 10,
   };
 
   const sectionStats: React.CSSProperties = {
@@ -253,13 +309,104 @@ export default function ReviewView({
     lineHeight: 1.4,
   };
 
+  // 達成度ボタンのスタイル
+  const achievementBtn = (val: "done" | "partial" | "failed", label: string, color: string): React.ReactElement => {
+    const selected = achievement === val;
+    return (
+      <button
+        key={val}
+        onClick={() => {
+          const next = selected ? "" : val;
+          setAchievement(next);
+          saveAchievement(next);
+          if (next) setIsEditingAchievement(false);
+        }}
+        style={{
+          flex: 1,
+          padding: "8px 4px",
+          borderRadius: 10,
+          border: selected ? `2px solid ${color}` : "1.5px solid rgba(0,0,0,0.12)",
+          background: selected ? color : "transparent",
+          color: selected ? "#fff" : theme.text,
+          fontWeight: selected ? 700 : 500,
+          fontSize: 13,
+          cursor: "pointer",
+          transition: "all 0.15s",
+        }}
+      >
+        {label}
+      </button>
+    );
+  };
+
   return (
     <>
-      <div style={{ display: "grid", gap: space.xl }}>
+      <div style={{ display: "grid", gap: space.xl, marginTop: 0 }}>
+
+        {/* ── 目標の達成チェック（前日に tomorrow_note がある場合のみ表示） ── */}
+        {yesterdayNote && (
+          <div>
+            <SectionTitle
+              title="目標の達成チェック"
+              isLarge={true}
+              style={{ marginBottom: 8 }}
+              right={
+                achievement && !isEditingAchievement ? (
+                  <IconBtn title="達成度を編集" onClick={() => setIsEditingAchievement(true)}>
+                    <PencilIcon size={18} />
+                  </IconBtn>
+                ) : null
+              }
+            />
+
+            {/* 今日の目標（記録タブと同サイズ・グレー枠の白ボックス） */}
+            <div style={{
+              padding: "10px 14px",
+              borderRadius: 10,
+              border: "1px solid #e2e8f0",
+              background: "#ffffff",
+              display: "grid",
+              gap: 2,
+              marginBottom: 8,
+            }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#1e293b", letterSpacing: 0.5 }}>今日の目標</div>
+              <div style={{ fontSize: 14, lineHeight: 1.5, whiteSpace: "pre-wrap", color: theme.text }}>{yesterdayNote}</div>
+            </div>
+
+            {/* 達成チェック: hasSavedReview に依存せず isEditingAchievement で独立制御 */}
+            <Card style={cardStyle}>
+              {achievement && !isEditingAchievement ? (
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 12, opacity: 0.7 }}>達成度：</span>
+                  <span style={{
+                    padding: "3px 10px",
+                    borderRadius: 999,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    background: achievement === "done" ? theme.habit : achievement === "partial" ? "#f59e0b" : "#ef4444",
+                    color: "#fff",
+                  }}>
+                    {achievement === "done" ? "○ できた" : achievement === "partial" ? "△ 一部" : "× できなかった"}
+                  </span>
+                </div>
+              ) : (
+                <div>
+                  <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>達成度</div>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    {achievementBtn("done",    "○ できた",       theme.habit)}
+                    {achievementBtn("partial", "△ 一部",         "#f59e0b")}
+                    {achievementBtn("failed",  "× できなかった",  "#ef4444")}
+                  </div>
+                </div>
+              )}
+            </Card>
+          </div>
+        )}
+
         {/* ✅ セクション：振り返り */}
         <div>
           <SectionTitle
-            title="振り返り"
+            title="今日の振り返り"
             isLarge={true}
             right={
               hasSavedReview && !isEditingReview ? (
@@ -272,7 +419,7 @@ export default function ReviewView({
           />
 
           {/* ✅ 充実度Card：未登録時＆編集時 / 登録済で出し分け */}
-          <Card style={cardStyle}>
+          <Card data-tutorial="review-content" style={cardStyle}>
             {reviewLoading && <small style={{ opacity: 0.7 }}>読み込み中…</small>}
 
             {/* 登録済＆確認モード */}
@@ -294,6 +441,13 @@ export default function ReviewView({
                   <div style={{ ...confirmLabel, marginBottom: 6 }}>振り返りメモ</div>
                   <div style={noteBox}>{note.trim() ? note : "（メモは未入力です）"}</div>
                 </div>
+
+                {tomorrowNote.trim() && (
+                  <div>
+                    <div style={{ ...confirmLabel, marginBottom: 6 }}>明日の目標</div>
+                    <div style={noteBox}>{tomorrowNote.trim()}</div>
+                  </div>
+                )}
               </div>
             ) : !hasSavedReview && !isEditingReview ? (
               /* ✅ 追加要望11, 12: 未記入時は「振り返りを記入」ボタン（点線枠）のみ表示 */
@@ -363,6 +517,17 @@ export default function ReviewView({
                   />
                 </label>
 
+                <label>
+                  <div style={{ ...confirmLabel, marginBottom: 6 }}>明日の目標（任意）</div>
+                  <textarea
+                    rows={3}
+                    value={tomorrowNote}
+                    onChange={(e) => setTomorrowNote(e.target.value)}
+                    style={{ width: "100%", boxSizing: "border-box" }}
+                    placeholder="例：早起きして読書を30分する"
+                  />
+                </label>
+
                 <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 8 }}>
                   <IconBtn
                     title="キャンセル"
@@ -416,7 +581,7 @@ export default function ReviewView({
 
         {/* ✅ 見出し：実施したこと一覧（SegmentedBarの上） */}
         <div>
-          <SectionTitle title="実施したこと一覧" isLarge={true} style={{ marginBottom: 8 }} />
+          <SectionTitle title="実施したこと一覧" isLarge={true} style={{ marginBottom: 0 }} />
 
           {/* ✅ SegmentedBar */}
           <SegmentedBar
@@ -442,28 +607,23 @@ export default function ReviewView({
               }
               style={{ marginBottom: 8 }}
             />
-            <Card style={cardStyle}>
-              <div style={sectionCardBody}>
-
-                {doneHabits.length === 0 ? (
-                  <p>まだありません</p>
-                ) : (
-                  <div style={listWrap}>
-                    {doneHabits.map((t) => (
-                      <div key={t.id} style={getItemCardStyle(theme.habit)}>
-                        <div style={{ minWidth: 0, width: "100%" }}>
-                          <div style={itemTitle}>{t.title}</div>
-                          <div style={metaLine}>
-                            <PriorityBadge value={(t as any).priority} />
-                            <VolBar value={(t as any).volume} isReverse={true} />
-                          </div>
-                        </div>
+            {doneHabits.length === 0 ? (
+              <p style={{ margin: 0, opacity: 0.5, fontSize: 14 }}>まだありません</p>
+            ) : (
+              <div style={listWrap}>
+                {doneHabits.map((t) => (
+                  <div key={t.id} style={getItemCardStyle(theme.habit)}>
+                    <div style={{ minWidth: 0, width: "100%" }}>
+                      <div style={itemTitle}>{t.title}</div>
+                      <div style={metaLine}>
+                        <PriorityBadge value={(t as any).priority} />
+                        <VolBar value={(t as any).volume} isReverse={true} />
                       </div>
-                    ))}
+                    </div>
                   </div>
-                )}
+                ))}
               </div>
-            </Card>
+            )}
           </div>
         )}
 
@@ -482,36 +642,31 @@ export default function ReviewView({
               }
               style={{ marginBottom: 8 }}
             />
-            <Card style={cardStyle}>
-              <div style={sectionCardBody}>
+            {doneOneoffs.length === 0 ? (
+              <p style={{ margin: 0, opacity: 0.5, fontSize: 14 }}>まだありません</p>
+            ) : (
+              <div style={listWrap}>
+                {doneOneoffs.map((t) => (
+                  <div key={t.id} style={getItemCardStyle(theme.task)}>
+                    <div style={{ minWidth: 0, width: "100%" }}>
+                      <div style={itemTitle}>{t.title}</div>
 
-                {doneOneoffs.length === 0 ? (
-                  <p>まだありません</p>
-                ) : (
-                  <div style={listWrap}>
-                    {doneOneoffs.map((t) => (
-                      <div key={t.id} style={getItemCardStyle(theme.task)}>
-                        <div style={{ minWidth: 0, width: "100%" }}>
-                          <div style={itemTitle}>{t.title}</div>
-
-                          <div style={metaLine}>
-                            <PriorityBadge value={(t as any).priority} />
-                            <VolBar value={(t as any).volume} isReverse={true} />
-                          </div>
-
-                          {t.due_date ? (
-                            <div style={{ ...metaLine, marginTop: 4 }}>
-                              <span style={smallLabel}>期限：</span>
-                              <span style={smallLabel}>{t.due_date}</span>
-                            </div>
-                          ) : null}
-                        </div>
+                      <div style={metaLine}>
+                        <PriorityBadge value={(t as any).priority} />
+                        <VolBar value={(t as any).volume} isReverse={true} />
                       </div>
-                    ))}
+
+                      {t.due_date ? (
+                        <div style={{ ...metaLine, marginTop: 4 }}>
+                          <span style={smallLabel}>期限：</span>
+                          <span style={smallLabel}>{t.due_date}</span>
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
-                )}
+                ))}
               </div>
-            </Card>
+            )}
           </div>
         )}
 
@@ -530,42 +685,37 @@ export default function ReviewView({
               }
               style={{ marginBottom: 8 }}
             />
-            <Card style={cardStyle}>
-              <div style={sectionCardBody}>
+            {doneActionEntries.length === 0 ? (
+              <p style={{ margin: 0, opacity: 0.5, fontSize: 14 }}>まだありません</p>
+            ) : (
+              <div style={listWrap}>
+                {doneActionEntries.map((e: any) => {
+                  const a = actionById.get(e.action_id);
+                  const title = a ? (a.kind) : "（不明）";
 
-                {doneActionEntries.length === 0 ? (
-                  <p>まだありません</p>
-                ) : (
-                  <div style={listWrap}>
-                    {doneActionEntries.map((e: any) => {
-                      const a = actionById.get(e.action_id);
-                      const title = a ? (a.kind) : "（不明）";
-
-                      return (
-                        <div key={e.id} style={getItemCardStyle(theme.action)}>
-                          <div style={{ minWidth: 0, width: "100%" }}>
-                            <div style={itemTitle}>
-                              {title}{" "}
-                              <span style={{ marginLeft: 8 }}>
-                                <CategoryBadge category={a?.category} />
-                              </span>
-                            </div>
-
-                            {e.note ? (
-                              <div style={{ ...smallLabel, marginTop: 6, opacity: 0.9 }}>{e.note}</div>
-                            ) : null}
-
-                            <div style={metaLine}>
-                              <VolBar value={(e as any).volume} isReverse={true} />
-                            </div>
-                          </div>
+                  return (
+                    <div key={e.id} style={getItemCardStyle(theme.action)}>
+                      <div style={{ minWidth: 0, width: "100%" }}>
+                        <div style={itemTitle}>
+                          {title}{" "}
+                          <span style={{ marginLeft: 8 }}>
+                            <CategoryBadge category={a?.category} />
+                          </span>
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
+
+                        {e.note ? (
+                          <div style={{ ...smallLabel, marginTop: 6, opacity: 0.9 }}>{e.note}</div>
+                        ) : null}
+
+                        <div style={metaLine}>
+                          <VolBar value={(e as any).volume} isReverse={true} />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            </Card>
+            )}
           </div>
         )}
       </div>

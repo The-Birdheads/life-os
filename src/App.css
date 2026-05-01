@@ -59,10 +59,40 @@ body {
   }
 }
 
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .animate-fade-in {
   animation: fadeIn 0.2s ease forwards;
 }
 
 .animate-fade-in-up {
   animation: fadeInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes toastSlideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.toast-slide-down {
+  animation: toastSlideDown 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* iOS での入力フォーカス時の自動ズーム防止（inline style より優先させるため !important） */
+input, textarea, select {
+  font-size: 16px !important;
 }

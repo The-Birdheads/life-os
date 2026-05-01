@@ -26,3 +26,8 @@ dist-ssr
 # Appium
 appium.log
 ios/build/
+
+# Environment variables (secret keys)
+.env
+.env.local
+.env.*.local

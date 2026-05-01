@@ -88,6 +88,7 @@ export default function Tabs({ tab, setTab }: Props) {
             <button
               key={it.key}
               type="button"
+              data-tutorial={`tab-${it.key}`}
               aria-current={active ? "page" : undefined}
               onClick={() => setTab(it.key)}
               style={{

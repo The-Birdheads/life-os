@@ -9,9 +9,13 @@ type Props = React.SelectHTMLAttributes<HTMLSelectElement> & {
 export default function Select({ fullWidth = false, style, children, onFocus, onBlur, ...props }: Props) {
     const [focused, setFocused] = useState(false);
 
+    const { width, minWidth, maxWidth, ...restStyle } = style ?? {};
+
     const wrapStyle: React.CSSProperties = {
         position: "relative",
-        width: fullWidth ? "100%" : "auto",
+        width: fullWidth ? "100%" : (width ?? "auto"),
+        minWidth,
+        maxWidth,
         display: "inline-block",
     };
 
@@ -31,7 +35,7 @@ export default function Select({ fullWidth = false, style, children, onFocus, on
             ? `0 0 0 3px ${theme.primary}20, inset 0 1px 2px rgba(0,0,0,0.02)`
             : "inset 0 1px 2px rgba(0,0,0,0.02)",
         cursor: "pointer",
-        ...style,
+        ...restStyle,
     };
 
     const iconStyle: React.CSSProperties = {
