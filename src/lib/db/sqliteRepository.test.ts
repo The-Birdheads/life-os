@@ -65,6 +65,64 @@ describe('SqliteRepository', () => {
         );
     });
 
+    it('persists the in-memory database to the store after a write on iOS (jeep-sqlite) as well as on web', async () => {
+        const { Capacitor } = await import('@capacitor/core');
+        mockRun.mockResolvedValue({ changes: { changes: 1 } });
+        const task = {
+            id: 't1', user_id: 'user-1', title: 'T', task_type: 'habit' as any, due_date: null,
+            is_active: true, is_hidden: false, priority: 1, volume: 1,
+        };
+
+        (Capacitor.getPlatform as any).mockReturnValue('ios');
+        mockSaveToStore.mockClear();
+        await repository.createTask(task);
+        expect(mockSaveToStore).toHaveBeenCalledWith('test-db');
+
+        (Capacitor.getPlatform as any).mockReturnValue('android');
+        mockSaveToStore.mockClear();
+        await repository.createTask({ ...task, id: 't2' });
+        expect(mockSaveToStore).not.toHaveBeenCalled();
+
+        (Capacitor.getPlatform as any).mockReturnValue('web');
+    });
+
+    it('does not fail a write when saving to the store fails', async () => {
+        mockRun.mockResolvedValue({ changes: { changes: 1 } });
+        mockSaveToStore.mockRejectedValueOnce(new Error('idb error'));
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        await expect(repository.createTask({
+            id: 't3', user_id: 'user-1', title: 'T', task_type: 'habit' as any, due_date: null,
+            is_active: true, is_hidden: false, priority: 1, volume: 1,
+        })).resolves.toBeUndefined();
+    });
+
+    it('migrate should also move notification_settings to the new user (or drop the old one if the new user already has settings)', async () => {
+        mockRun.mockResolvedValue({ changes: { changes: 1 } });
+        mockQuery.mockResolvedValue({ values: [] });
+
+        await repository.migrate('old-id', 'new-id');
+        expect(mockRun).toHaveBeenCalledWith(
+            expect.stringContaining('UPDATE notification_settings SET user_id = ? WHERE user_id = ?'),
+            ['new-id', 'old-id']
+        );
+
+        mockRun.mockClear();
+        mockQuery.mockImplementation(async (sql: string) =>
+            sql.includes('FROM notification_settings') ? { values: [{ id: 'settings_new' }] } : { values: [] }
+        );
+
+        await repository.migrate('old-id', 'new-id');
+        expect(mockRun).toHaveBeenCalledWith(
+            expect.stringContaining('DELETE FROM notification_settings WHERE user_id = ?'),
+            ['old-id']
+        );
+        expect(mockRun).not.toHaveBeenCalledWith(
+            expect.stringContaining('UPDATE notification_settings SET user_id'),
+            expect.anything()
+        );
+    });
+
     it('migrate should swap user_id and trigger deduplication', async () => {
         mockRun.mockResolvedValue({ changes: { changes: 1 } });
         mockQuery.mockResolvedValue({ values: [] }); // 重複なしの場合

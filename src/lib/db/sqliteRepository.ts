@@ -13,9 +13,21 @@ export class SqliteRepository implements Repository {
         }
     }
 
+    /**
+     * Web 版 SQLite(jeep-sqlite)は、saveToStore を呼ばない限りメモリ上にしか保持されない。
+     * iOS も jeep-sqlite を使っている(initSqlite.ts の isWebOrIos)ため、web と同様に保存する。
+     * (以前は web のみだったため、iOS では起動時のスナップショット以降の端末内の変更が、
+     *  アプリを終了すると失われていた。ログイン中はクラウドから復元されるが、
+     *  未ログイン・オフライン中の記録は失われる。)
+     * 保存に失敗しても、記録の操作自体は失敗させない。
+     */
     private async save() {
-        if (Capacitor.getPlatform() === "web") {
+        const platform = Capacitor.getPlatform();
+        if (platform !== "web" && platform !== "ios") return;
+        try {
             await sqlite.saveToStore(DB_NAME);
+        } catch (e) {
+            console.warn("[SqliteRepository] saveToStore failed:", e);
         }
     }
 
@@ -447,6 +459,15 @@ export class SqliteRepository implements Repository {
             const tables = ['tasks', 'actions', 'task_entries', 'action_entries', 'daily_logs'];
             for (const table of tables) {
                 await db.run(`UPDATE ${table} SET user_id = ? WHERE user_id = ?`, [newUserId, oldUserId]);
+            }
+
+            // notification_settings(ユーザー設定・通知設定)も付け替える。user_id が UNIQUE のため、
+            // 付け替え先に既にあるときは付け替え先を優先し、古い方は削除する
+            const existingSettings = await db.query(`SELECT id FROM notification_settings WHERE user_id = ?`, [newUserId]);
+            if (existingSettings.values && existingSettings.values.length > 0) {
+                await db.run(`DELETE FROM notification_settings WHERE user_id = ?`, [oldUserId]);
+            } else {
+                await db.run(`UPDATE notification_settings SET user_id = ? WHERE user_id = ?`, [newUserId, oldUserId]);
             }
 
             // 2. Deduplication (Tasks)
