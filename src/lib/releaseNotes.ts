@@ -7,9 +7,21 @@ export type ReleaseNote = {
 };
 
 // ここだけ編集すればOKにする（最上位）
-export const APP_VERSION = "1.3";
+export const APP_VERSION = "1.3.1";
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+    {
+        date: "2026-10-25",
+        version: "1.3.1",
+        items: [
+            "Memory Calendar とアカウントを共通化（同じ Apple / Google アカウントで両方のアプリを利用可能に）",
+            "アカウント削除時、Memory Calendar でも使っているアカウントは Habitas のデータだけを削除するように変更",
+            "Google でログインする際に、使うアカウントを選べるように改善",
+            "バナー広告の表示中に、ヘッダーが縦に広がってしまう不具合を修正",
+            "ログインせずに使っている場合に、記録が端末に保存されないことがある不具合を修正",
+            "アプリの言語設定を日本語に変更",
+        ],
+    },
     {
         date: "2026-04-27",
         version: "1.3",
