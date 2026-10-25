@@ -31,3 +31,6 @@ ios/build/
 .env
 .env.local
 .env.*.local
+
+# データ移行スクリプトの出力(個人情報を含む)
+migrate-identities.sql
