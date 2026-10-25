@@ -567,8 +567,16 @@ export class SqliteRepository implements Repository {
                 const mapKey = (r: any) => table === 'notification_settings' ? r.user_id : r.id;
                 const remoteMap = new Map(remoteData?.map(r => [mapKey(r), r]) || []);
 
+                // 1行の失敗(例: 削除済みタスクを参照する実施記録の外部キー違反)で、
+                // テーブル全体の同期が止まらないよう、行ごとに失敗を数えて続行する
+                let pushFailed = 0;
+                let pullFailed = 0;
+                let firstRowError: string | undefined;
+                const onRowError = (e: any) => { firstRowError ??= e?.message ?? String(e); };
+
                 // A. Local to Remote (Push)
                 for (const local of localData) {
+                    try {
                     const remote = remoteMap.get(mapKey(local));
                     // updated_at が local の方が新しい場合か、リモートに存在しない場合にプッシュ
                     if (!remote || new Date(local.updated_at) > new Date(remote.updated_at)) {
@@ -590,12 +598,17 @@ export class SqliteRepository implements Repository {
                             if (updateError) throw updateError;
                         }
                     }
+                    } catch (rowErr) {
+                        pushFailed++;
+                        onRowError(rowErr);
+                    }
                 }
 
                 // B. Remote to Local (Pull)
                 const { data: latestRemote, error: pullError } = await supabase.from(table).select("*").eq("user_id", userId);
                 if (pullError) throw pullError;
                 for (const remote of latestRemote || []) {
+                    try {
                     // daily_logs / notification_settings は自然キーで照合する
                     let local: { updated_at: string } | undefined;
                     if (table === "daily_logs") {
@@ -693,6 +706,13 @@ export class SqliteRepository implements Repository {
                             }
                         }
                     }
+                    } catch (rowErr) {
+                        pullFailed++;
+                        onRowError(rowErr);
+                    }
+                }
+                if (pushFailed > 0 || pullFailed > 0) {
+                    console.warn(`[sync] ${table} — skipped rows: push ${pushFailed}, pull ${pullFailed} (first error: ${firstRowError})`);
                 }
                 } catch (tableErr: any) {
                     // カラム未追加などのスキーマ不一致エラーはそのテーブルをスキップしてログに残す

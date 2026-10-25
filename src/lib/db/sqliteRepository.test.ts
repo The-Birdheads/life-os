@@ -134,4 +134,35 @@ describe('SqliteRepository', () => {
             ['new-id', 'old-id']
         );
     });
+
+    it('sync keeps pulling the remaining rows when one row fails (e.g. an entry of a deleted task)', async () => {
+        const entries = ['e1', 'e2-of-deleted-task', 'e3'].map((id, i) => ({
+            id, user_id: 'user-1', day: `2026-10-0${i + 1}`, task_id: `task-${id}`, status: 'done', updated_at: '2026-10-24T00:00:00Z',
+        }));
+        const from = vi.fn((table: string) => ({
+            select: () => ({ eq: async () => ({ data: table === 'task_entries' ? entries : [], error: null }) }),
+        }));
+        vi.doMock('../supabase', () => ({
+            supabase: { auth: { getSession: async () => ({ data: { session: { user: { id: 'user-1' } } } }) }, from },
+        }));
+        mockQuery.mockResolvedValue({ values: [] }); // 端末内は空(新しい端末・初回ログイン)
+        mockRun.mockImplementation(async (sql: string, params: unknown[]) => {
+            if (sql.includes('INSERT INTO task_entries') && params[0] === 'e2-of-deleted-task') {
+                throw new Error('FOREIGN KEY constraint failed');
+            }
+            return { changes: { changes: 1 } };
+        });
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        const result = await repository.sync('user-1');
+
+        expect(result.success).toBe(true);
+        const insertedIds = mockRun.mock.calls
+            .filter(([sql]) => String(sql).includes('INSERT INTO task_entries'))
+            .map(([, params]) => (params as unknown[])[0]);
+        expect(insertedIds).toEqual(['e1', 'e2-of-deleted-task', 'e3']);
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('task_entries — skipped rows: push 0, pull 1'));
+        warn.mockRestore();
+        vi.doUnmock('../supabase');
+    });
 });
