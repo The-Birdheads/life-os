@@ -431,6 +431,8 @@ export default function App() {
         options: {
           redirectTo: 'com.morikuma.habitas://login-callback',
           skipBrowserRedirect: true,
+          // 前回の Google アカウントで自動的にログインせず、毎回アカウントを選べるようにする
+          queryParams: { prompt: 'select_account' },
         }
       });
       if (error) { setMsg(`エラー: ${error.message}`); return; }
@@ -439,7 +441,7 @@ export default function App() {
       // Web: 通常のリダイレクト
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo: window.location.origin }
+        options: { redirectTo: window.location.origin, queryParams: { prompt: 'select_account' } }
       });
       if (error) setMsg(`エラー: ${error.message}`);
     }
@@ -801,6 +803,7 @@ export default function App() {
           loadTodayEntries={loadTodayEntries}
           loadBase={loadBase}
           onAfterWrite={webAutoSync}
+          adHeight={adHeight}
         />
       )}
 

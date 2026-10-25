@@ -146,7 +146,7 @@ export default function NotificationSettingsModal({ isOpen, onClose, userId, set
         transition: "opacity 0.2s ease",
     };
     const modalStyle: React.CSSProperties = {
-        width: "100%", maxWidth: 600, maxHeight: `calc(100dvh - 24px - ${adHeight}px)`,
+        width: "100%", maxWidth: 600, maxHeight: `calc(100dvh - max(env(safe-area-inset-top, 0px), 24px) - ${adHeight}px)`,
         background: "var(--bg)", borderTopLeftRadius: 20, borderTopRightRadius: 20,
         display: "flex", flexDirection: "column",
         boxShadow: "0 -4px 20px rgba(0,0,0,0.15)",

@@ -194,10 +194,12 @@ export default function AppShell({
             WebkitBackdropFilter: "blur(12px) saturate(180%)",
             borderBottom: `1px solid rgba(255,255,255,0.05)`, /* ダーク用ボーダー */
             boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)", /* 落ちる影 */
-            paddingTop: `calc(max(env(safe-area-inset-top, 0px), 32px) + ${adHeight}px)`, /* バナー広告 + ノッチ分を確保 */
+            /* ヘッダーは画面最上部から敷き、バナー広告 + ノッチ分は padding で確保する
+               (top もずらすと広告の高さを二重に空けてしまい、ヘッダーが縦に広がる) */
+            paddingTop: `calc(max(env(safe-area-inset-top, 0px), 32px) + ${adHeight}px)`,
             color: theme.surfaceDarkText, /* テキストを白系に */
-            top: adHeight > 0 ? `calc(env(safe-area-inset-top, 0px) + ${adHeight}px)` : 0,
-            transition: "top 0.2s ease, padding-top 0.2s ease",
+            top: 0,
+            transition: "padding-top 0.2s ease",
           }}
         >
           <div style={{
@@ -559,13 +561,17 @@ export default function AppShell({
               justifyContent: "center",
               zIndex: 100,
               animation: "fadeIn 0.2s ease",
+              /* 画面上部のバナー広告・ノッチに重ならないよう、上下に余白を確保 */
+              paddingTop: `calc(max(env(safe-area-inset-top, 0px), 24px) + ${adHeight}px + 12px)`,
+              paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)",
+              boxSizing: "border-box",
             }}
           >
             <div
               onClick={(e) => e.stopPropagation()}
               style={{
                 width: "min(92vw, 720px)",
-                maxHeight: "80vh",
+                maxHeight: "min(80vh, 100%)",
                 overflow: "auto",
                 borderRadius: "20px",
                 background: theme.card,
@@ -603,12 +609,18 @@ export default function AppShell({
             justifyContent: "center",
             zIndex: 100,
             animation: "fadeIn 0.2s ease",
+            /* 画面上部のバナー広告・ノッチに重ならないよう、上下に余白を確保 */
+            paddingTop: `calc(max(env(safe-area-inset-top, 0px), 24px) + ${adHeight}px + 12px)`,
+            paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)",
+            boxSizing: "border-box",
           }}
         >
           <div
             onClick={(e) => e.stopPropagation()}
             style={{
               width: "min(92vw, 360px)",
+              maxHeight: "100%",
+              overflow: "auto",
               borderRadius: "20px",
               background: theme.card,
               boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)",
