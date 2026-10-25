@@ -7,4 +7,15 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error("Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY");
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+/**
+ * Habitas のテーブルを置いている Postgres スキーマ。
+ * Memory Calendar と Supabase プロジェクト(= ログイン基盤)を共有しており、
+ * Memory Calendar の public スキーマと混ざらないよう habitas スキーマに分けている。
+ * `.from()` はこのスキーマを向く。public スキーマの RPC は `supabase.schema("public").rpc()` で呼ぶ
+ * (src/lib/accountApi.ts)。
+ */
+export const HABITAS_SCHEMA = "habitas";
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  db: { schema: HABITAS_SCHEMA },
+});

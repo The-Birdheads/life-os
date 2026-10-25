@@ -9,6 +9,8 @@ import DangerBtn from "../components/ui/DangerBtn";
 import SecondaryBtn from "../components/ui/SecondaryBtn";
 import { theme } from "../lib/ui/theme";
 import { todayJST } from "../lib/day";
+import { deleteConfirmMessage, deleteConfirmVariant } from "../lib/accountApi";
+import type { AppId, DeleteConfirmVariant } from "../lib/accountApi";
 
 
 type Tab = "today" | "review" | "week";
@@ -42,6 +44,8 @@ type Props = {
   onOpenOnboarding?: () => void;
   onOpenHabitTutorial?: () => void;
   onDeleteAccount?: () => Promise<void>;
+  /** アカウントが使っているアプリの一覧(削除確認の文言の出し分け用)。取得できなければ null */
+  onFetchAccountUsage?: () => Promise<AppId[] | null>;
   isDeleting?: boolean;
   isSyncing?: boolean;
 };
@@ -70,6 +74,7 @@ export default function AppShell({
   onOpenOnboarding,
   onOpenHabitTutorial,
   onDeleteAccount,
+  onFetchAccountUsage,
   isDeleting,
   isSyncing,
 }: Props) {
@@ -83,6 +88,7 @@ export default function AppShell({
 
   const [releaseOpen, setReleaseOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteVariant, setDeleteVariant] = useState<DeleteConfirmVariant>("unknown");
 
   const bottomNavHeight = 64;
   const topBarHeight = 56;
@@ -436,7 +442,13 @@ export default function AppShell({
                                   ログアウト
                                 </PrimaryBtn>
                                 {onDeleteAccount && (
-                                  <DangerBtn fullWidth onClick={() => { setMenuOpen(false); setDeleteConfirmOpen(true); }} style={btnL}>
+                                  <DangerBtn fullWidth onClick={async () => {
+                                    setMenuOpen(false);
+                                    // 他のアプリも使っているかで、確認画面の文言を出し分ける(取得失敗時は汎用の文言)
+                                    const usage = onFetchAccountUsage ? await onFetchAccountUsage() : null;
+                                    setDeleteVariant(deleteConfirmVariant(usage));
+                                    setDeleteConfirmOpen(true);
+                                  }} style={btnL}>
                                     アカウント削除
                                   </DangerBtn>
                                 )}
@@ -608,7 +620,7 @@ export default function AppShell({
               アカウント削除の確認
             </div>
             <div style={{ fontSize: 14, lineHeight: 1.6, marginBottom: 20 }}>
-              登録済みのすべてのデータが削除され、復元することはできませんがよろしいですか？
+              {deleteConfirmMessage(deleteVariant)}
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <DangerBtn fullWidth onClick={async () => {

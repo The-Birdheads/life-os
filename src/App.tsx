@@ -25,6 +25,9 @@ import { supabase } from "./lib/supabase";
 import { scheduleNotifications, setupNotificationListeners, cancelAllNotifications, requestNotificationPermissions } from "./lib/notifications";
 import { syncWidgetData, processPendingCompletions } from "./lib/widgetData";
 import { sqliteRepo } from "./lib/db/instance";
+import { registerAppUse, getAccountUsage, deleteAppData, deleteDoneMessage, revokeAppleAuthorizationIfNeeded } from "./lib/accountApi";
+import { adoptLegacyUserData, clearLegacySession } from "./lib/legacyAuthMigration";
+import LegacyAuthNotice from "./components/features/notice/LegacyAuthNotice";
 import {
   cardStyle,
   layoutStyle,
@@ -50,6 +53,12 @@ export default function App() {
   const [noAds, setNoAds] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  // 旧プロジェクトからの移行(ログイン共通化)のお知らせ。更新前にログインしていた端末にだけ出す
+  const [legacyNoticeOpen, setLegacyNoticeOpen] = useState(false);
+  const legacyAdoptedRef = useRef(false);
+  const registeredUidRef = useRef<string | null>(null);
+  // アカウント削除中は、サインアウトに伴う「ログアウトしました」の表示を出さない(削除完了の表示を優先)
+  const deletingRef = useRef(false);
 
   useEffect(() => {
     if (!msg) return;
@@ -243,12 +252,19 @@ export default function App() {
         if (initialSession?.user) {
           initialId = initialSession.user.id;
           setUserEmail(initialSession.user.email ?? "");
+          clearLegacySession(); // 新プロジェクトにログイン済み。旧セッションの情報は不要
           console.log("[App] Initial ID from Supabase session:", initialId);
           // no_ads フラグをフェッチ（非同期・ノンブロッキング）
           fetchNoAds(initialId);
         } else {
           initialId = await getLocalUserId();
           setUserEmail("offline-user@local");
+          // 更新前にログインしていた端末なら、端末内データをローカルIDへ付け替えて、再ログインを案内する
+          const legacy = await adoptLegacyUserData(sqliteRepo, initialId);
+          if (legacy.hadLegacySession) {
+            legacyAdoptedRef.current = legacy.adopted;
+            setLegacyNoticeOpen(true);
+          }
           console.log("[App] Initial ID from local storage:", initialId);
         }
 
@@ -270,6 +286,11 @@ export default function App() {
           if (session?.user && newUserId) {
             setUserEmail(session.user.email ?? "");
             fetchNoAds(newUserId);
+            // Memory Calendar と共通のアカウントで、Habitas を使っていることを記録する(冪等・失敗は無視)
+            if (registeredUidRef.current !== newUserId) {
+              registeredUidRef.current = newUserId;
+              void registerAppUse();
+            }
 
             const doSync = async (uid: string, delayMs = 0, silent = false) => {
               if (delayMs > 0) {
@@ -309,7 +330,14 @@ export default function App() {
               if (oldUserId && oldUserId.includes("-")) {
                 console.log("[App] Migrating data from local to new cloud user.");
                 setMsg("データを統合中...");
-                await sqliteRepo.migrate(oldUserId, newUserId);
+                try {
+                  await sqliteRepo.migrate(oldUserId, newUserId);
+                  console.log("[App] Migration done.");
+                } catch (e: any) {
+                  // 統合に失敗しても、ログインと同期は続ける(ここで例外を出すと、同期まで進めずに止まってしまう)
+                  console.error("[App] Migration error (continuing with sync):", e?.message ?? e);
+                  setMsg("データの統合に失敗しました。同期を続けます");
+                }
               }
               prevUserIdRef.current = newUserId;
               setUserId(newUserId);
@@ -343,7 +371,7 @@ export default function App() {
               prevUserIdRef.current = localId;
               setUserId(localId);
               setUserEmail("offline-user@local");
-              setMsg("ログアウトしました");
+              if (!deletingRef.current) setMsg("ログアウトしました");
             } else {
               console.log("[App] Already using local ID after sign out.");
             }
@@ -454,23 +482,42 @@ export default function App() {
 
   async function signOut() {
     const { supabase } = await import("./lib/supabase");
-    await supabase.auth.signOut();
+    // Memory Calendar と同じアカウントを共有しているため、この端末だけログアウトする
+    // (既定の global だと、全端末・Memory Calendar のログインまで外れる)
+    await supabase.auth.signOut({ scope: "local" });
   }
 
   async function deleteAccount() {
     if (!userId) return;
+
+    // Apple でログインした人は、削除の前に Apple のトークンも失効させる(Apple の確認画面が出る)。
+    // 確認画面を閉じたら削除を中止する。失効に失敗しても削除は続行する(削除できなくなるのを避ける)。
+    // サーバー側の削除より前に行う(失効の Edge Function はログイン中のユーザーのJWTが必要なため)
+    const revocation = await revokeAppleAuthorizationIfNeeded();
+    if (revocation === "cancelled") {
+      setMsg("アカウントの削除を中止しました");
+      return;
+    }
+
     setIsDeleting(true);
+    deletingRef.current = true;
     try {
+      // サーバー側を先に削除する(失敗したら端末内のデータは消さない)。
+      // 他のアプリ(Memory Calendar)も使っていなければアカウントごと削除される
+      const accountDeleted = await deleteAppData();
       await cancelAllNotifications();
       await sqliteRepo.deleteAllUserData(userId);
       const { supabase } = await import("./lib/supabase");
-      const { error } = await supabase.rpc('delete_user');
-      if (error) throw error;
-      await supabase.auth.signOut();
+      // アカウントが残る場合に他のアプリのログインを巻き込まないよう、この端末だけログアウトする
+      await supabase.auth.signOut({ scope: "local" });
+      setMsg(deleteDoneMessage(accountDeleted, revocation));
       setIsDeleting(false);
     } catch (err: any) {
       setMsg(`削除エラー: ${err.message}`);
       setIsDeleting(false);
+    } finally {
+      // SIGNED_OUT のハンドラは非同期で後から動くため、少し待ってから戻す
+      setTimeout(() => { deletingRef.current = false; }, 3000);
     }
   }
 
@@ -714,6 +761,7 @@ export default function App() {
       userEmail={userEmail}
       onSignOut={signOut}
       onDeleteAccount={deleteAccount}
+      onFetchAccountUsage={getAccountUsage}
       isDeleting={isDeleting}
       isSyncing={isSyncing}
       msg={msg}
@@ -835,6 +883,15 @@ export default function App() {
       {!noAds && <BannerAd onStatusChange={setAdHeight} />}
     </AppShell>
 
+    <LegacyAuthNotice
+      isOpen={legacyNoticeOpen}
+      onClose={() => {
+        setLegacyNoticeOpen(false);
+        // 付け替えに成功していれば、旧セッションの情報を消してお知らせを繰り返さない
+        // (失敗していれば残して、次回起動でやり直す)
+        if (legacyAdoptedRef.current) clearLegacySession();
+      }}
+    />
     <SpotlightTutorial isOpen={onboardingOpen} onClose={handleOnboardingClose} onSetTab={setTab} />
     <HabitTutorial
       isOpen={habTutOpen}
