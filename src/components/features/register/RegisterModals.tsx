@@ -18,6 +18,11 @@ import Select from "../../ui/Select";
 import { PlusIcon, CloseIcon, EyeIcon, EyeOffIcon, MemoIcon, BellIcon } from "../../ui/Icon";
 import ToggleSwitch from "../../ui/ToggleSwitch";
 import { checkOrRequestNotifPermission } from "../../../lib/notifications";
+import FrequencyPicker from "./FrequencyPicker";
+import { changeFrequencyPatch, currentFrequency, frequencyLabel, isValidFrequency, type Frequency } from "../../../lib/mandala/frequency";
+import { todayJST } from "../../../lib/day";
+
+const DAILY: Frequency = { kind: "daily", count: null, days: null };
 
 type SubTab = "shown" | "hidden";
 const subTabItems = [
@@ -60,8 +65,13 @@ export default function RegisterModals({
     const [categoryModalOpen, setCategoryModalOpen] = useState(false);
 
     // --- DB Helpers ---
-    async function addTask(form: { title: string; task_type: "habit" | "oneoff"; priority: number; volume: number; due_date: string | null; is_hidden: boolean; memo?: string | null; remind_on?: boolean; remind_hour?: number; remind_minute?: number; }) {
+    async function addTask(form: { title: string; task_type: "habit" | "oneoff"; priority: number; volume: number; due_date: string | null; is_hidden: boolean; memo?: string | null; remind_on?: boolean; remind_hour?: number; remind_minute?: number; frequency?: Frequency; }) {
+        const freq = form.task_type === "habit" && form.frequency ? form.frequency : DAILY;
         await sqliteRepo.createTask({
+            frequency_kind: freq.kind,
+            frequency_count: freq.kind === "weekly_count" ? freq.count : null,
+            frequency_days: freq.kind === "weekdays" ? freq.days : null,
+            frequency_history: [],
             id: "", // auto-generated inside createTask
             user_id: userId,
             title: form.title,
@@ -288,6 +298,7 @@ function TaskListModal({
     const [newRemindOn, setNewRemindOn] = useState(false);
     const [newRemindHour, setNewRemindHour] = useState(8);
     const [newRemindMinute, setNewRemindMinute] = useState(0);
+    const [newFreq, setNewFreq] = useState<Frequency>(DAILY);
 
     const shownTasks = tasks.filter((t) => t.task_type === type);
     const baseList = shownTasks.filter((t) => {
@@ -341,10 +352,12 @@ function TaskListModal({
                                         remind_on: type === "habit" ? newRemindOn : false,
                                         remind_hour: newRemindHour,
                                         remind_minute: newRemindMinute,
+                                        frequency: newFreq,
                                     });
                                     setNewTitle(""); setDueDate(""); setPriority(3); setVolume(5);
                                     setNewMemo(""); setShowNewMemo(false);
                                     setNewRemindOn(false); setNewRemindHour(8); setNewRemindMinute(0);
+                                    setNewFreq(DAILY);
                                     setAdding(false);
                                     setMsg("追加しました。");
                                 } catch (err: any) {
@@ -389,6 +402,7 @@ function TaskListModal({
                                     ボリューム（1-10）: <b>{volume}{volumeUnit !== "none" ? ` (${formatVolumeLabel(volume, volumeUnit)})` : ""}</b>
                                     <Slider min="1" max="10" step="1" value={volume} onChange={(e) => setVolume(Number(e.target.value))} fullWidth />
                                 </label>
+                                {type === "habit" && <FrequencyPicker value={newFreq} onChange={setNewFreq} />}
                                 {type === "habit" && (
                                     <div data-tutorial="habit-remind" style={{ display: "grid", gap: 8 }}>
                                         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -439,7 +453,7 @@ function TaskListModal({
                                     </div>
                                 )}
                                 <div style={{ display: "flex", gap: 8 }}>
-                                    <PrimaryBtn type="submit" disabled={!newTitle.trim()}>追加</PrimaryBtn>
+                                    <PrimaryBtn type="submit" disabled={!newTitle.trim() || (type === "habit" && !isValidFrequency(newFreq))}>追加</PrimaryBtn>
                                     <SecondaryBtn onClick={() => setAdding(false)}>キャンセル</SecondaryBtn>
                                 </div>
                             </form>
@@ -513,6 +527,9 @@ function TaskRow({
                 <div style={{ opacity: 0.75, display: "flex", alignItems: "center", gap: 8 }}>
                     <PriorityBadge value={(task as any).priority} />
                     <VolBar value={(task as any).volume} />
+                    {type === "habit" && task.frequency_kind && task.frequency_kind !== "daily" && (
+                        <span style={{ fontSize: 12, fontWeight: 600 }}>{frequencyLabel(currentFrequency(task))}</span>
+                    )}
                 </div>
                 {task.due_date && <div style={{ fontSize: 12, opacity: 0.7 }}>期限：{task.due_date}</div>}
             </div>
@@ -559,11 +576,14 @@ function TaskEditModal({
     const [tRemindOn, setTRemindOn] = useState(item.remind_on ?? false);
     const [tRemindHour, setTRemindHour] = useState(item.remind_hour ?? 8);
     const [tRemindMinute, setTRemindMinute] = useState(item.remind_minute ?? 0);
+    const [tFreq, setTFreq] = useState<Frequency>(currentFrequency(item));
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
         setMsg("");
         try {
+            // 頻度を変えたときは、変える前の頻度を昨日までの履歴に残す(今日から新しい頻度で数える)
+            const freqPatch = type === "habit" ? changeFrequencyPatch(item, tFreq, todayJST()) : null;
             await updateTask(item.id, {
                 title: tTitle.trim() || item.title,
                 priority: tPriority, volume: tVolume,
@@ -572,6 +592,7 @@ function TaskEditModal({
                     : null,
                 memo: tMemo.trim() || null,
                 ...(type === "habit" ? { remind_on: tRemindOn, remind_hour: tRemindHour, remind_minute: tRemindMinute } : {}),
+                ...(freqPatch ?? {}),
             } as any);
             setEditingItem(null);
             setMsg("更新しました。");
@@ -651,6 +672,7 @@ function TaskEditModal({
                             ボリューム（1-10）: <b>{tVolume}{volumeUnit !== "none" ? ` (${formatVolumeLabel(tVolume, volumeUnit)})` : ""}</b>
                             <Slider min="1" max="10" step="1" value={tVolume} onChange={(e) => setTVolume(Number(e.target.value))} fullWidth />
                         </label>
+                        {type === "habit" && <FrequencyPicker value={tFreq} onChange={setTFreq} />}
                         {type === "habit" && (
                             <div style={{ display: "grid", gap: 8 }}>
                                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -703,7 +725,7 @@ function TaskEditModal({
 
                         <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
                             <div style={{ flex: 1 }}>
-                                <PrimaryBtn type="submit" fullWidth>保存</PrimaryBtn>
+                                <PrimaryBtn type="submit" fullWidth disabled={type === "habit" && !isValidFrequency(tFreq)}>保存</PrimaryBtn>
                             </div>
                             <div style={{ flex: 1 }}>
                                 <SecondaryBtn type="button" onClick={() => setEditingItem(null)} fullWidth>キャンセル</SecondaryBtn>

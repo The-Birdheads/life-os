@@ -1,5 +1,10 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import type { Action, Task } from "../lib/types";
+import FrequencyPicker from "../components/features/register/FrequencyPicker";
+import { changeFrequencyPatch, currentFrequency, frequencyAt, frequencyLabel, isScheduledOn, isValidFrequency, type Frequency } from "../lib/mandala/frequency";
+import { doneDaysByTask, weekCountStatus } from "../lib/mandala/progress";
+import { weekStart } from "../lib/mandala/dates";
+import { todayJST } from "../lib/day";
 import { sqliteRepo } from "../lib/db/instance";
 import { useUserSettings } from "../lib/context/UserSettingsContext";
 import { sortTasks } from "../lib/sortTasks";
@@ -94,10 +99,40 @@ export default function TodayView({
      */
     const shouldShowHabitInToday = (t: Task) => {
         const hidden = !!(t as any).is_hidden;
+        // 曜日指定で予定のない日は出さない(完了にした記録があれば出す)
+        if (!isScheduledOn(frequencyAt(t, day), day)) return doneTaskIds.has(t.id);
         if (!hidden) return true;
 
         // 非表示習慣は選択中の日付に完了している場合のみ表示
         return doneTaskIds.has(t.id);
+    };
+
+    // 曜日指定で、選択中の日に予定のない習慣(記録タブの下に名前だけ出す)
+    const offDayHabits = activeHabits.filter(
+        (t) => !t.is_hidden && !isScheduledOn(frequencyAt(t, day), day) && !doneTaskIds.has(t.id)
+    );
+
+    // 週n回の習慣の「今週 n/m回」のため、選択中の日を含む週(月曜〜選択中の日)の完了日
+    const [weekDoneDays, setWeekDoneDays] = useState<Map<string, Set<string>>>(new Map());
+    useEffect(() => {
+        let cancelled = false;
+        sqliteRepo.getTaskEntriesBetween(userId, weekStart(day), day).then((entries) => {
+            if (!cancelled) setWeekDoneDays(doneDaysByTask(entries));
+        }).catch(() => { /* 表示だけなので失敗は無視 */ });
+        return () => { cancelled = true; };
+    }, [userId, day, doneTaskIds]);
+
+    const habitFrequencyNote = (t: Task): string | null => {
+        const freq = frequencyAt(t, day);
+        if (freq.kind === "weekly_count") {
+            // チェックは保存より先に画面へ反映されるため、選択中の日は画面の状態(doneTaskIds)を使う
+            const doneDays = new Set(weekDoneDays.get(t.id));
+            if (doneTaskIds.has(t.id)) doneDays.add(day); else doneDays.delete(day);
+            const { done, target } = weekCountStatus(t, doneDays, day);
+            return `${frequencyLabel(freq)} ・ 今週 ${done}/${target}回${done >= target ? "（達成）" : ""}`;
+        }
+        if (freq.kind === "weekdays") return frequencyLabel(freq);
+        return null;
     };
 
     /**
@@ -285,6 +320,7 @@ export default function TodayView({
         const [remindOn, setRemindOn] = useState(item.remind_on ?? false);
         const [remindHour, setRemindHour] = useState(item.remind_hour ?? 8);
         const [remindMinute, setRemindMinute] = useState(item.remind_minute ?? 0);
+        const [freq, setFreq] = useState<Frequency>(type === "habit" ? currentFrequency(item) : { kind: "daily", count: null, days: null });
 
         const [actionId, setActionId] = useState(item.action_id || "");
         const [note, setNote] = useState(item.note || "");
@@ -329,6 +365,8 @@ export default function TodayView({
                                         : null,
                         memo: memo.trim() || null,
                         ...(type === "habit" ? { remind_on: remindOn, remind_hour: remindHour, remind_minute: remindMinute } : {}),
+                        // 頻度を変えたときは、変える前の頻度を昨日までの履歴に残す
+                        ...(type === "habit" ? changeFrequencyPatch(item, freq, todayJST()) ?? {} : {}),
                     } as any);
                     await loadBase();
                     window.dispatchEvent(new CustomEvent('lifeos:scheduleNotifications'));
@@ -421,6 +459,7 @@ export default function TodayView({
                                     ボリューム（1-10）: <b>{volume}</b>
                                     <Slider min="1" max="10" step="1" value={volume} onChange={(e) => setVolume(Number(e.target.value))} fullWidth />
                                 </label>
+                                {type === "habit" && <FrequencyPicker value={freq} onChange={setFreq} />}
                                 {type === "habit" && (
                                     <div style={{ display: "grid", gap: 8 }}>
                                         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -505,7 +544,7 @@ export default function TodayView({
 
                         <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
                             <div style={{ flex: 1 }}>
-                                <PrimaryBtn type="submit" fullWidth>保存</PrimaryBtn>
+                                <PrimaryBtn type="submit" fullWidth disabled={type === "habit" && !isValidFrequency(freq)}>保存</PrimaryBtn>
                             </div>
                             <div style={{ flex: 1 }}>
                                 <SecondaryBtn type="button" onClick={() => setEditingItem(null)} fullWidth>キャンセル</SecondaryBtn>
@@ -625,12 +664,20 @@ export default function TodayView({
                                                                 <small style={{ opacity: 0.6 }}>（非表示・当日完了のため表示）</small>
                                                             ) : null}
                                                         </div>
+                                                        {habitFrequencyNote(t) && (
+                                                            <div style={{ fontSize: 12, opacity: checked ? 0.85 : 0.7 }}>{habitFrequencyNote(t)}</div>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </li>
                                         );
                                     })}
                                 </ul>
+                        )}
+                        {offDayHabits.length > 0 && (
+                            <p style={{ margin: "8px 0 0", fontSize: 12, opacity: 0.7 }}>
+                                この日は予定のない習慣：{offDayHabits.map((t) => `${t.title}（${frequencyLabel(frequencyAt(t, day))}）`).join("、")}
+                            </p>
                         )}
                     </div>
                 )}

@@ -2,6 +2,7 @@ import { Capacitor } from "@capacitor/core";
 import { Preferences } from "@capacitor/preferences";
 import type { Task } from "./types";
 import { todayJST } from "./day";
+import { frequencyAt, isScheduledOn } from "./mandala/frequency";
 
 const WIDGET_DATA_KEY    = "widget_data";
 const WIDGET_PENDING_KEY = "widget_pending";
@@ -21,9 +22,9 @@ export async function syncWidgetData(
   try {
     const today = todayJST();
 
-    // 習慣: 優先度が高い順（数値が小さいほど高優先度）
+    // 習慣: 今日予定のあるもの(曜日指定)を、優先度が高い順（数値が小さいほど高優先度）
     const habits = tasks
-      .filter((t) => t.task_type === "habit" && !t.is_hidden && t.is_active)
+      .filter((t) => t.task_type === "habit" && !t.is_hidden && t.is_active && !t.ended_at && isScheduledOn(frequencyAt(t, today), today))
       .sort((a, b) => a.priority - b.priority)
       .slice(0, 10)
       .map((t) => ({

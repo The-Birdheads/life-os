@@ -5,6 +5,7 @@ import { todayJST } from './day';
 import { addDaysJST } from './dayNav';
 import { Capacitor } from '@capacitor/core';
 import type { Task } from './types';
+import { frequencyAt, isScheduledOn } from './mandala/frequency';
 
 export async function cancelAllNotifications() {
     if (Capacitor.getPlatform() === 'web') return;
@@ -72,8 +73,8 @@ export async function scheduleNotifications(userId: string) {
         const doneTodaySet = new Set(todayHabitEntries.filter(e => e.status === 'done').map(e => e.task_id));
 
         // --- 4. Per-Habit Reminders (notification_settings 不要) ---
-        const habitsList = tasks.filter(t => t.task_type === 'habit');
-        await schedulePerHabitReminders(habitsList, doneTodaySet);
+        const habitsList = tasks.filter(t => t.task_type === 'habit' && !t.ended_at);
+        await schedulePerHabitReminders(habitsList, doneTodaySet, todayDate);
 
         // グローバル通知設定が未作成の場合はデフォルト値を使用
         const settings = await sqliteRepo.getNotificationSettings(userId) ?? {
@@ -92,7 +93,11 @@ export async function scheduleNotifications(userId: string) {
         // --- 1. Habit Reminder ---
         if (settings.habit_remind_on) {
             try {
-                const habits = tasks.filter(t => t.task_type === 'habit' && !t.is_hidden && t.is_active);
+                // 曜日指定で今日予定のない習慣・終了した習慣は数えない
+                const habits = tasks.filter(t =>
+                    t.task_type === 'habit' && !t.is_hidden && t.is_active && !t.ended_at &&
+                    isScheduledOn(frequencyAt(t, todayDate), todayDate)
+                );
                 const uncompletedHabits = habits.filter(h => !doneTodaySet.has(h.id)).length;
                 const hour = settings.habit_remind_hour ?? 18;
                 const minute = settings.habit_remind_minute ?? 0;
@@ -179,7 +184,7 @@ function habitIdToNotifBase(taskId: string): number {
     return 10000 + (hash % 1285) * 7;
 }
 
-async function schedulePerHabitReminders(habits: Task[], doneTodaySet: Set<string>) {
+async function schedulePerHabitReminders(habits: Task[], doneTodaySet: Set<string>, todayDate: string) {
     const remindHabits = habits.filter(h => h.remind_on && !h.is_hidden && h.is_active);
     if (remindHabits.length === 0) return;
 
@@ -194,6 +199,8 @@ async function schedulePerHabitReminders(habits: Task[], doneTodaySet: Set<strin
         for (let i = 0; i < 7; i++) {
             // Day 0: skip if already done today
             if (i === 0 && doneTodaySet.has(habit.id)) continue;
+            // 曜日指定で予定のない日は通知しない
+            if (!isScheduledOn(frequencyAt(habit, addDaysJST(todayDate, i)), addDaysJST(todayDate, i))) continue;
 
             const scheduledTime = new Date();
             scheduledTime.setDate(scheduledTime.getDate() + i);
