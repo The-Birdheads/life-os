@@ -165,4 +165,36 @@ describe('SqliteRepository', () => {
         warn.mockRestore();
         vi.doUnmock('../supabase');
     });
+
+    it('sync pushes mandala charts before tasks, with JSON columns as JSON', async () => {
+        const order: string[] = [];
+        const upserts: Record<string, any[]> = {};
+        const from = vi.fn((table: string) => ({
+            select: () => ({ eq: async () => ({ data: [], error: null }) }),
+            upsert: async (row: any) => { order.push(table); (upserts[table] ??= []).push(row); return { error: null }; },
+            insert: async (row: any) => { order.push(table); (upserts[table] ??= []).push(row); return { error: null }; },
+        }));
+        vi.doMock('../supabase', () => ({
+            supabase: { auth: { getSession: async () => ({ data: { session: { user: { id: 'user-1' } } } }) }, from },
+        }));
+        const localRows: Record<string, any[]> = {
+            mandala_charts: [{ id: 'c1', user_id: 'user-1', title: '健康', status: 'active', updated_at: '2026-11-01T00:00:00Z' }],
+            mandala_cells: [{ id: 'cell1', user_id: 'user-1', chart_id: 'c1', element_index: 0, cell_index: 0, text: '23時に寝る', paused_periods: '[{"from":"2026-10-01","to":null}]', updated_at: '2026-11-01T00:00:00Z' }],
+            tasks: [{ id: 't1', user_id: 'user-1', title: '23時に布団に入る', task_type: 'habit', frequency_kind: 'weekly_count', frequency_count: 2, frequency_history: '[]', mandala_cell_id: 'cell1', updated_at: '2026-11-01T00:00:00Z' }],
+        };
+        mockQuery.mockImplementation(async (sql: string) => {
+            const m = /FROM (\w+) WHERE user_id = \?$/.exec(sql.trim());
+            return { values: m ? (localRows[m[1]] ?? []) : [] };
+        });
+        mockRun.mockResolvedValue({ changes: { changes: 1 } });
+
+        const result = await repository.sync('user-1');
+
+        expect(result.success).toBe(true);
+        expect(order.indexOf('mandala_charts')).toBeLessThan(order.indexOf('mandala_cells'));
+        expect(order.indexOf('mandala_cells')).toBeLessThan(order.indexOf('tasks'));
+        expect(upserts.mandala_cells[0].paused_periods).toEqual([{ from: '2026-10-01', to: null }]);
+        expect(upserts.tasks[0].frequency_history).toEqual([]);
+        vi.doUnmock('../supabase');
+    });
 });

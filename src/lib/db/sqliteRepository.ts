@@ -1,7 +1,11 @@
-import type { Task, Action, TaskEntry, ActionEntry, DailyLog, NotificationSettings } from "../types";
+import type {
+    Task, Action, TaskEntry, ActionEntry, DailyLog, NotificationSettings,
+    MandalaChart, MandalaCell, MandalaCellEvent, MandalaReview,
+} from "../types";
 import type { Repository } from "./repository";
 import { Capacitor } from "@capacitor/core";
 import { initSqlite, DB_NAME, sqlite } from "./initSqlite";
+import { MANDALA_COLUMNS, MANDALA_TABLES, parseJsonColumn, stringifyJsonColumn, toLocalValue, toRemoteRow } from "./rowCodec";
 
 export class SqliteRepository implements Repository {
     private async getDb() {
@@ -56,6 +60,8 @@ export class SqliteRepository implements Repository {
             remind_on: r.remind_on === 1,
             remind_hour: r.remind_hour ?? 8,
             remind_minute: r.remind_minute ?? 0,
+            frequency_kind: r.frequency_kind ?? "daily",
+            frequency_history: parseJsonColumn(r.frequency_history, []),
         }));
     }
 
@@ -64,8 +70,9 @@ export class SqliteRepository implements Repository {
         if (!task.id) task.id = crypto.randomUUID();
         const now = new Date().toISOString();
         await db.run(
-            `INSERT INTO tasks (id, user_id, title, task_type, due_date, is_active, is_hidden, priority, volume, memo, remind_on, remind_hour, remind_minute, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO tasks (id, user_id, title, task_type, due_date, is_active, is_hidden, priority, volume, memo, remind_on, remind_hour, remind_minute,
+              frequency_kind, frequency_count, frequency_days, frequency_history, mandala_cell_id, mandala_linked_at, ended_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 task.id,
                 task.user_id,
@@ -80,6 +87,13 @@ export class SqliteRepository implements Repository {
                 task.remind_on ? 1 : 0,
                 task.remind_hour ?? 8,
                 task.remind_minute ?? 0,
+                task.frequency_kind ?? "daily",
+                task.frequency_count ?? null,
+                task.frequency_days ?? null,
+                stringifyJsonColumn(task.frequency_history, []),
+                task.mandala_cell_id ?? null,
+                task.mandala_linked_at ?? null,
+                task.ended_at ?? null,
                 now
             ]
         );
@@ -89,6 +103,10 @@ export class SqliteRepository implements Repository {
             due_date: task.due_date ?? null, is_active: task.is_active ? 1 : 0, is_hidden: task.is_hidden ? 1 : 0,
             priority: task.priority, volume: task.volume, memo: task.memo ?? null,
             remind_on: task.remind_on ? 1 : 0, remind_hour: task.remind_hour ?? 8, remind_minute: task.remind_minute ?? 0,
+            frequency_kind: task.frequency_kind ?? "daily", frequency_count: task.frequency_count ?? null,
+            frequency_days: task.frequency_days ?? null, frequency_history: task.frequency_history ?? [],
+            mandala_cell_id: task.mandala_cell_id ?? null, mandala_linked_at: task.mandala_linked_at ?? null,
+            ended_at: task.ended_at ?? null,
             deleted_at: null, updated_at: now,
         });
     }
@@ -101,7 +119,11 @@ export class SqliteRepository implements Repository {
 
         for (const [key, val] of Object.entries(patch)) {
             sets.push(`${key} = ?`);
-            values.push(typeof val === "boolean" ? (val ? 1 : 0) : val);
+            values.push(
+                typeof val === "boolean" ? (val ? 1 : 0)
+                    : key === "frequency_history" ? stringifyJsonColumn(val, [])
+                    : val
+            );
         }
         if (sets.length === 0) return;
 
@@ -116,7 +138,7 @@ export class SqliteRepository implements Repository {
         await this.save();
         // 更新後の全カラムを再取得してプッシュ（部分パッチの代わりにフル upsert）
         const rec = (await db.query('SELECT * FROM tasks WHERE id = ? AND user_id = ?', [taskId, userId])).values?.[0];
-        if (rec) await this._tryPush('tasks', rec);
+        if (rec) await this._tryPush('tasks', toRemoteRow('tasks', rec));
     }
 
     async deleteTask(userId: string, taskId: string): Promise<void> {
@@ -440,11 +462,105 @@ export class SqliteRepository implements Repository {
         if (savedNs) await this._tryPush('notification_settings', savedNs, 'user_id');
     }
 
+    // --- Mandala Chart ---
+    /**
+     * マンダラチャート関連の行を保存する(id で上書き)。JSON の列は TEXT にして持つ。
+     * created_at は最初に作ったときだけ入れ、updated_at は保存のたびに更新する。
+     */
+    private async upsertMandalaRow(table: (typeof MANDALA_TABLES)[number], row: Record<string, any>): Promise<void> {
+        const db = await this.getDb();
+        const now = new Date().toISOString();
+        const record: Record<string, any> = { ...row, created_at: row.created_at ?? now, updated_at: now };
+        record.deleted_at ??= null;
+        const cols = MANDALA_COLUMNS[table];
+        await db.run(
+            `INSERT INTO ${table} (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})
+             ON CONFLICT(id) DO UPDATE SET ${cols.filter((c) => c !== "id" && c !== "created_at").map((c) => `${c}=excluded.${c}`).join(", ")}`,
+            cols.map((c) => toLocalValue(table, c, record[c]))
+        );
+        await this.save();
+        const saved = (await db.query(`SELECT * FROM ${table} WHERE id = ?`, [record.id])).values?.[0];
+        if (saved) await this._tryPush(table, toRemoteRow(table, saved));
+    }
+
+    /** 使用中のチャート(1枚)。複数ある場合(別の端末で同時に作ったとき)は、最後に更新したもの */
+    async getActiveChart(userId: string): Promise<MandalaChart | null> {
+        const db = await this.getDb();
+        const res = await db.query(
+            `SELECT * FROM mandala_charts WHERE user_id = ? AND status = 'active' AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT 1`,
+            [userId]
+        );
+        return (res.values?.[0] as MandalaChart | undefined) ?? null;
+    }
+
+    async upsertChart(chart: MandalaChart): Promise<void> {
+        if (!chart.id) chart.id = crypto.randomUUID();
+        await this.upsertMandalaRow("mandala_charts", chart);
+    }
+
+    async getCells(userId: string, chartId: string): Promise<MandalaCell[]> {
+        const db = await this.getDb();
+        const res = await db.query(
+            `SELECT * FROM mandala_cells WHERE user_id = ? AND chart_id = ? AND deleted_at IS NULL`,
+            [userId, chartId]
+        );
+        return (res.values ?? []).map((r: any) => ({ ...r, paused_periods: parseJsonColumn(r.paused_periods, []) }));
+    }
+
+    async upsertCell(cell: MandalaCell): Promise<void> {
+        if (!cell.id) cell.id = crypto.randomUUID();
+        await this.upsertMandalaRow("mandala_cells", cell);
+    }
+
+    async addCellEvent(event: Omit<MandalaCellEvent, "id" | "created_at"> & { id?: string }): Promise<void> {
+        await this.upsertMandalaRow("mandala_cell_events", { ...event, id: event.id ?? crypto.randomUUID() });
+    }
+
+    async getCellEvents(userId: string, cellId: string): Promise<MandalaCellEvent[]> {
+        const db = await this.getDb();
+        const res = await db.query(
+            `SELECT * FROM mandala_cell_events WHERE user_id = ? AND cell_id = ? AND deleted_at IS NULL ORDER BY created_at ASC`,
+            [userId, cellId]
+        );
+        return (res.values ?? []) as MandalaCellEvent[];
+    }
+
+    async getReviews(userId: string, chartId: string): Promise<MandalaReview[]> {
+        const db = await this.getDb();
+        const res = await db.query(
+            `SELECT * FROM mandala_reviews WHERE user_id = ? AND chart_id = ? AND deleted_at IS NULL ORDER BY reviewed_at ASC`,
+            [userId, chartId]
+        );
+        return (res.values ?? []).map((r: any) => ({
+            ...r,
+            decisions: parseJsonColumn(r.decisions, []),
+            snapshot: parseJsonColumn(r.snapshot, {}),
+        }));
+    }
+
+    /** 見直しの記録は、保存後は変更しない */
+    async createReview(review: Omit<MandalaReview, "id"> & { id?: string }): Promise<void> {
+        await this.upsertMandalaRow("mandala_reviews", { ...review, id: review.id ?? crypto.randomUUID() });
+    }
+
+    /** 期間内(from〜to、両端を含む)の実施記録。進み具合の計算に使う */
+    async getTaskEntriesBetween(userId: string, from: string, to: string): Promise<TaskEntry[]> {
+        const db = await this.getDb();
+        const res = await db.query(
+            `SELECT * FROM task_entries WHERE user_id = ? AND day >= ? AND day <= ?`,
+            [userId, from, to]
+        );
+        return (res.values ?? []) as TaskEntry[];
+    }
+
     // --- Account Deletion ---
     async deleteAllUserData(userId: string): Promise<void> {
         const db = await this.getDb();
         // FK依存順に削除（子テーブル → 親テーブル）
-        const tables = ['task_entries', 'action_entries', 'daily_logs', 'notification_settings', 'tasks', 'actions'];
+        const tables = [
+            'task_entries', 'action_entries', 'daily_logs', 'notification_settings', 'tasks', 'actions',
+            'mandala_reviews', 'mandala_cell_events', 'mandala_cells', 'mandala_charts',
+        ];
         for (const table of tables) {
             await db.run(`DELETE FROM ${table} WHERE user_id = ?`, [userId]);
         }
@@ -456,7 +572,7 @@ export class SqliteRepository implements Repository {
         const db = await this.getDb();
         try {
             // 1. 全テーブルのIDを付け替え
-            const tables = ['tasks', 'actions', 'task_entries', 'action_entries', 'daily_logs'];
+            const tables = ['tasks', 'actions', 'task_entries', 'action_entries', 'daily_logs', ...MANDALA_TABLES];
             for (const table of tables) {
                 await db.run(`UPDATE ${table} SET user_id = ? WHERE user_id = ?`, [newUserId, oldUserId]);
             }
@@ -492,9 +608,17 @@ export class SqliteRepository implements Repository {
                 const masterId = sameTasks.values[0].id;
                 const otherIds = sameTasks.values.slice(1).map((r: any) => r.id);
 
-                // 履歴データをマスターへ統合
+                // 履歴データをマスターへ統合(マスへのひもづけは、マスターに無ければ引き継ぐ)
                 for (const oldId of otherIds) {
                     await db.run(`UPDATE task_entries SET task_id = ? WHERE task_id = ?`, [masterId, oldId]);
+                    await db.run(
+                        `UPDATE tasks SET
+                           mandala_cell_id = COALESCE(mandala_cell_id, (SELECT mandala_cell_id FROM tasks WHERE id = ?)),
+                           mandala_linked_at = COALESCE(mandala_linked_at, (SELECT mandala_linked_at FROM tasks WHERE id = ?))
+                         WHERE id = ?`,
+                        [oldId, oldId, masterId]
+                    );
+                    await db.run(`UPDATE mandala_cell_events SET task_id = ? WHERE task_id = ?`, [masterId, oldId]);
                     await db.run(`DELETE FROM tasks WHERE id = ?`, [oldId]);
                 }
             }
@@ -554,7 +678,13 @@ export class SqliteRepository implements Repository {
             }
 
             const db = await this.getDb();
-            const tables = ["tasks", "actions", "task_entries", "action_entries", "daily_logs", "notification_settings"];
+            // サーバーの外部キーの順(チャート → マス → 習慣・タスク → … → マスの変更の履歴・見直しの記録)
+            const tables = [
+                "mandala_charts", "mandala_cells",
+                "tasks", "actions", "task_entries", "action_entries", "daily_logs", "notification_settings",
+                "mandala_cell_events", "mandala_reviews",
+            ];
+            const isMandalaTable = (t: string) => (MANDALA_TABLES as readonly string[]).includes(t);
 
             for (const table of tables) {
                 try {
@@ -580,21 +710,23 @@ export class SqliteRepository implements Repository {
                     const remote = remoteMap.get(mapKey(local));
                     // updated_at が local の方が新しい場合か、リモートに存在しない場合にプッシュ
                     if (!remote || new Date(local.updated_at) > new Date(remote.updated_at)) {
-                        if (table === "task_entries" || table === "daily_logs" || table === "action_entries" || table === "notification_settings") {
+                        // JSON の列(端末内は TEXT)を JSON に戻して送る
+                        const payload = toRemoteRow(table, local);
+                        if (table === "task_entries" || table === "daily_logs" || table === "action_entries" || table === "notification_settings" || isMandalaTable(table)) {
                             // 複合キー or user_id キーを持つテーブルは upsert（ON CONFLICT が必要）
                             const onConflict = table === "daily_logs" ? "user_id,day"
                                 : table === "task_entries" ? "user_id,day,task_id"
                                 : table === "notification_settings" ? "user_id"
                                 : "id";
-                            const { error: upsertError } = await supabase.from(table).upsert(local, { onConflict });
+                            const { error: upsertError } = await supabase.from(table).upsert(payload, { onConflict });
                             if (upsertError) throw upsertError;
                         } else if (!remote) {
                             // 新規レコード: INSERT
-                            const { error: insertError } = await supabase.from(table).insert(local);
+                            const { error: insertError } = await supabase.from(table).insert(payload);
                             if (insertError) throw insertError;
                         } else {
                             // 既存レコード: UPDATE（memo=null などの null フィールドも確実に上書きされる）
-                            const { error: updateError } = await supabase.from(table).update(local).eq('id', local.id).eq('user_id', userId);
+                            const { error: updateError } = await supabase.from(table).update(payload).eq('id', local.id).eq('user_id', userId);
                             if (updateError) throw updateError;
                         }
                     }
@@ -635,15 +767,32 @@ export class SqliteRepository implements Repository {
                             continue;
                         }
 
-                        if (table === "tasks") {
-                            await db.run(`INSERT INTO tasks (id, user_id, title, task_type, due_date, is_active, is_hidden, priority, volume, memo, remind_on, remind_hour, remind_minute, deleted_at, updated_at)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET
+                        if (isMandalaTable(table)) {
+                            // マンダラチャート関連は、削除済み(deleted_at)の行も残して同じ列で取り込む
+                            const cols = MANDALA_COLUMNS[table as keyof typeof MANDALA_COLUMNS];
+                            await db.run(
+                                `INSERT INTO ${table} (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})
+                                 ON CONFLICT(id) DO UPDATE SET ${cols.filter((c) => c !== "id").map((c) => `${c}=excluded.${c}`).join(", ")}`,
+                                cols.map((c) => toLocalValue(table, c, remote[c]))
+                            );
+                        } else if (table === "tasks") {
+                            await db.run(`INSERT INTO tasks (id, user_id, title, task_type, due_date, is_active, is_hidden, priority, volume, memo, remind_on, remind_hour, remind_minute,
+                                frequency_kind, frequency_count, frequency_days, frequency_history, mandala_cell_id, mandala_linked_at, ended_at, deleted_at, updated_at)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET
                                 title=excluded.title, task_type=excluded.task_type, due_date=excluded.due_date,
                                 is_active=excluded.is_active, is_hidden=excluded.is_hidden, priority=excluded.priority,
                                 volume=excluded.volume, memo=excluded.memo,
                                 remind_on=excluded.remind_on, remind_hour=excluded.remind_hour, remind_minute=excluded.remind_minute,
+                                frequency_kind=excluded.frequency_kind, frequency_count=excluded.frequency_count,
+                                frequency_days=excluded.frequency_days, frequency_history=excluded.frequency_history,
+                                mandala_cell_id=excluded.mandala_cell_id, mandala_linked_at=excluded.mandala_linked_at,
+                                ended_at=excluded.ended_at,
                                 deleted_at=excluded.deleted_at, updated_at=excluded.updated_at`,
-                                [remote.id, remote.user_id, remote.title, remote.task_type, remote.due_date, remote.is_active, remote.is_hidden, remote.priority, remote.volume, remote.memo ?? null, remote.remind_on ?? 0, remote.remind_hour ?? 8, remote.remind_minute ?? 0, remote.deleted_at ?? null, remote.updated_at]);
+                                [remote.id, remote.user_id, remote.title, remote.task_type, remote.due_date, remote.is_active, remote.is_hidden, remote.priority, remote.volume, remote.memo ?? null, remote.remind_on ?? 0, remote.remind_hour ?? 8, remote.remind_minute ?? 0,
+                                 remote.frequency_kind ?? "daily", remote.frequency_count ?? null, remote.frequency_days ?? null,
+                                 toLocalValue("tasks", "frequency_history", remote.frequency_history),
+                                 remote.mandala_cell_id ?? null, remote.mandala_linked_at ?? null, remote.ended_at ?? null,
+                                 remote.deleted_at ?? null, remote.updated_at]);
                         } else if (table === "actions") {
                             await db.run(`INSERT INTO actions (id, user_id, category, kind, is_active, is_hidden, created_at, deleted_at, updated_at)
                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET
