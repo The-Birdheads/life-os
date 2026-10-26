@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { theme } from "../../../lib/ui/theme";
 import PrimaryBtn from "../../ui/PrimaryBtn";
+import type { Tab } from "../../../lib/tabs";
 
 // ─── Step 定義 ──────────────────────────────────────────────────────────────
 
@@ -102,7 +103,7 @@ function measureTarget(target: string, padding: number): SpotRect | null {
 type Props = {
     isOpen: boolean;
     onClose: () => void;
-    onSetTab?: (tab: "today" | "review" | "week") => void;
+    onSetTab?: (tab: Tab) => void;
 };
 
 export default function SpotlightTutorial({ isOpen, onClose, onSetTab }: Props) {

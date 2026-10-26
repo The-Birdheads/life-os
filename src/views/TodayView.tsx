@@ -55,6 +55,10 @@ type Props = {
     loadBase: () => Promise<void>;
     onAfterWrite?: () => Promise<void>;
     adHeight?: number;
+    /** マンダラチャートにひもづいた習慣・タスクの id → 要素(カードに色のチップを出す) */
+    goalChips?: Map<string, { label: string; color: string; element: number }>;
+    /** チップをタップしたときに、目標タブのその要素を開く */
+    onOpenGoal?: (element: number) => void;
 };
 
 export default function TodayView({
@@ -73,7 +77,28 @@ export default function TodayView({
     loadBase,
     onAfterWrite,
     adHeight = 0,
+    goalChips,
+    onOpenGoal,
 }: Props) {
+    const goalChip = (taskId: string) => {
+        const chip = goalChips?.get(taskId);
+        if (!chip) return null;
+        return (
+            <button
+                type="button"
+                aria-label={`目標「${chip.label}」のチャートを開く`}
+                onClick={(e) => { e.stopPropagation(); onOpenGoal?.(chip.element); }}
+                style={{
+                    justifySelf: "start", minHeight: 28, display: "inline-flex", alignItems: "center", gap: 6,
+                    background: "#FFFFFF", color: "#0F172A", border: "1px solid #CBD5E1", borderRadius: 999,
+                    padding: "2px 10px", fontSize: 12, fontWeight: 500, cursor: "pointer", fontFamily: "inherit",
+                }}
+            >
+                <span style={{ width: 9, height: 9, borderRadius: 5, background: chip.color }} />
+                {chip.label}
+            </button>
+        );
+    };
     const { sortRule, prioritizeDue } = useUserSettings();
 
     // ✅ Segmented filter（コンポーネント内）
@@ -667,6 +692,7 @@ export default function TodayView({
                                                         {habitFrequencyNote(t) && (
                                                             <div style={{ fontSize: 12, opacity: checked ? 0.85 : 0.7 }}>{habitFrequencyNote(t)}</div>
                                                         )}
+                                                        {goalChip(t.id)}
                                                     </div>
                                                 </div>
                                             </li>
@@ -730,6 +756,7 @@ export default function TodayView({
                                                                 {t.due_date}
                                                             </div>
                                                         ) : null}
+                                                        {goalChip(t.id)}
                                                     </div>
                                                 </div>
                                             </li>

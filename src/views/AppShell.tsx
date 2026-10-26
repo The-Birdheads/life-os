@@ -13,7 +13,7 @@ import { deleteConfirmMessage, deleteConfirmVariant } from "../lib/accountApi";
 import type { AppId, DeleteConfirmVariant } from "../lib/accountApi";
 
 
-type Tab = "today" | "review" | "week";
+import type { Tab } from "../lib/tabs";
 
 type Props = {
   userEmail: string | null;

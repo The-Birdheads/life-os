@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { todayJST } from "./lib/day";
 import { clampDayToToday, addDaysJST, canGoNextDay } from "./lib/dayNav";
 import type { Action, Task } from "./lib/types";
@@ -37,7 +37,9 @@ import {
 
 // グローバルなリポジトリインスタンスは ./lib/db/instance.ts へ移動しました
 
-type Tab = "today" | "review" | "week";
+import type { Tab } from "./lib/tabs";
+import GoalView, { type GoalFocus } from "./views/GoalView";
+import { useMandala } from "./lib/mandala/useMandala";
 
 function toHeaderDateLabel(dayISO: string) {
   const [y, m, d] = dayISO.split("-");
@@ -185,6 +187,8 @@ export default function App() {
   const [sortRule, setSortRule] = useState<SortRule>("priority");
   const [prioritizeDue, setPrioritizeDue] = useState(false);
   const [dataVersion, setDataVersion] = useState(0);
+  // 記録タブのチップから、目標タブの要素を開く
+  const [goalFocus, setGoalFocus] = useState<GoalFocus>(null);
 
   const prevUserIdRef = useRef<string | null>(null);
 
@@ -680,6 +684,27 @@ export default function App() {
     return () => { listener.then(l => l.remove()); };
   }, [userId]);
 
+  // 目標タブ(マンダラチャート)。同期・完了の切り替え・習慣の変更のたびに読み直す
+  const mandalaRefreshKey = useMemo(() => ({}), [dataVersion, doneTaskIds, tasks]);
+  const mandala = useMandala(userId, tasks, {
+    refreshKey: mandalaRefreshKey,
+    reloadTasks: () => loadBase(),
+    onAfterWrite: webAutoSync,
+  });
+  // 記録タブのカードに出す、要素のチップ(習慣・タスクの id → 要素)
+  const goalChips = useMemo(() => {
+    const map = new Map<string, { label: string; color: string; element: number }>();
+    for (const el of mandala.model?.elements ?? []) {
+      if (!el.name) continue;
+      for (const c of el.actions) {
+        for (const t of c ? mandala.byCell.get(c.id) ?? [] : []) {
+          map.set(t.id, { label: el.name, color: el.color, element: el.index });
+        }
+      }
+    }
+    return map;
+  }, [mandala.model, mandala.byCell]);
+
   // ------- Render -------
   if (!userId) {
     return (
@@ -804,10 +829,20 @@ export default function App() {
           loadBase={loadBase}
           onAfterWrite={webAutoSync}
           adHeight={adHeight}
+          goalChips={goalChips}
+          onOpenGoal={(element) => { setGoalFocus({ element, nonce: Date.now() }); setTab("goal"); }}
         />
       )}
 
-
+      {tab === "goal" && (
+        <GoalView
+          mandala={mandala}
+          tasks={tasks}
+          adHeight={adHeight}
+          setMsg={setMsg}
+          focus={goalFocus}
+        />
+      )}
 
       {tab === "review" && (
         <ReviewView

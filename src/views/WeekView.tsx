@@ -5,7 +5,7 @@ import SectionTitle from "../components/ui/SectionTitle";
 import { space } from "../lib/ui/spacing";
 import { theme } from "../lib/ui/theme";
 
-type Tab = "today" | "review" | "week";
+import type { Tab } from "../lib/tabs";
 type ChartTarget = "fulfillment" | "total" | "habit" | "task" | "action";
 type ChartMetric  = "count" | "vol";
 

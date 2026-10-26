@@ -96,3 +96,30 @@ export const BellIcon = ({ size = 16, color = "currentColor", style }: IconProps
     <path d="M13.73 21a2 2 0 0 1-3.46 0" />
   </svg>
 );
+
+export const TargetIcon = ({ size = 16, color = "currentColor", style }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={style}>
+    <circle cx="12" cy="12" r="9" />
+    <circle cx="12" cy="12" r="5" />
+    <circle cx="12" cy="12" r="1" />
+  </svg>
+);
+
+export const GridIcon = ({ size = 16, color = "currentColor", style }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style}>
+    <rect x="3" y="3" width="18" height="18" rx="2" />
+    <path d="M9 3v18M15 3v18M3 9h18M3 15h18" />
+  </svg>
+);
+
+export const ChevronLeftIcon = ({ size = 16, color = "currentColor", style }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={style}>
+    <path d="m15 18-6-6 6-6" />
+  </svg>
+);
+
+export const ChevronRightIcon = ({ size = 16, color = "currentColor", style }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={style}>
+    <path d="m9 18 6-6-6-6" />
+  </svg>
+);
