@@ -9,12 +9,14 @@ import type { MandalaState } from "../lib/mandala/useMandala";
 import { isCounted } from "../lib/mandala/progress";
 import ChartWizard from "../components/features/goal/ChartWizard";
 import CellSheet from "../components/features/goal/CellSheet";
+import ReviewFlow from "../components/features/goal/ReviewFlow";
+import ReviewHistory from "../components/features/goal/ReviewHistory";
 import PrimaryBtn from "../components/ui/PrimaryBtn";
 import SecondaryBtn from "../components/ui/SecondaryBtn";
 import { ChevronLeftIcon, ChevronRightIcon, GridIcon, PlusIcon, TargetIcon } from "../components/ui/Icon";
 import { todayJST } from "../lib/day";
 
-type View = "center" | "element" | "all" | "wizard";
+type View = "center" | "element" | "all" | "wizard" | "review" | "history";
 type Sheet = { element: number; cell: number | null } | null;
 
 /** 記録タブのチップなどから、特定の要素を開くための指定(nonce が変わるたびに開く) */
@@ -127,8 +129,20 @@ export default function GoalView({
                     <div style={{ background: theme.card, borderRadius: 14, padding: "12px 14px", fontSize: 13 }}>
                         ひもづいた習慣 <b>{linkedCount("habit")}</b> 件 ・ タスク <b>{linkedCount("oneoff")}</b> 件
                     </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                        <PrimaryBtn fullWidth disabled={named.length === 0} onClick={() => setView("review")} style={{ minHeight: 52 }}>見直す</PrimaryBtn>
+                        <SecondaryBtn fullWidth onClick={() => setView("history")} style={{ minHeight: 52 }}>見直しの履歴（{mandala.reviews.length}）</SecondaryBtn>
+                    </div>
                     <SecondaryBtn fullWidth onClick={() => setView("all")}><GridIcon size={18} />全体を見る（9×9）</SecondaryBtn>
                 </>
+            )}
+
+            {view === "review" && (
+                <ReviewFlow mandala={mandala} adHeight={adHeight} setMsg={setMsg} onDone={() => setView("center")} />
+            )}
+
+            {view === "history" && (
+                <ReviewHistory reviews={mandala.reviews} model={model} onBack={() => setView("center")} />
             )}
 
             {view === "element" && element && (

@@ -42,6 +42,13 @@ export function weekStart(day: string): string {
   return addDays(day, -weekdayIndex(day));
 }
 
+/** 保存時刻(ISO、UTC)を、端末の日付(YYYY/MM/DD)で表す */
+export function localDateLabel(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 10).replace(/-/g, "/");
+  return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")}`;
+}
+
 export function maxDay(...days: (string | null | undefined)[]): string | null {
   const valid = days.filter((d): d is string => !!d);
   return valid.length ? valid.reduce((a, b) => (a > b ? a : b)) : null;

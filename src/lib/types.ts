@@ -57,7 +57,8 @@ export type MandalaChart = {
 
 export type MandalaCellStatus = "active" | "paused" | "achieved";
 
-export type PausedPeriod = { from: string; to: string | null };
+/** 休止した期間(両端を含む。to が null なら休止中)。task_ids は休止で記録タブから外した習慣・タスク(再開で戻す) */
+export type PausedPeriod = { from: string; to: string | null; task_ids?: string[] };
 
 export type MandalaCell = {
   id: string;

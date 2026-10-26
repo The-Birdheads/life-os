@@ -5,11 +5,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { sqliteRepo } from "../db/instance";
 import { todayJST } from "../day";
-import type { MandalaCell, MandalaCellEvent, MandalaCellEventKind, MandalaChart, Task } from "../types";
+import type { MandalaCell, MandalaCellEvent, MandalaCellEventKind, MandalaChart, MandalaReview, Task } from "../types";
 import { buildChartModel, ELEMENT_COLORS, tasksByCell, type ChartModel } from "./chart";
 import { addDays } from "./dates";
-import { frequencyLabel, type Frequency } from "./frequency";
-import { doneDaysByTask, type Period } from "./progress";
+import { changeFrequencyPatch, currentFrequency, frequencyLabel, type Frequency } from "./frequency";
+import { doneDaysByTask, isCounted, type Period } from "./progress";
+import { buildSnapshot, describeDecision, type ReviewDecision } from "./review";
 
 /** チャートの作成で入力する内容(作成の3ステップ) */
 export type ChartDraft = {
@@ -43,6 +44,7 @@ export function useMandala(
   const [chart, setChart] = useState<MandalaChart | null>(null);
   const [cells, setCells] = useState<MandalaCell[]>([]);
   const [doneByTask, setDoneByTask] = useState<Map<string, Set<string>>>(new Map());
+  const [reviews, setReviews] = useState<MandalaReview[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   // 進み具合は「直近7日(今日を含む)」で数える
@@ -54,6 +56,7 @@ export function useMandala(
     const c = await sqliteRepo.getActiveChart(userId);
     setChart(c);
     setCells(c ? await sqliteRepo.getCells(userId, c.id) : []);
+    setReviews(c ? await sqliteRepo.getReviews(userId, c.id) : []);
     setDoneByTask(doneDaysByTask(await sqliteRepo.getTaskEntriesBetween(userId, period.from, period.to)));
     setLoaded(true);
   }, [userId, period]);
@@ -194,11 +197,122 @@ export function useMandala(
     return sqliteRepo.getCellEvents(userId, cellId);
   }, [userId]);
 
+  /**
+   * 見直しを保存する。見直す前のチャート(snapshot)と決めたこと・メモを記録してから、
+   * マスごとの次の手をチャート・習慣へ反映する。過去の記録(task_entries)は消さない。
+   */
+  const saveReview = useCallback(async (
+    decisions: Map<string, ReviewDecision>,
+    notes: { good: string; next: string }
+  ) => {
+    if (!userId || !model) return;
+    const today = todayJST();
+    const cellById = new Map<string, { cell: MandalaCell; elementName: string }>();
+    for (const el of model.elements) for (const c of el.actions) if (c) cellById.set(c.id, { cell: c, elementName: el.name });
+
+    const snapshot = buildSnapshot(model, byCell, doneByTask, period);
+    const texts: string[] = [];
+    for (const [cellId, d] of decisions) {
+      const entry = cellById.get(cellId);
+      if (entry && d.kind !== "keep") texts.push(describeDecision(entry.elementName, entry.cell.text, d, tasks));
+    }
+    await sqliteRepo.createReview({
+      user_id: userId, chart_id: model.chart.id, reviewed_at: new Date().toISOString(),
+      good_note: notes.good.trim() || null, next_note: notes.next.trim() || null,
+      decisions: texts, snapshot: snapshot as unknown as Record<string, unknown>,
+    });
+
+    for (const [cellId, d] of decisions) {
+      const entry = cellById.get(cellId);
+      if (!entry || d.kind === "keep") continue;
+      const { cell } = entry;
+      const active = (byCell.get(cell.id) ?? []).filter(isCounted);
+      const endTasks = async (list: Task[], unlink = false) => {
+        for (const t of list) {
+          await sqliteRepo.updateTask(userId, t.id, {
+            ended_at: today, is_hidden: true, ...(unlink ? { mandala_cell_id: null } : {}),
+          });
+        }
+      };
+
+      if (d.kind === "lower") {
+        const t = tasks.find((x) => x.id === d.taskId);
+        if (!t) continue;
+        const before = `${t.title}（${frequencyLabel(currentFrequency(t))}）`;
+        await sqliteRepo.updateTask(userId, t.id, {
+          title: d.title.trim() || t.title,
+          ...(changeFrequencyPatch(t, d.frequency, today) ?? {}),
+        });
+        await addEvent(cell.id, "lowered", `見直し：ハードルを下げた。${before} → ${d.title.trim() || t.title}（${frequencyLabel(d.frequency)}）`, t.id);
+      } else if (d.kind === "change") {
+        const habits = active.filter((t) => t.task_type === "habit");
+        await endTasks(habits);
+        const newText = d.newText.trim() || cell.text;
+        if (newText !== cell.text) await sqliteRepo.upsertCell({ ...cell, text: newText });
+        let note = `見直し：やり方を変えた。「${cell.text}」→「${newText}」`;
+        if (habits.length) note += `。習慣「${habits.map((t) => t.title).join("」「")}」を終了`;
+        let newTaskId: string | null = null;
+        if (d.newHabit && d.newHabit.title.trim()) {
+          const task: Task = {
+            id: "", user_id: userId, title: d.newHabit.title.trim(), task_type: "habit", due_date: null,
+            is_active: true, is_hidden: false, priority: 3, volume: 5,
+            frequency_kind: d.newHabit.frequency.kind,
+            frequency_count: d.newHabit.frequency.kind === "weekly_count" ? d.newHabit.frequency.count : null,
+            frequency_days: d.newHabit.frequency.kind === "weekdays" ? d.newHabit.frequency.days : null,
+            frequency_history: [], mandala_cell_id: cell.id, mandala_linked_at: today,
+          };
+          await sqliteRepo.createTask(task);
+          newTaskId = task.id;
+          note += `、「${task.title}」（${frequencyLabel(d.newHabit.frequency)}）を開始`;
+        }
+        await addEvent(cell.id, "changed", note, newTaskId);
+      } else if (d.kind === "pause") {
+        const hidden = active.map((t) => t.id);
+        for (const t of active) await sqliteRepo.updateTask(userId, t.id, { is_hidden: true });
+        await sqliteRepo.upsertCell({
+          ...cell, status: "paused",
+          paused_periods: [...cell.paused_periods, { from: today, to: null, task_ids: hidden }],
+        });
+        await addEvent(cell.id, "paused", "見直し：いったん休む（習慣は記録タブに出なくなる）");
+      } else if (d.kind === "achieve") {
+        if (d.endHabits) await endTasks(active);
+        await sqliteRepo.upsertCell({ ...cell, status: "achieved" });
+        await addEvent(cell.id, "achieved", `見直し：達成にした（習慣は${d.endHabits ? "終了" : "続ける"}）`);
+      } else if (d.kind === "remove") {
+        await addEvent(cell.id, "removed", `見直し：「${cell.text}」を目標から外した（習慣は${d.endHabits ? "終了" : "記録タブに残す"}）`);
+        if (d.endHabits) await endTasks(active, true);
+        else for (const t of active) await sqliteRepo.updateTask(userId, t.id, { mandala_cell_id: null, mandala_linked_at: null });
+        await sqliteRepo.upsertCell({ ...cell, text: "", status: "active" });
+      }
+    }
+    await reloadTasks();
+    await afterWrite();
+  }, [userId, model, byCell, doneByTask, period, tasks, addEvent, reloadTasks, afterWrite]);
+
+  /** 休止したマスを再開する。休止で外した習慣を戻し、今日から数える(決定 #17) */
+  const resumeCell = useCallback(async (cell: MandalaCell) => {
+    if (!userId) return;
+    const yesterday = addDays(todayJST(), -1);
+    const open = cell.paused_periods.find((p) => p.to === null);
+    for (const id of open?.task_ids ?? []) {
+      const t = tasks.find((x) => x.id === id);
+      if (t && !t.ended_at && t.mandala_cell_id === cell.id) await sqliteRepo.updateTask(userId, id, { is_hidden: false });
+    }
+    await sqliteRepo.upsertCell({
+      ...cell, status: "active",
+      paused_periods: cell.paused_periods.map((p) => (p.to === null ? { ...p, to: yesterday } : p)),
+    });
+    await addEvent(cell.id, "resumed", "再開した");
+    await reloadTasks();
+    await afterWrite();
+  }, [userId, tasks, addEvent, reloadTasks, afterWrite]);
+
   return {
-    loaded, model, byCell, doneByTask, period,
+    loaded, model, byCell, doneByTask, period, reviews,
     reload: load,
     createChart, updateChart, setElementName, setActionText,
     createTaskForCell, linkTask, unlinkTask, getEvents,
+    saveReview, resumeCell,
   };
 }
 

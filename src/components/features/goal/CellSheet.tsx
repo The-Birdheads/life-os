@@ -5,6 +5,7 @@ import type { ElementModel } from "../../../lib/mandala/chart";
 import type { MandalaState } from "../../../lib/mandala/useMandala";
 import { currentFrequency, frequencyLabel, isValidFrequency, type Frequency } from "../../../lib/mandala/frequency";
 import { isCounted, taskProgress, weekCountStatus } from "../../../lib/mandala/progress";
+import { localDateLabel } from "../../../lib/mandala/dates";
 import PrimaryBtn from "../../ui/PrimaryBtn";
 import SecondaryBtn from "../../ui/SecondaryBtn";
 import TextInput from "../../ui/TextInput";
@@ -12,13 +13,6 @@ import { CloseIcon } from "../../ui/Icon";
 import FrequencyPicker from "../register/FrequencyPicker";
 
 const DAILY: Frequency = { kind: "daily", count: null, days: null };
-
-/** 保存時刻(ISO、UTC)を、端末の日付(YYYY/MM/DD)で表す */
-function localDate(iso: string): string {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return iso.slice(0, 10).replace(/-/g, "/");
-    return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")}`;
-}
 
 type Mode = "main" | "create-habit" | "create-task" | "pick";
 
@@ -136,6 +130,17 @@ export default function CellSheet({
                     </button>
                 </div>
 
+                {cell && cellIndex !== null && cell.status !== "active" && (
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, background: theme.card, border: `1px solid ${theme.border}`, borderRadius: 12, padding: "8px 8px 8px 12px" }}>
+                        <span style={{ fontSize: 13, fontWeight: 700 }}>
+                            {cell.status === "paused" ? "このマスは休止中です（進み具合に数えません）" : "このマスは達成済みです（100% として数えます）"}
+                        </span>
+                        {cell.status === "paused" && (
+                            <PrimaryBtn disabled={busy} style={{ whiteSpace: "nowrap", flexShrink: 0 }} onClick={() => run(() => mandala.resumeCell(cell), "再開しました。習慣が記録タブに戻ります")}>再開する</PrimaryBtn>
+                        )}
+                    </div>
+                )}
+
                 <label style={{ display: "grid", gap: 6, fontSize: 14 }}>
                     {cellIndex === null ? "要素の名前" : "行動目標"}
                     <TextInput value={text} onChange={(e) => setText(e.target.value)} placeholder={cellIndex === null ? "例: 睡眠" : "例: 23時に寝る"} fullWidth />
@@ -199,7 +204,7 @@ export default function CellSheet({
                                 <div style={{ display: "grid", gap: 6 }}>
                                     {[...events].reverse().map((ev) => (
                                         <div key={ev.id} style={{ display: "flex", gap: 10, fontSize: 12, lineHeight: 1.6 }}>
-                                            <span style={{ color: theme.subtext, whiteSpace: "nowrap" }}>{localDate(ev.created_at)}</span>
+                                            <span style={{ color: theme.subtext, whiteSpace: "nowrap" }}>{localDateLabel(ev.created_at)}</span>
                                             <span>{ev.note}</span>
                                         </div>
                                     ))}
