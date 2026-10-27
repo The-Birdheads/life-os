@@ -152,7 +152,7 @@ export function useMandala(
     const task: Task = {
       id: "", user_id: userId, title: input.title.trim(), task_type: input.type,
       due_date: input.type === "oneoff" ? input.dueDate : null,
-      is_active: true, is_hidden: false, priority: 3, volume: 5,
+      is_active: true, is_hidden: false, priority: 0, volume: 0,
       frequency_kind: isHabit ? input.frequency.kind : "daily",
       frequency_count: isHabit && input.frequency.kind === "weekly_count" ? input.frequency.count : null,
       frequency_days: isHabit && input.frequency.kind === "weekdays" ? input.frequency.days : null,
@@ -191,6 +191,29 @@ export function useMandala(
     await reloadTasks();
     await afterWrite();
   }, [userId, addEvent, reloadTasks, afterWrite]);
+
+  /** 習慣・タスクの側から選べる行動目標(要素ごと)。文言のある、休止中でないマス */
+  const goalOptions: GoalOptionGroup[] = useMemo(() => {
+    if (!model) return [];
+    return model.elements
+      .filter((el) => el.name)
+      .map((el) => ({
+        element: el.name,
+        color: el.color,
+        cells: el.actions
+          .filter((c): c is MandalaCell => !!c && !!c.text && c.status !== "paused")
+          .map((c) => ({ id: c.id, text: c.text, achieved: c.status === "achieved" })),
+      }))
+      .filter((g) => g.cells.length > 0);
+  }, [model]);
+
+  /** 習慣・タスクの側から、ひもづける行動目標を変える(null で外す) */
+  const setTaskCell = useCallback(async (task: Task, cellId: string | null) => {
+    if ((task.mandala_cell_id ?? null) === cellId) return;
+    if (!cellId) return unlinkTask(task);
+    const cell = model?.elements.flatMap((el) => el.actions).find((c) => c?.id === cellId);
+    if (cell) await linkTask(task, cell);
+  }, [model, linkTask, unlinkTask]);
 
   const getEvents = useCallback(async (cellId: string): Promise<MandalaCellEvent[]> => {
     if (!userId) return [];
@@ -255,7 +278,7 @@ export function useMandala(
         if (d.newHabit && d.newHabit.title.trim()) {
           const task: Task = {
             id: "", user_id: userId, title: d.newHabit.title.trim(), task_type: "habit", due_date: null,
-            is_active: true, is_hidden: false, priority: 3, volume: 5,
+            is_active: true, is_hidden: false, priority: 0, volume: 0,
             frequency_kind: d.newHabit.frequency.kind,
             frequency_count: d.newHabit.frequency.kind === "weekly_count" ? d.newHabit.frequency.count : null,
             frequency_days: d.newHabit.frequency.kind === "weekdays" ? d.newHabit.frequency.days : null,
@@ -307,13 +330,45 @@ export function useMandala(
     await afterWrite();
   }, [userId, tasks, addEvent, reloadTasks, afterWrite]);
 
+  /**
+   * マスを見直しを通さずに達成にする(習慣・タスクを作らずに済んだ行動目標もあるため)。
+   * endHabits のときは、ひもづいた習慣を今日で終える。
+   */
+  const achieveCell = useCallback(async (cell: MandalaCell, endHabits: boolean) => {
+    if (!userId) return;
+    const habits = (byCell.get(cell.id) ?? []).filter((t) => isCounted(t) && t.task_type === "habit");
+    if (endHabits) {
+      for (const t of habits) await sqliteRepo.updateTask(userId, t.id, { ended_at: todayJST(), is_hidden: true });
+    }
+    await sqliteRepo.upsertCell({ ...cell, status: "achieved" });
+    await addEvent(cell.id, "achieved", habits.length ? `達成にした（習慣は${endHabits ? "終了" : "続ける"}）` : "達成にした");
+    await reloadTasks();
+    await afterWrite();
+  }, [userId, byCell, addEvent, reloadTasks, afterWrite]);
+
+  /** 達成を取り消して、進み具合を数えるマスに戻す(終えた習慣は戻さない) */
+  const unachieveCell = useCallback(async (cell: MandalaCell) => {
+    if (!userId) return;
+    await sqliteRepo.upsertCell({ ...cell, status: "active" });
+    await addEvent(cell.id, "resumed", "達成を取り消した");
+    await afterWrite();
+  }, [userId, addEvent, afterWrite]);
+
   return {
     loaded, model, byCell, doneByTask, period, reviews,
     reload: load,
     createChart, updateChart, setElementName, setActionText,
-    createTaskForCell, linkTask, unlinkTask, getEvents,
-    saveReview, resumeCell,
+    createTaskForCell, linkTask, unlinkTask, getEvents, goalOptions, setTaskCell,
+    saveReview, resumeCell, achieveCell, unachieveCell,
   };
 }
 
 export type MandalaState = ReturnType<typeof useMandala>;
+
+export type GoalOptionGroup = {
+  element: string;
+  color: string;
+  cells: { id: string; text: string; achieved: boolean }[];
+};
+/** 習慣・タスクの編集画面で、行動目標をひもづけるのに使う分だけ */
+export type GoalLinkApi = Pick<MandalaState, "goalOptions" | "setTaskCell">;

@@ -14,7 +14,7 @@ import FrequencyPicker from "../register/FrequencyPicker";
 
 const DAILY: Frequency = { kind: "daily", count: null, days: null };
 
-type Mode = "main" | "create-habit" | "create-task" | "pick";
+type Mode = "main" | "create-habit" | "create-task" | "pick" | "achieve";
 
 /**
  * マスの詳細(下から出るシート)。行動目標の文言、ひもづいた習慣・タスク、
@@ -89,6 +89,7 @@ export default function CellSheet({
     const linked = cell ? (mandala.byCell.get(cell.id) ?? []) : [];
     const activeLinked = linked.filter(isCounted);
     const endedLinked = linked.filter((t) => !isCounted(t));
+    const activeHabits = activeLinked.filter((t) => t.task_type === "habit");
     const pickable = tasks.filter((t) => !t.is_hidden && !t.ended_at && t.mandala_cell_id !== cell?.id);
     const cellLabel = (cellId: string | null | undefined) => {
         if (!cellId || !mandala.model) return null;
@@ -138,6 +139,9 @@ export default function CellSheet({
                         {cell.status === "paused" && (
                             <PrimaryBtn disabled={busy} style={{ whiteSpace: "nowrap", flexShrink: 0 }} onClick={() => run(() => mandala.resumeCell(cell), "再開しました。習慣が記録タブに戻ります")}>再開する</PrimaryBtn>
                         )}
+                        {cell.status === "achieved" && (
+                            <SecondaryBtn disabled={busy} style={{ whiteSpace: "nowrap", flexShrink: 0 }} onClick={() => run(() => mandala.unachieveCell(cell), "達成を取り消しました")}>取り消す</SecondaryBtn>
+                        )}
                     </div>
                 )}
 
@@ -186,6 +190,9 @@ export default function CellSheet({
                             style={{ minHeight: 44, border: "none", background: "none", color: theme.habit, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
                             登録済みの習慣・タスクをひもづける
                         </button>
+                        {cell.status === "active" && (
+                            <SecondaryBtn fullWidth onClick={() => setMode("achieve")}>✓ このマスを達成にする</SecondaryBtn>
+                        )}
 
                         {endedLinked.length > 0 && (
                             <>
@@ -242,6 +249,41 @@ export default function CellSheet({
                                 }, mode === "create-habit" ? "習慣を追加しました。記録タブに出ます" : "タスクを追加しました。記録タブに出ます")}
                             >追加</PrimaryBtn>
                         </div>
+                    </div>
+                )}
+
+                {cell && mode === "achieve" && (
+                    <div style={{ display: "grid", gap: 12, borderTop: `1px solid ${theme.border}`, paddingTop: 14 }}>
+                        <h3 style={{ margin: 0, fontSize: 16 }}>「{savedText}」を達成にする</h3>
+                        <p style={{ margin: 0, fontSize: 13, lineHeight: 1.7, color: theme.subtext }}>
+                            達成にしたマスは、進み具合で 100% として数えます。あとから取り消せます。
+                        </p>
+                        {activeHabits.length > 0 ? (
+                            <>
+                                <p style={{ margin: 0, fontSize: 13, lineHeight: 1.7 }}>
+                                    ひもづいた習慣（{activeHabits.map((t) => `「${t.title}」`).join("")}）はどうしますか？
+                                    終えた習慣は記録タブに出なくなります（これまでの記録は残ります）。
+                                </p>
+                                <PrimaryBtn fullWidth disabled={busy}
+                                    onClick={() => run(async () => { await mandala.achieveCell(cell, false); setMode("main"); }, "達成にしました")}>
+                                    達成にする（習慣は続ける）
+                                </PrimaryBtn>
+                                <SecondaryBtn fullWidth disabled={busy}
+                                    onClick={() => run(async () => { await mandala.achieveCell(cell, true); setMode("main"); }, "達成にしました。習慣を終えました")}>
+                                    達成にする（習慣も終える）
+                                </SecondaryBtn>
+                                <button type="button" onClick={() => setMode("main")}
+                                    style={{ minHeight: 44, border: "none", background: "none", color: theme.subtext, fontSize: 14, cursor: "pointer" }}>キャンセル</button>
+                            </>
+                        ) : (
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                                <SecondaryBtn fullWidth onClick={() => setMode("main")}>キャンセル</SecondaryBtn>
+                                <PrimaryBtn fullWidth disabled={busy}
+                                    onClick={() => run(async () => { await mandala.achieveCell(cell, false); setMode("main"); }, "達成にしました")}>
+                                    達成にする
+                                </PrimaryBtn>
+                            </div>
+                        )}
                     </div>
                 )}
 

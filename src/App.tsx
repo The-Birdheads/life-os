@@ -830,6 +830,7 @@ export default function App() {
           onAfterWrite={webAutoSync}
           adHeight={adHeight}
           goalChips={goalChips}
+          goal={mandala}
           onOpenGoal={(element) => { setGoalFocus({ element, nonce: Date.now() }); setTab("goal"); }}
         />
       )}
@@ -897,6 +898,7 @@ export default function App() {
         loadTodayEntries={loadTodayEntries}
         onAfterWrite={webAutoSync}
         adHeight={adHeight}
+        goal={mandala}
       />
 
       <NotificationSettingsModal

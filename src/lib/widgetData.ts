@@ -13,6 +13,9 @@ function daysDiff(from: string, to: string): number {
   return Math.round((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24));
 }
 
+// 優先度が未設定(0)のものは後ろに回す
+const widgetPriority = (p: number) => (p > 0 ? p : 99);
+
 export async function syncWidgetData(
   tasks: Task[],
   doneHabitIds: Set<string>,
@@ -25,7 +28,7 @@ export async function syncWidgetData(
     // 習慣: 今日予定のあるもの(曜日指定)を、優先度が高い順（数値が小さいほど高優先度）
     const habits = tasks
       .filter((t) => t.task_type === "habit" && !t.is_hidden && t.is_active && !t.ended_at && isScheduledOn(frequencyAt(t, today), today))
-      .sort((a, b) => a.priority - b.priority)
+      .sort((a, b) => widgetPriority(a.priority) - widgetPriority(b.priority))
       .slice(0, 10)
       .map((t) => ({
         id: t.id,
@@ -37,7 +40,7 @@ export async function syncWidgetData(
     // 全アクティブタスク（完了済・非表示・非アクティブを除く）を優先度順に
     const upcomingTasks = tasks
       .filter((t) => t.task_type === "oneoff" && !t.is_hidden && t.is_active && !doneTaskIdsAnyDay.has(t.id))
-      .sort((a, b) => a.priority - b.priority)
+      .sort((a, b) => widgetPriority(a.priority) - widgetPriority(b.priority))
       .slice(0, 10)
       .map((t) => ({
         id: t.id,

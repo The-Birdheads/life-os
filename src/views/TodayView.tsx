@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from "react";
 import type { Action, Task } from "../lib/types";
+import LevelFields from "../components/features/register/LevelFields";
+import GoalLinkField from "../components/features/goal/GoalLinkField";
+import type { GoalLinkApi } from "../lib/mandala/useMandala";
 import FrequencyPicker from "../components/features/register/FrequencyPicker";
 import { changeFrequencyPatch, currentFrequency, frequencyAt, frequencyLabel, isScheduledOn, isValidFrequency, type Frequency } from "../lib/mandala/frequency";
 import { doneDaysByTask, weekCountStatus } from "../lib/mandala/progress";
@@ -59,6 +62,8 @@ type Props = {
     goalChips?: Map<string, { label: string; color: string; element: number }>;
     /** チップをタップしたときに、目標タブのその要素を開く */
     onOpenGoal?: (element: number) => void;
+    /** 編集で、目標タブの行動目標にひもづける */
+    goal?: GoalLinkApi;
 };
 
 export default function TodayView({
@@ -79,6 +84,7 @@ export default function TodayView({
     adHeight = 0,
     goalChips,
     onOpenGoal,
+    goal,
 }: Props) {
     const goalChip = (taskId: string) => {
         const chip = goalChips?.get(taskId);
@@ -336,8 +342,9 @@ export default function TodayView({
         const { type, item } = editingItem;
 
         const [title, setTitle] = useState(item.title || "");
-        const [priority, setPriority] = useState(item.priority ?? 3);
-        const [volume, setVolume] = useState(item.volume ?? 5);
+        const [goalCell, setGoalCell] = useState<string | null>(item.mandala_cell_id ?? null);
+        const [priority, setPriority] = useState(item.priority ?? 0);
+        const [volume, setVolume] = useState(item.volume ?? (type === "action" ? 5 : 0));
         const [dueDate, setDueDate] = useState(item.due_date || "");
         const [dueDateCleared, setDueDateCleared] = useState(false);
         const [memo, setMemo] = useState(item.memo || "");
@@ -393,6 +400,7 @@ export default function TodayView({
                         // 頻度を変えたときは、変える前の頻度を昨日までの履歴に残す
                         ...(type === "habit" ? changeFrequencyPatch(item, freq, todayJST()) ?? {} : {}),
                     } as any);
+                    await goal?.setTaskCell({ ...item, title: title.trim() || item.title }, goalCell);
                     await loadBase();
                     window.dispatchEvent(new CustomEvent('lifeos:scheduleNotifications'));
                 }
@@ -476,14 +484,8 @@ export default function TodayView({
                                         />
                                     </div>
                                 )}
-                                <label>
-                                    優先度（1-5）: <b>{priority}</b>
-                                    <Slider min="1" max="5" step="1" value={priority} onChange={(e) => setPriority(Number(e.target.value))} fullWidth />
-                                </label>
-                                <label>
-                                    ボリューム（1-10）: <b>{volume}</b>
-                                    <Slider min="1" max="10" step="1" value={volume} onChange={(e) => setVolume(Number(e.target.value))} fullWidth />
-                                </label>
+                                <GoalLinkField groups={goal?.goalOptions ?? []} value={goalCell} onChange={setGoalCell} />
+                                <LevelFields priority={priority} volume={volume} onPriority={setPriority} onVolume={setVolume} />
                                 {type === "habit" && <FrequencyPicker value={freq} onChange={setFreq} />}
                                 {type === "habit" && (
                                     <div style={{ display: "grid", gap: 8 }}>

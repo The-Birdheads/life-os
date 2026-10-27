@@ -7,7 +7,6 @@ import { theme } from "../lib/ui/theme";
 
 import type { Tab } from "../lib/tabs";
 type ChartTarget = "fulfillment" | "total" | "habit" | "task" | "action";
-type ChartMetric  = "count" | "vol";
 
 type Props = {
     userId: string;
@@ -45,11 +44,8 @@ export default function WeekView({
     type RowData = {
         day: string;
         habitDone: number;
-        habitVol: number;
         taskDone: number;
-        taskVol: number;
         actionDone: number;
-        actionVol: number;
         fulfillment: number | null;
         goalStatus: GoalStatus;
     };
@@ -57,7 +53,6 @@ export default function WeekView({
     const [rows, setRows] = useState<RowData[]>([]);
     const [weekLoading, setWeekLoading] = useState(false);
     const [chartTarget, setChartTarget] = useState<ChartTarget>("fulfillment");
-    const [chartMetric, setChartMetric]  = useState<ChartMetric>("count");
 
     const startDay = useMemo(() => addDaysISO(day, -6), [day]);
     const endDay = day;
@@ -82,7 +77,7 @@ export default function WeekView({
                         [userId, startDay, endDay]
                     ),
                     db.query(
-                        `SELECT day, id, volume FROM action_entries WHERE user_id = ? AND day >= ? AND day <= ? AND deleted_at IS NULL`,
+                        `SELECT day, id FROM action_entries WHERE user_id = ? AND day >= ? AND day <= ? AND deleted_at IS NULL`,
                         [userId, startDay, endDay]
                     ),
                     db.query(
@@ -98,11 +93,8 @@ export default function WeekView({
                 const taskById = new Map(tasks.map((t) => [t.id, t]));
 
                 const habitDoneMap  = new Map<string, number>();
-                const habitVolMap   = new Map<string, number>();
                 const oneoffDoneMap = new Map<string, number>();
-                const taskVolMap    = new Map<string, number>();
                 const actionCountMap = new Map<string, number>();
-                const actionVolMap   = new Map<string, number>();
                 const fulfillmentMap = new Map<string, number | null>();
 
                 te.forEach((r: any) => {
@@ -111,16 +103,13 @@ export default function WeekView({
                     if (!t) return;
                     if (t.task_type === "habit") {
                         habitDoneMap.set(r.day, (habitDoneMap.get(r.day) ?? 0) + 1);
-                        habitVolMap.set(r.day, (habitVolMap.get(r.day) ?? 0) + ((t as any).volume ?? 0));
                     } else if (t.task_type === "oneoff") {
                         oneoffDoneMap.set(r.day, (oneoffDoneMap.get(r.day) ?? 0) + 1);
-                        taskVolMap.set(r.day, (taskVolMap.get(r.day) ?? 0) + ((t as any).volume ?? 0));
                     }
                 });
 
                 ae.forEach((r: any) => {
                     actionCountMap.set(r.day, (actionCountMap.get(r.day) ?? 0) + 1);
-                    actionVolMap.set(r.day, (actionVolMap.get(r.day) ?? 0) + (r.volume ?? 0));
                 });
 
                 const dlMap = new Map<string, {
@@ -152,11 +141,8 @@ export default function WeekView({
                     return {
                         day: d,
                         habitDone:  habitDoneMap.get(d) ?? 0,
-                        habitVol:   habitVolMap.get(d) ?? 0,
                         taskDone:   oneoffDoneMap.get(d) ?? 0,
-                        taskVol:    taskVolMap.get(d) ?? 0,
                         actionDone: actionCountMap.get(d) ?? 0,
-                        actionVol:  actionVolMap.get(d) ?? 0,
                         fulfillment: fulfillmentMap.get(d) ?? null,
                         goalStatus,
                     };
@@ -287,9 +273,9 @@ export default function WeekView({
         }
 
         // 積み上げ棒グラフ
-        const getH = (r: RowData) => chartMetric === "count" ? r.habitDone  : r.habitVol;
-        const getT = (r: RowData) => chartMetric === "count" ? r.taskDone   : r.taskVol;
-        const getA = (r: RowData) => chartMetric === "count" ? r.actionDone : r.actionVol;
+        const getH = (r: RowData) => r.habitDone;
+        const getT = (r: RowData) => r.taskDone;
+        const getA = (r: RowData) => r.actionDone;
 
         const hasBarData = rows.some(r => {
             if (chartTarget === "habit")  return getH(r) > 0;
@@ -381,7 +367,7 @@ export default function WeekView({
         ? `${titleDateMatch[1]}年${titleDateMatch[2]}月${titleDateMatch[3]}日`
         : endDay;
 
-    const showMetricRow = chartTarget !== "fulfillment";
+    const showLegend = chartTarget === "total";
 
     return (
         <>
@@ -393,7 +379,7 @@ export default function WeekView({
                 {/* ── グラフ枠 ── */}
                 <Card style={{ ...cardStyle, padding: "14px 16px", margin: "0 -16px", width: "calc(100% + 32px)" }}>
                     {/* 行1: 表示対象プルダウン */}
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: showMetricRow ? 10 : 12 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: showLegend ? 10 : 12 }}>
                         <label style={{ fontSize: 12, color: "#64748b", whiteSpace: "nowrap" }}>表示対象</label>
                         <select
                             value={chartTarget}
@@ -416,30 +402,12 @@ export default function WeekView({
                         </select>
                     </div>
 
-                    {/* 行2: ラジオボタン（充実度以外のみ表示） */}
-                    {showMetricRow && (
-                        <div style={{ display: "flex", gap: 20, marginBottom: 12 }}>
-                            {(["count", "vol"] as ChartMetric[]).map(m => (
-                                <label key={m} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 13, cursor: "pointer" }}>
-                                    <input
-                                        type="radio"
-                                        name="chartMetric"
-                                        value={m}
-                                        checked={chartMetric === m}
-                                        onChange={() => setChartMetric(m)}
-                                        style={{ accentColor: theme.primary }}
-                                    />
-                                    {m === "count" ? "合計数" : "合計vol"}
-                                </label>
-                            ))}
-                            {/* 凡例（合計モードのみ） */}
-                            {chartTarget === "total" && (
-                                <div style={{ marginLeft: "auto", display: "flex", gap: 10, fontSize: 11, color: "#64748b", alignItems: "center" }}>
-                                    <span><span style={{ color: theme.habit }}>■</span> 習慣</span>
-                                    <span><span style={{ color: theme.task }}>■</span> タスク</span>
-                                    <span><span style={{ color: theme.action }}>■</span> 行動</span>
-                                </div>
-                            )}
+                    {/* 行2: 凡例（合計のみ） */}
+                    {showLegend && (
+                        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, fontSize: 11, color: "#64748b", marginBottom: 12 }}>
+                            <span><span style={{ color: theme.habit }}>■</span> 習慣</span>
+                            <span><span style={{ color: theme.task }}>■</span> タスク</span>
+                            <span><span style={{ color: theme.action }}>■</span> 行動</span>
                         </div>
                     )}
 
