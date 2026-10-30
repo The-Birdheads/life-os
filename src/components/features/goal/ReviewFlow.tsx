@@ -5,6 +5,7 @@ import type { MandalaState } from "../../../lib/mandala/useMandala";
 import { actionRate, elementRate, namedElements, rateText, type ElementModel } from "../../../lib/mandala/chart";
 import { currentFrequency, frequencyLabel, isValidFrequency, type Frequency } from "../../../lib/mandala/frequency";
 import { isCounted } from "../../../lib/mandala/progress";
+import { isRepeating, KIND_LABEL } from "../../../lib/taskKind";
 import { DECISION_LABELS, parseSnapshot, type ReviewDecision } from "../../../lib/mandala/review";
 import { localDateLabel } from "../../../lib/mandala/dates";
 import PrimaryBtn from "../../ui/PrimaryBtn";
@@ -136,7 +137,7 @@ export default function ReviewFlow({
                             <span style={{ fontSize: 13, fontWeight: 700, lineHeight: 1.4 }}>{r.element.name} › {r.cell.text}</span>
                             <span style={{ fontSize: 11, color: theme.subtext }}>
                                 {r.cell.status === "paused" ? "休止中" : r.cell.status === "achieved" ? "達成"
-                                    : r.linked.map((t) => `${t.title}（${t.task_type === "habit" ? frequencyLabel(currentFrequency(t)) : "タスク"}）`).join("、")}
+                                    : r.linked.map((t) => `${t.title}（${isRepeating(t) ? frequencyLabel(currentFrequency(t)) : "タスク"}）`).join("、")}
                             </span>
                             {d && d.kind !== "keep" && (
                                 <span style={{ justifySelf: "start", fontSize: 11, fontWeight: 700, color: "#1E3A8A", background: "#DBEAFE", borderRadius: 6, padding: "2px 6px" }}>→ {DECISION_LABELS[d.kind]}</span>
@@ -196,7 +197,8 @@ function DecisionSheet({
     onClose: () => void;
     onDecide: (d: ReviewDecision) => void;
 }) {
-    const habits = row.linked.filter((t) => t.task_type === "habit");
+    // マイルールも習慣と同じく、頻度を直したり終えたりできる
+    const habits = row.linked.filter(isRepeating);
     const [mode, setMode] = useState<Mode>("choose");
     const [taskId, setTaskId] = useState(habits[0]?.id ?? "");
     const target = habits.find((t) => t.id === taskId);
@@ -240,7 +242,7 @@ function DecisionSheet({
                 <div style={{ background: theme.card, borderRadius: 12, padding: "10px 12px", display: "grid", gap: 4 }}>
                     {row.linked.length === 0 && <span style={{ fontSize: 12, color: theme.subtext }}>習慣・タスクはひもづいていません</span>}
                     {row.linked.map((t) => (
-                        <span key={t.id} style={{ fontSize: 12 }}>{t.task_type === "habit" ? "習慣" : "タスク"} ・ {t.title}（{t.task_type === "habit" ? frequencyLabel(currentFrequency(t)) : "タスク"}）</span>
+                        <span key={t.id} style={{ fontSize: 12 }}>{KIND_LABEL[t.task_type]} ・ {t.title}（{isRepeating(t) ? frequencyLabel(currentFrequency(t)) : "タスク"}）</span>
                     ))}
                     <span style={{ fontSize: 12, fontWeight: 700 }}>直近7日：{row.cell.status === "paused" ? "休止中" : rateText(row.rate)}</span>
                 </div>

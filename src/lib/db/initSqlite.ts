@@ -372,7 +372,39 @@ async function createTables(db: SQLiteDBConnection) {
       console.warn('Migration/Check failed for tasks frequency / mandala columns', e);
     }
 
-    await db.execute("PRAGMA user_version = 11;");
+    // 11. 記録画面で自分で並べる順(v12マイグレーション)
+    try {
+      const tasksInfo4 = await db.query(`PRAGMA table_info(tasks);`);
+      const tasksColumns4 = (tasksInfo4.values || []).map((c: any) => c.name);
+      if (!tasksColumns4.includes('sort_order')) {
+        console.log('Adding sort_order column to tasks...');
+        await db.execute(`ALTER TABLE tasks ADD COLUMN sort_order REAL;`);
+      }
+      // 並び順の既定を「自分で並べる」にする。並べるまでは優先度順と同じ並びなので、見た目は変わらない
+      if (currentVersion < 12) {
+        await db.run(
+          `UPDATE notification_settings SET sort_rule = 'manual', updated_at = ? WHERE sort_rule IS NULL OR sort_rule = 'priority'`,
+          [new Date().toISOString()]
+        );
+      }
+    } catch (e) {
+      console.warn('Migration/Check failed for tasks sort_order', e);
+    }
+
+    // 12. 作った日時(v13マイグレーション)。推移タブで、作る前の日を「やらなかった日」に数えないため。
+    // サーバーには前からあるので、既存の分は次の同期で埋まる
+    try {
+      const tasksInfo5 = await db.query(`PRAGMA table_info(tasks);`);
+      const tasksColumns5 = (tasksInfo5.values || []).map((c: any) => c.name);
+      if (!tasksColumns5.includes('created_at')) {
+        console.log('Adding created_at column to tasks...');
+        await db.execute(`ALTER TABLE tasks ADD COLUMN created_at TEXT;`);
+      }
+    } catch (e) {
+      console.warn('Migration/Check failed for tasks created_at', e);
+    }
+
+    await db.execute("PRAGMA user_version = 13;");
 
     // Web版では明示的に保存が必要
     if (Capacitor.getPlatform() === 'web' || Capacitor.getPlatform() === 'ios') {

@@ -3,7 +3,7 @@ import { todayJST } from "./lib/day";
 import { clampDayToToday, addDaysJST, canGoNextDay } from "./lib/dayNav";
 import type { Action, Task } from "./lib/types";
 import AppShell from "./views/AppShell";
-import WeekView from "./views/WeekView";
+import TrendView from "./views/TrendView";
 import ReviewView from "./views/ReviewView";
 import TodayView from "./views/TodayView";
 import FABMenu from "./components/features/register/FABMenu";
@@ -24,6 +24,8 @@ import BannerAd from "./components/ui/BannerAd";
 import { supabase } from "./lib/supabase";
 import { scheduleNotifications, setupNotificationListeners, cancelAllNotifications, requestNotificationPermissions } from "./lib/notifications";
 import { syncWidgetData, processPendingCompletions } from "./lib/widgetData";
+import { buildWidgetMandala } from "./lib/mandala/widget";
+import { namedElements } from "./lib/mandala/chart";
 import { sqliteRepo } from "./lib/db/instance";
 import { registerAppUse, getAccountUsage, deleteAppData, deleteDoneMessage, revokeAppleAuthorizationIfNeeded } from "./lib/accountApi";
 import { adoptLegacyUserData, clearLegacySession } from "./lib/legacyAuthMigration";
@@ -40,6 +42,7 @@ import {
 import type { Tab } from "./lib/tabs";
 import GoalView, { type GoalFocus } from "./views/GoalView";
 import { useMandala } from "./lib/mandala/useMandala";
+import { doingSinceByTask } from "./lib/taskState";
 
 function toHeaderDateLabel(dayISO: string) {
   const [y, m, d] = dayISO.split("-");
@@ -69,7 +72,8 @@ export default function App() {
   }, [msg]);
 
   // ------- UI -------
-  const [tab, setTab] = useState<Tab>("today");
+  // 起動時は目標タブ(PDCA の P)から
+  const [tab, setTab] = useState<Tab>("goal");
 
   useEffect(() => {
     setMsg("");
@@ -135,7 +139,13 @@ export default function App() {
     CapApp.addListener('appUrlOpen', async (data: any) => {
       console.log('App opened with URL:', data.url);
       const url = new URL(data.url);
-      
+
+      // チャートのウィジェットから開いたときは、目標タブへ(habitas://goal)
+      if (url.protocol === 'habitas:' && url.host === 'goal') {
+        setTab("goal");
+        return;
+      }
+
       // habitas://login-callback#access_token=... 形式を処理
       if (url.host === 'login-callback') {
         const hash = url.hash.substring(1); // # を除く
@@ -171,20 +181,27 @@ export default function App() {
   const [actions, setActions] = useState<Action[]>([]);
   const [doneTaskIds, setDoneTaskIds] = useState<Set<string>>(new Set());
   const [doneTaskIdsAnyDay, setDoneTaskIdsAnyDay] = useState<Set<string>>(new Set());
+  // 対応中のタスク(id → 対応中にした日)
+  const [doingSince, setDoingSince] = useState<Map<string, string>>(new Map());
+  // マイルールで、選択中の日に × をつけたもの(○ は doneTaskIds)
+  const [missedTaskIds, setMissedTaskIds] = useState<Set<string>>(new Set());
+  // 読み込みの途中で日付を変えたときに、前の日の内容で上書きしないため
+  const dayRef = useRef(day);
+  dayRef.current = day;
   const [todayActionEntries, setTodayActionEntries] = useState<any[]>([]);
   const [note, setNote] = useState("");
   const [fulfillment, setFulfillment] = useState(0);
   const [yesterdayGoal, setYesterdayGoal] = useState<string | null>(null);
 
   // ------- Modals -------
-  const [openModal, setOpenModal] = useState<"habit" | "oneoff" | "action" | null>(null);
+  const [openModal, setOpenModal] = useState<"habit" | "oneoff" | "rule" | "action" | null>(null);
   const [notifSettingsOpen, setNotifSettingsOpen] = useState(false);
   const [userSettingsOpen, setUserSettingsOpen] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [habTutOpen, setHabTutOpen] = useState(false);
   const [fabForceOpen, setFabForceOpen] = useState(false);
   const [volumeUnit, setVolumeUnit] = useState("30");
-  const [sortRule, setSortRule] = useState<SortRule>("priority");
+  const [sortRule, setSortRule] = useState<SortRule>("manual");
   const [prioritizeDue, setPrioritizeDue] = useState(false);
   const [dataVersion, setDataVersion] = useState(0);
   // 記録タブのチップから、目標タブの要素を開く
@@ -317,7 +334,7 @@ export default function App() {
                   const s = await sqliteRepo.getNotificationSettings(uid);
                   if (s) {
                     setVolumeUnit(s.volume_unit ?? "30");
-                    setSortRule((s.sort_rule as SortRule) ?? "priority");
+                    setSortRule((s.sort_rule as SortRule) ?? "manual");
                     setPrioritizeDue(!!s.prioritize_due);
                   }
                 }
@@ -582,12 +599,18 @@ export default function App() {
 
       const teToday = await sqliteRepo.getTodayTaskEntries(uid, day);
       const doneToday = new Set<string>();
+      const missedToday = new Set<string>();
       for (const t of teToday) {
         if (t.status === "done") doneToday.add(t.task_id);
+        if (t.status === "missed") missedToday.add(t.task_id);
       }
+      const doing = doingSinceByTask(await sqliteRepo.getDoingTaskEntries(uid));
+      if (dayRef.current !== day) return;
 
       setDoneTaskIds(doneToday);
+      setMissedTaskIds(missedToday);
       setDoneTaskIdsAnyDay(new Set(doneIds));
+      setDoingSince(doing);
       setTodayActionEntries(ae);
 
       // 前日の目標を取得（同期後も確実に更新されるようApp側で管理）
@@ -645,11 +668,6 @@ export default function App() {
     loadTodayEntries().catch((e: any) => setMsg(e?.message ?? "読み込みエラー"));
   }, [userId, day]);
 
-  // ------- Widget Sync -------
-  useEffect(() => {
-    if (!userId || tasks.length === 0) return;
-    syncWidgetData(tasks, doneTaskIds, doneTaskIdsAnyDay);
-  }, [tasks, doneTaskIds, doneTaskIdsAnyDay]);
 
   // ウィジェットからの習慣完了をフォアグラウンド復帰時に処理
   useEffect(() => {
@@ -688,9 +706,25 @@ export default function App() {
   const mandalaRefreshKey = useMemo(() => ({}), [dataVersion, doneTaskIds, tasks]);
   const mandala = useMandala(userId, tasks, {
     refreshKey: mandalaRefreshKey,
+    doneAnyDay: doneTaskIdsAnyDay,
+    doingSince,
+    reloadEntries: () => loadTodayEntries(),
     reloadTasks: () => loadBase(),
     onAfterWrite: webAutoSync,
   });
+  // ------- Widget Sync -------
+  // ウィジェットのチャートは、目標タブと同じ直近7日の進み具合
+  const widgetMandala = useMemo(
+    () => (mandala.model && namedElements(mandala.model).length > 0
+      ? buildWidgetMandala(mandala.model, mandala.byCell, mandala.doneByTask, mandala.period)
+      : null),
+    [mandala.model, mandala.byCell, mandala.doneByTask, mandala.period]
+  );
+  useEffect(() => {
+    if (!userId || tasks.length === 0) return;
+    syncWidgetData(tasks, doneTaskIds, doneTaskIdsAnyDay, widgetMandala, sortRule);
+  }, [tasks, doneTaskIds, doneTaskIdsAnyDay, widgetMandala, sortRule]);
+
   // 記録タブのカードに出す、要素のチップ(習慣・タスクの id → 要素)
   const goalChips = useMemo(() => {
     const map = new Map<string, { label: string; color: string; element: number }>();
@@ -821,7 +855,11 @@ export default function App() {
           actions={actions}
           doneTaskIds={doneTaskIds}
           setDoneTaskIds={setDoneTaskIds}
+          missedTaskIds={missedTaskIds}
+          setMissedTaskIds={setMissedTaskIds}
           doneTaskIdsAnyDay={doneTaskIdsAnyDay}
+          doingSince={doingSince}
+          setDoingSince={setDoingSince}
           todayActionEntries={todayActionEntries}
           yesterdayGoal={yesterdayGoal}
           setMsg={setMsg}
@@ -852,6 +890,7 @@ export default function App() {
           setDay={safeSetDay}
           tasks={tasks}
           doneTaskIds={doneTaskIds}
+          missedTaskIds={missedTaskIds}
           actions={actions}
           todayActionEntries={todayActionEntries}
           note={note}
@@ -861,11 +900,13 @@ export default function App() {
           setMsg={setMsg}
           cardStyle={cardStyle}
           dataVersion={dataVersion}
+          mandala={mandala}
+          onOpenGoal={(element) => { setGoalFocus({ element, nonce: Date.now() }); setTab("goal"); }}
         />
       )}
 
       {tab === "week" && (
-        <WeekView
+        <TrendView
           userId={userId}
           tasks={tasks}
           day={day}

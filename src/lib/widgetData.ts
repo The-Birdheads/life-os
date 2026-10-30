@@ -3,6 +3,8 @@ import { Preferences } from "@capacitor/preferences";
 import type { Task } from "./types";
 import { todayJST } from "./day";
 import { frequencyAt, isScheduledOn } from "./mandala/frequency";
+import type { WidgetMandala } from "./mandala/widget";
+import { sortTasks, type SortRule } from "./sortTasks";
 
 const WIDGET_DATA_KEY    = "widget_data";
 const WIDGET_PENDING_KEY = "widget_pending";
@@ -13,23 +15,23 @@ function daysDiff(from: string, to: string): number {
   return Math.round((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-// 優先度が未設定(0)のものは後ろに回す
-const widgetPriority = (p: number) => (p > 0 ? p : 99);
-
 export async function syncWidgetData(
   tasks: Task[],
   doneHabitIds: Set<string>,
-  doneTaskIdsAnyDay: Set<string>
+  doneTaskIdsAnyDay: Set<string>,
+  mandala: WidgetMandala | null = null,
+  sortRule: SortRule = "manual"
 ): Promise<void> {
   if (Capacitor.getPlatform() !== "ios") return;
   try {
     const today = todayJST();
 
-    // 習慣: 今日予定のあるもの(曜日指定)を、優先度が高い順（数値が小さいほど高優先度）
-    const habits = tasks
-      .filter((t) => t.task_type === "habit" && !t.is_hidden && t.is_active && !t.ended_at && isScheduledOn(frequencyAt(t, today), today))
-      .sort((a, b) => widgetPriority(a.priority) - widgetPriority(b.priority))
-      .slice(0, 10)
+    // 習慣: 今日予定のあるもの(曜日指定)を、記録タブと同じ順に
+    const scheduled = tasks.filter(
+      (t) => t.task_type === "habit" && !t.is_hidden && t.is_active && !t.ended_at && isScheduledOn(frequencyAt(t, today), today)
+    );
+    const habits = sortTasks(scheduled, sortRule, false)
+      .slice(0, 12)
       .map((t) => ({
         id: t.id,
         title: t.title,
@@ -37,25 +39,29 @@ export async function syncWidgetData(
         priority: t.priority,
       }));
 
-    // 全アクティブタスク（完了済・非表示・非アクティブを除く）を優先度順に
-    const upcomingTasks = tasks
-      .filter((t) => t.task_type === "oneoff" && !t.is_hidden && t.is_active && !doneTaskIdsAnyDay.has(t.id))
-      .sort((a, b) => widgetPriority(a.priority) - widgetPriority(b.priority))
-      .slice(0, 10)
+    // 未完了のタスク（完了済・非表示・非アクティブを除く）を、記録タブと同じ順に
+    const openTasks = tasks.filter((t) => t.task_type === "oneoff" && !t.is_hidden && t.is_active && !doneTaskIdsAnyDay.has(t.id));
+    const upcomingTasks = sortTasks(openTasks, sortRule, false)
+      .slice(0, 12)
       .map((t) => ({
         id: t.id,
         title: t.title,
         daysUntilDue: t.due_date ? daysDiff(today, t.due_date) : 9999,
         priority: t.priority,
+        done: false,
       }));
 
     const payload = {
       today,
       updatedAt: new Date().toISOString(),
       habits,
-      habitsDone: habits.filter((h) => h.done).length,
-      habitsTotal: habits.length,
+      // 件数は、一覧に入りきらない分も数える
+      habitsDone: scheduled.filter((t) => doneHabitIds.has(t.id)).length,
+      habitsTotal: scheduled.length,
       tasks: upcomingTasks,
+      tasksOverdue: openTasks.filter((t) => t.due_date && daysDiff(today, t.due_date) < 0).length,
+      // チャートが無いときは送らない(ウィジェットは「チャートを作る」案内を出す)
+      ...(mandala ? { mandala } : {}),
     };
 
     await Preferences.set({ key: WIDGET_DATA_KEY, value: JSON.stringify(payload) });

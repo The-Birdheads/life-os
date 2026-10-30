@@ -25,7 +25,8 @@ const VOLUME_UNIT_OPTIONS = [
 ];
 
 const SORT_RULE_OPTIONS: { value: SortRule; label: string }[] = [
-    { value: "priority",    label: "優先度順（デフォルト）" },
+    { value: "manual",      label: "自分で並べる（デフォルト）" },
+    { value: "priority",    label: "優先度順" },
     { value: "volume_desc", label: "ボリューム大きい順" },
     { value: "volume_asc",  label: "ボリューム小さい順" },
 ];
@@ -35,7 +36,7 @@ export default function UserSettingsModal({
     onVolumeUnitChange, onSortSettingsChange,
 }: Props) {
     const [volumeUnit, setVolumeUnit] = useState("30");
-    const [sortRule, setSortRule] = useState<SortRule>("priority");
+    const [sortRule, setSortRule] = useState<SortRule>("manual");
     const [prioritizeDue, setPrioritizeDue] = useState(false);
 
     useEffect(() => {
@@ -44,7 +45,7 @@ export default function UserSettingsModal({
         sqliteRepo.getNotificationSettings(userId).then(res => {
             if (res) {
                 setVolumeUnit(res.volume_unit ?? "30");
-                setSortRule((res.sort_rule as SortRule) ?? "priority");
+                setSortRule((res.sort_rule as SortRule) ?? "manual");
                 setPrioritizeDue(!!res.prioritize_due);
             }
         });
@@ -186,10 +187,15 @@ export default function UserSettingsModal({
                                         <option key={opt.value} value={opt.value}>{opt.label}</option>
                                     ))}
                                 </select>
+                                {sortRule === "manual" && (
+                                    <div style={{ fontSize: 12, color: theme.subtext, marginTop: 6, lineHeight: 1.5 }}>
+                                        記録タブで、カードの右の「≡」をつかんで上下に動かします。並べていないものは、下に優先度順で出ます。
+                                    </div>
+                                )}
                             </div>
 
-                            {/* 行2: 期限付きタスクを優先 チェックボックス */}
-                            <label style={{
+                            {/* 行2: 期限付きタスクを優先 チェックボックス(自分で並べるときは、並べた順を優先するので出さない) */}
+                            {sortRule !== "manual" && <label style={{
                                 display: "flex", alignItems: "center", gap: 12,
                                 padding: "10px 14px", borderRadius: 10, cursor: "pointer",
                                 background: prioritizeDue ? theme.primarySoft : "transparent",
@@ -206,7 +212,7 @@ export default function UserSettingsModal({
                                     <div style={{ fontSize: 14, fontWeight: prioritizeDue ? 600 : 400 }}>期限付きタスクを優先表示</div>
                                     <div style={{ fontSize: 12, color: theme.subtext, marginTop: 2 }}>タスクのみ有効。期限日が近い順に上に表示されます。</div>
                                 </div>
-                            </label>
+                            </label>}
                         </div>
 
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 4 }}>

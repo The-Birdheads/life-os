@@ -18,7 +18,7 @@ type Step = {
 const STEPS: Step[] = [
     {
         targets: ["fab"],
-        title: "習慣・タスク・行動を登録",
+        title: "習慣・タスク・マイルールを登録",
         body: [
             "右下の ＋ ボタンから",
             "続けたい習慣やタスクを追加できます。",
@@ -32,9 +32,10 @@ const STEPS: Step[] = [
         targets: ["bottom-tabs"],
         title: "タブで画面を切り替え",
         body: [
+            "目標 → 大きな目標を行動目標に分ける",
             "記録 → 今日の習慣・タスクを管理",
-            "振り返り → 充実度とメモを記録",
-            "週 → 1週間の達成状況を確認",
+            "振り返り → その日できたことを確認",
+            "推移 → 週・月ごとの記録と抜けを確認",
         ],
         tooltipSide: "top",
         padding: 10,
@@ -46,8 +47,8 @@ const STEPS: Step[] = [
         title: "1日の締めくくりに",
         body: [
             "夜は「振り返り」タブを開いて",
-            "今日の充実度（1〜100）と",
-            "一言メモを残しましょう。",
+            "今日できたことと、",
+            "マイルールの ○× を確かめましょう。",
         ],
         tooltipSide: "top",
         tooltipSides: ["top", "bottom"], // tab-review は上、review-content は下

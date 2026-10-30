@@ -26,6 +26,7 @@ export const theme = {
   habit: "#3b82f6", // Blue 500 (旧タスク色)
   task: "#10b981", // Emerald 500 (旧習慣色)
   action: "#f59e0b", // Amber 500
+  rule: "#8b5cf6", // Violet 500 (マイルール)
 
   toastBg: "rgba(15, 23, 42, 0.95)", // より濃いスレート
   toastText: "#ffffff",

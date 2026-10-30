@@ -133,3 +133,19 @@ describe('weekCountStatus', () => {
         expect(weekCountStatus(t, days('2026-10-25', '2026-10-27'), '2026-11-01')).toEqual({ done: 1, target: 2 });
     });
 });
+
+describe('my rules (マイルール)', () => {
+    it('counts only ○ (done) days; × (missed) and unanswered days count as not kept', () => {
+        const rule = habit({ id: 'r1', task_type: 'rule', priority: 0, volume: 0 });
+        const entries = [
+            { task_id: 'r1', day: '2026-10-26', status: 'done' as const },
+            { task_id: 'r1', day: '2026-10-27', status: 'missed' as const },
+            { task_id: 'r1', day: '2026-10-28', status: 'done' as const },
+        ];
+        const done = doneDaysByTask(entries);
+        expect(done.get('r1')).toEqual(days('2026-10-26', '2026-10-28'));
+        const cell = { text: '早く寝る', status: 'active' as const, paused_periods: [] };
+        // 7日のうち ○ が2日
+        expect(cellRate(cell, [rule], done, WEEK)).toBe(29);
+    });
+});

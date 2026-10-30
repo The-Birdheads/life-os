@@ -14,7 +14,8 @@ export type Task = {
   id: string;
   user_id: string;
   title: string;
-  task_type: "habit" | "oneoff";
+  /** habit=習慣 / oneoff=タスク / rule=マイルール(一日の終わりに、守れたかを ○× でつける) */
+  task_type: "habit" | "oneoff" | "rule";
   due_date: string | null;
   is_active: boolean;
   is_hidden: boolean;
@@ -38,6 +39,10 @@ export type Task = {
   mandala_linked_at?: string | null;
   /** 見直しなどで終了した日(YYYY-MM-DD)。終了した習慣も記録は残す */
   ended_at?: string | null;
+  /** 記録画面で自分で並べたときの順(小さいほど上)。並べたことが無ければ null */
+  sort_order?: number | null;
+  /** 作った日時(ISO)。古い端末の行では、同期するまで null のことがある */
+  created_at?: string | null;
 };
 
 export type MandalaChartStatus = "active" | "finished";
@@ -121,7 +126,16 @@ export type TaskEntry = {
   user_id: string;
   day: string; // YYYY-MM-DD
   task_id: string;
-  status: "todo" | "doing" | "done";
+  /** マイルールは ○=done / ×=missed。答えていない日は todo か記録なし */
+  status: "todo" | "doing" | "done" | "missed";
+};
+
+/** 習慣・タスクごと、状態ごとの記録の、いちばん早い日と遅い日 */
+export type TaskEntryBounds = {
+  task_id: string;
+  status: "doing" | "done" | "missed";
+  first: string;
+  last: string;
 };
 
 export type ActionEntry = {

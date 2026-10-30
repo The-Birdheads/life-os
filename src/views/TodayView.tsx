@@ -10,18 +10,25 @@ import { weekStart } from "../lib/mandala/dates";
 import { todayJST } from "../lib/day";
 import { sqliteRepo } from "../lib/db/instance";
 import { useUserSettings } from "../lib/context/UserSettingsContext";
-import { sortTasks } from "../lib/sortTasks";
+import { mergeManualOrder, sortTasks } from "../lib/sortTasks";
+import SortableList, { type DragHandle } from "../components/ui/SortableList";
 
 import CategoryBadge from "../components/badges/CategoryBadge";
-import PriorityBadge from "../components/badges/PriorityBadge";
 import VolBar from "../components/badges/VolBar";
 import SegmentedBar from "../components/ui/SegmentedBar";
+import { FEATURES } from "../lib/features";
 import SectionTitle from "../components/ui/SectionTitle";
-import { RepeatIcon, CheckIcon, ZapIcon, MemoIcon, BellIcon } from "../components/ui/Icon";
+import { RepeatIcon, CheckIcon, ZapIcon, MemoIcon, GripIcon, ShieldIcon, GridIcon } from "../components/ui/Icon";
 import ToggleSwitch from "../components/ui/ToggleSwitch";
 import { checkOrRequestNotifPermission } from "../lib/notifications";
 import { space } from "../lib/ui/spacing";
 import Checkbox from "../components/ui/Checkbox";
+import TaskStatusBox from "../components/ui/TaskStatusBox";
+import TaskCard from "../components/features/tasks/TaskCard";
+import { nextOnLongPress, nextOnTap, oneoffState, type TaskState } from "../lib/taskState";
+import { saveRuleAnswer, saveTaskState } from "../lib/taskEntries";
+import RuleAnswerButtons from "../components/features/tasks/RuleAnswerButtons";
+import type { RuleAnswer } from "../lib/taskKind";
 import Select from "../components/ui/Select";
 import TextInput from "../components/ui/TextInput";
 import Slider from "../components/ui/Slider";
@@ -29,14 +36,16 @@ import PrimaryBtn from "../components/ui/PrimaryBtn";
 import SecondaryBtn from "../components/ui/SecondaryBtn";
 import { theme } from "../lib/ui/theme";
 
-type Filter = "all" | "habit" | "task" | "action";
+type Filter = "all" | "habit" | "task" | "rule" | "action";
 
+// 5つ並ぶと文字が切れるので、アイコンの下に小さく名前を出す(アイコンは各欄の見出しと同じ)
 const segmentedItems = [
-    { key: "all", label: "すべて" },
-    { key: "habit", label: "習慣" },
-    { key: "task", label: "タスク" },
-    { key: "action", label: "行動" },
-] as const;
+    { key: "all", label: "すべて", icon: <GridIcon size={16} /> },
+    { key: "habit", label: "習慣", icon: <RepeatIcon size={16} /> },
+    { key: "task", label: "タスク", icon: <CheckIcon size={16} /> },
+    { key: "rule", label: "ルール", icon: <ShieldIcon size={16} /> },
+    { key: "action", label: "行動", icon: <ZapIcon size={16} /> },
+].filter((it) => it.key !== "action" || FEATURES.actions);
 
 type Props = {
     userId: string;
@@ -48,7 +57,13 @@ type Props = {
 
     doneTaskIds: Set<string>; // 今日done
     setDoneTaskIds: React.Dispatch<React.SetStateAction<Set<string>>>;
+    /** マイルールで × をつけたもの(○ は doneTaskIds) */
+    missedTaskIds: Set<string>;
+    setMissedTaskIds: React.Dispatch<React.SetStateAction<Set<string>>>;
     doneTaskIdsAnyDay: Set<string>; // 過去どこかでdone
+    /** 対応中のタスク(id → 対応中にした日) */
+    doingSince: Map<string, string>;
+    setDoingSince: React.Dispatch<React.SetStateAction<Map<string, string>>>;
 
     todayActionEntries: any[];
     yesterdayGoal: string | null;
@@ -74,7 +89,11 @@ export default function TodayView({
     actions,
     doneTaskIds,
     setDoneTaskIds,
+    missedTaskIds,
+    setMissedTaskIds,
     doneTaskIdsAnyDay,
+    doingSince,
+    setDoingSince,
     todayActionEntries,
     yesterdayGoal,
     setMsg,
@@ -109,7 +128,8 @@ export default function TodayView({
 
     // ✅ Segmented filter（コンポーネント内）
     const [filter, setFilter] = useState<Filter>("all");
-    const [editingItem, setEditingItem] = useState<{ type: "habit" | "oneoff" | "action"; item: any } | null>(null);
+    const showYesterdayGoal = FEATURES.dailyReview && !!yesterdayGoal;
+    const [editingItem, setEditingItem] = useState<{ type: "habit" | "oneoff" | "rule" | "action"; item: any } | null>(null);
 
     React.useEffect(() => {
         const handleSetFilter = (e: Event) => {
@@ -121,6 +141,7 @@ export default function TodayView({
 
     const activeHabits = tasks.filter((t) => t.is_active && t.task_type === "habit");
     const activeOneoffs = tasks.filter((t) => t.is_active && t.task_type === "oneoff");
+    const activeRules = tasks.filter((t) => t.is_active && t.task_type === "rule");
 
     /**
      * ✅ 習慣（habit）の表示ルール
@@ -191,6 +212,36 @@ export default function TodayView({
     // ✅ 記録タブで表示する習慣
     const habits = activeHabits.filter(shouldShowHabitInToday);
 
+    /**
+     * マイルール。習慣と同じく、予定のある日に出す(非表示・予定のない日は、答えていれば出す)。
+     * 答えていなくても「未完了」とはせず、一日の終わりに ○ / × をつける
+     */
+    const ruleAnswerOf = (id: string): RuleAnswer =>
+        doneTaskIds.has(id) ? "done" : missedTaskIds.has(id) ? "missed" : null;
+    const rules = activeRules.filter((t) =>
+        ruleAnswerOf(t.id) !== null || (!t.is_hidden && isScheduledOn(frequencyAt(t, day), day))
+    );
+    const offDayRules = activeRules.filter(
+        (t) => !t.is_hidden && !isScheduledOn(frequencyAt(t, day), day) && ruleAnswerOf(t.id) === null
+    );
+
+    async function answerRule(taskId: string, answer: RuleAnswer) {
+        const apply = (set: Set<string>, on: boolean) => {
+            const next = new Set(set);
+            if (on) next.add(taskId); else next.delete(taskId);
+            return next;
+        };
+        setDoneTaskIds((prev) => apply(prev, answer === "done"));
+        setMissedTaskIds((prev) => apply(prev, answer === "missed"));
+        try {
+            await saveRuleAnswer(userId, taskId, day, answer);
+            onAfterWrite?.();
+        } catch (e: any) {
+            await loadTodayEntries();
+            setMsg(e?.message ?? "保存できませんでした");
+        }
+    }
+
     // ✅ 記録タブで表示するタスク（oneoff）
     const visibleOneoffs = activeOneoffs.filter(shouldShowOneoffInToday);
 
@@ -227,12 +278,33 @@ export default function TodayView({
         }
     }
 
-    const rowLabelStyle: React.CSSProperties = {
-        display: "grid",
-        gridTemplateColumns: "22px 1fr",
-        columnGap: 14, // 左からチェックボックスまでの余白(約12px)と同等の余白をタイトルとの間にも空ける
-        alignItems: "start",
-    };
+    /** タスクの状態 */
+    const oneoffStateOf = (taskId: string): TaskState =>
+        oneoffState(doneTaskIds.has(taskId), doneTaskIdsAnyDay.has(taskId), doingSince.has(taskId));
+
+    /**
+     * タスクを 未完了 / 対応中 / 完了 にする。
+     * 完了から未完了に戻すときは、対応中の記録も未完了に戻す(着手前の状態に戻すため)。
+     */
+    async function setOneoffState(taskId: string, next: TaskState) {
+        setDoneTaskIds((prev) => {
+            const nextSet = new Set(prev);
+            if (next === "done") nextSet.add(taskId); else nextSet.delete(taskId);
+            return nextSet;
+        });
+        setDoingSince((prev) => {
+            const map = new Map(prev);
+            if (next === "doing" && !map.has(taskId)) map.set(taskId, day);
+            if (next === "todo") map.delete(taskId);
+            return map;
+        });
+        try {
+            await saveTaskState(userId, { id: taskId, task_type: "oneoff" }, day, next);
+        } finally {
+            // 別の日の完了・対応中の記録もあるため、保存のあとに読み直す
+            await loadTodayEntries();
+        }
+    }
 
     // ✅ アイテム行の沈み込みと色反転（追加要望7＆8）
     const rowCard = (accentColor: string | undefined, checked: boolean = false): React.CSSProperties => {
@@ -254,28 +326,6 @@ export default function TodayView({
         };
     };
 
-    const titleStyle = (checked: boolean, accentColor?: string): React.CSSProperties => ({
-        opacity: checked ? (accentColor ? 1 : 0.6) : 1, // 色付き背景ならopacity下げない
-        minWidth: 0,
-        wordBreak: "break-word",
-        lineHeight: 1.3,
-        fontWeight: 600,
-        textDecoration: checked && !accentColor ? "line-through" : "none", // （通常は反転で表現）
-    });
-
-    const metaLineStyle: React.CSSProperties = {
-        opacity: 0.75,
-        display: "flex",
-        gap: 8,
-        alignItems: "center",
-        flexWrap: "wrap",
-    };
-
-    const dueStyle: React.CSSProperties = {
-        opacity: 0.75,
-        fontSize: 12,
-    };
-
     async function updateActionEntry(
         entryId: string,
         patch: { note?: string | null; volume?: number | null; action_id?: string | null }
@@ -292,8 +342,46 @@ export default function TodayView({
         onAfterWrite?.();
     }
 
-    const sortedHabits = sortTasks(habits, sortRule, false, doneTaskIds);
-    const sortedOneoffs = sortTasks(visibleOneoffs, sortRule, prioritizeDue, doneTaskIds);
+    // ── 自分で並べる ──
+    const manual = sortRule === "manual";
+    // 並べ替えた直後は、保存して読み直すまで、並べた順で出しておく(元の位置に一瞬戻らないように)
+    const [orderOverride, setOrderOverride] = useState<Map<string, number> | null>(null);
+    const withOrder = (list: Task[]) =>
+        orderOverride ? list.map((t) => (orderOverride.has(t.id) ? { ...t, sort_order: orderOverride.get(t.id)! } : t)) : list;
+
+    const reorder = async (type: Task["task_type"], moved: string[]) => {
+        if (!userId) return;
+        const all = sortTasks(withOrder(tasks.filter((t) => t.task_type === type)), "manual", false);
+        const ids = mergeManualOrder(all, moved);
+        setOrderOverride(new Map([...(orderOverride ?? []), ...ids.map((id, i) => [id, i + 1] as [string, number])]));
+        try {
+            await sqliteRepo.setTaskOrder(userId, ids);
+            await loadBase();
+            onAfterWrite?.();
+        } catch (e: any) {
+            setMsg(e?.message ?? "並べ替えを保存できませんでした");
+        } finally {
+            setOrderOverride(null);
+        }
+    };
+
+    const gripFor = (handle: DragHandle | null, title: string) =>
+        handle && (
+            <span
+                role="button"
+                aria-label={`${title}を上下に動かして並べ替える`}
+                onPointerDown={handle.onPointerDown}
+                style={{ ...handle.style, display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, margin: "-10px -12px -10px 0", color: theme.subtext }}
+            >
+                <GripIcon size={20} />
+            </span>
+        );
+
+    const sortedHabits = sortTasks(withOrder(habits), sortRule, false, doneTaskIds);
+    // マイルールは答えても下に回さない(夜に上から順に ○× をつけるため、並びを動かさない)
+    const sortedRules = sortTasks(withOrder(rules), sortRule, false);
+    const doingIds = new Set(visibleOneoffs.filter((t) => oneoffStateOf(t.id) === "doing").map((t) => t.id));
+    const sortedOneoffs = sortTasks(withOrder(visibleOneoffs), sortRule, prioritizeDue, doneTaskIds, doingIds);
 
 
 
@@ -352,7 +440,8 @@ export default function TodayView({
         const [remindOn, setRemindOn] = useState(item.remind_on ?? false);
         const [remindHour, setRemindHour] = useState(item.remind_hour ?? 8);
         const [remindMinute, setRemindMinute] = useState(item.remind_minute ?? 0);
-        const [freq, setFreq] = useState<Frequency>(type === "habit" ? currentFrequency(item) : { kind: "daily", count: null, days: null });
+        const repeating = type === "habit" || type === "rule";
+        const [freq, setFreq] = useState<Frequency>(repeating ? currentFrequency(item) : { kind: "daily", count: null, days: null });
 
         const [actionId, setActionId] = useState(item.action_id || "");
         const [note, setNote] = useState(item.note || "");
@@ -398,7 +487,7 @@ export default function TodayView({
                         memo: memo.trim() || null,
                         ...(type === "habit" ? { remind_on: remindOn, remind_hour: remindHour, remind_minute: remindMinute } : {}),
                         // 頻度を変えたときは、変える前の頻度を昨日までの履歴に残す
-                        ...(type === "habit" ? changeFrequencyPatch(item, freq, todayJST()) ?? {} : {}),
+                        ...(repeating ? changeFrequencyPatch(item, freq, todayJST()) ?? {} : {}),
                     } as any);
                     await goal?.setTaskCell({ ...item, title: title.trim() || item.title }, goalCell);
                     await loadBase();
@@ -444,7 +533,7 @@ export default function TodayView({
             }
         };
 
-        const modalTitle = type === "habit" ? "習慣の編集" : type === "oneoff" ? "タスクの編集" : "行動ログの編集";
+        const modalTitle = type === "habit" ? "習慣の編集" : type === "oneoff" ? "タスクの編集" : type === "rule" ? "マイルールの編集" : "行動ログの編集";
         const activeActions = actions.filter((a) => a.is_active && !a.is_hidden);
 
         return (
@@ -454,7 +543,7 @@ export default function TodayView({
                     <h2 style={{ marginTop: 0, marginBottom: 20, fontSize: 20 }}>{modalTitle}</h2>
 
                     <form onSubmit={handleSave} style={{ display: "grid", gap: 16 }}>
-                        {(type === "habit" || type === "oneoff") && (
+                        {type !== "action" && (
                             <>
                                 <label>
                                     タイトル
@@ -485,8 +574,9 @@ export default function TodayView({
                                     </div>
                                 )}
                                 <GoalLinkField groups={goal?.goalOptions ?? []} value={goalCell} onChange={setGoalCell} />
-                                <LevelFields priority={priority} volume={volume} onPriority={setPriority} onVolume={setVolume} />
-                                {type === "habit" && <FrequencyPicker value={freq} onChange={setFreq} />}
+                                {/* マイルールは時間をかけてやるものではないので、優先度・ボリュームは持たない */}
+                                {type !== "rule" && <LevelFields priority={priority} volume={volume} onPriority={setPriority} onVolume={setVolume} />}
+                                {repeating && <FrequencyPicker value={freq} onChange={setFreq} />}
                                 {type === "habit" && (
                                     <div style={{ display: "grid", gap: 8 }}>
                                         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -571,13 +661,13 @@ export default function TodayView({
 
                         <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
                             <div style={{ flex: 1 }}>
-                                <PrimaryBtn type="submit" fullWidth disabled={type === "habit" && !isValidFrequency(freq)}>保存</PrimaryBtn>
+                                <PrimaryBtn type="submit" fullWidth disabled={repeating && !isValidFrequency(freq)}>保存</PrimaryBtn>
                             </div>
                             <div style={{ flex: 1 }}>
                                 <SecondaryBtn type="button" onClick={() => setEditingItem(null)} fullWidth>キャンセル</SecondaryBtn>
                             </div>
                         </div>
-                        {(type === "habit" || type === "oneoff") && (
+                        {type !== "action" && (
                             <div style={{ display: "flex", justifyContent: "center", gap: 24, marginTop: 8 }}>
                                 <button type="button" onClick={handleToggleHidden} style={{ background: "none", border: "none", color: theme.subtext, cursor: "pointer", textDecoration: "underline", fontSize: 14 }}>
                                     {item.is_hidden ? "表示に戻す" : "非表示にする"}
@@ -613,7 +703,8 @@ export default function TodayView({
 }
 `}</style>
             {/* ✅ 今日の目標バナー（前日に tomorrow_note が入力されていた場合のみ表示） */}
-            {yesterdayGoal && (
+            {/* 明日の目標は振り返りタブで書くので、振り返りを外しているあいだは出さない */}
+            {showYesterdayGoal && (
                 <div style={{
                     margin: "-8px -24px 0",   // 上の8px余白を打ち消してヘッダーと直結、左右は画面端まで
                     width: "calc(100% + 48px)",
@@ -635,7 +726,7 @@ export default function TodayView({
             )}
 
             {/* ✅ サブバー（segmented bar）: 目標なし時は上の8px余白を相殺 */}
-            <div style={!yesterdayGoal ? { marginTop: -8 } : undefined}>
+            <div style={!showYesterdayGoal ? { marginTop: -8 } : undefined}>
                 <SegmentedBar
                     items={segmentedItems as any}
                     value={filter}
@@ -653,54 +744,30 @@ export default function TodayView({
                         {sortedHabits.length === 0 ? (
                             <p style={{ margin: 0, opacity: 0.5, fontSize: 14 }}>まだありません（＋ボタンから追加）</p>
                         ) : (
-                            <ul style={{ listStyle: "none", paddingLeft: 0, margin: 0, display: "grid", gap: 8 }}>
-                                    {sortedHabits.map((t) => {
+                            <SortableList
+                                items={sortedHabits}
+                                getId={(t) => t.id}
+                                canDrag={(t) => manual && !doneTaskIds.has(t.id)}
+                                onReorder={(ids) => reorder("habit", ids)}
+                                renderItem={(t, handle) => {
                                         const isHidden = !!(t as any).is_hidden;
                                         const checked = doneTaskIds.has(t.id);
 
                                         return (
-                                            <li key={t.id}>
-                                                <div
-                                                    style={{ ...rowLabelStyle, ...rowCard(theme.habit, checked), cursor: "pointer" }}
-                                                    onMouseEnter={(e) => { if (!checked) e.currentTarget.style.transform = "translate(0,0) scale(1.01)"; }}
-                                                    onMouseLeave={(e) => { if (!checked) e.currentTarget.style.transform = "translate(0,0) scale(1)"; }}
-                                                    onClick={() => setEditingItem({ type: "habit", item: t })}
-                                                >
-                                                    <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", alignSelf: "center" }}>
-                                                        <Checkbox
-                                                            checked={checked}
-                                                            color={theme.habit}
-                                                            onChange={(e) => toggleTaskDone(t.id, e.target.checked)}
-                                                        />
-                                                    </div>
-
-                                                    <div style={{ display: "grid", gap: 4 }}>
-                                                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                                            <div style={titleStyle(checked, theme.habit)}>{t.title}</div>
-                                                            {t.remind_on && <BellIcon size={13} color={checked ? "rgba(255,255,255,0.8)" : theme.habit} style={{ flexShrink: 0, opacity: 0.8 }} />}
-                                                        </div>
-                                                        {t.memo && (
-                                                            <div style={{ fontSize: 12, opacity: checked ? 0.8 : 0.6, lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as any, overflow: "hidden" }}>
-                                                                {t.memo}
-                                                            </div>
-                                                        )}
-                                                        <div style={metaLineStyle}>
-                                                            <PriorityBadge value={(t as any).priority} />
-                                                            <VolBar value={(t as any).volume} isReverse={checked} />
-                                                            {isHidden && checked ? (
-                                                                <small style={{ opacity: 0.6 }}>（非表示・当日完了のため表示）</small>
-                                                            ) : null}
-                                                        </div>
-                                                        {habitFrequencyNote(t) && (
-                                                            <div style={{ fontSize: 12, opacity: checked ? 0.85 : 0.7 }}>{habitFrequencyNote(t)}</div>
-                                                        )}
-                                                        {goalChip(t.id)}
-                                                    </div>
-                                                </div>
-                                            </li>
+                                                <TaskCard
+                                                    task={t}
+                                                    accentColor={theme.habit}
+                                                    checked={checked}
+                                                    onOpen={() => setEditingItem({ type: "habit", item: t })}
+                                                    check={<Checkbox checked={checked} color={theme.habit} onChange={(e) => toggleTaskDone(t.id, e.target.checked)} />}
+                                                    hiddenNote={isHidden && checked ? "（非表示・当日完了のため表示）" : null}
+                                                    notes={[habitFrequencyNote(t)]}
+                                                    footer={goalChip(t.id)}
+                                                    right={gripFor(handle, t.title)}
+                                                />
                                         );
-                                    })}
-                                </ul>
+                                }}
+                            />
                         )}
                         {offDayHabits.length > 0 && (
                             <p style={{ margin: "8px 0 0", fontSize: 12, opacity: 0.7 }}>
@@ -716,60 +783,95 @@ export default function TodayView({
                         {sortedOneoffs.length === 0 ? (
                             <p style={{ margin: 0, opacity: 0.5, fontSize: 14 }}>まだありません（＋ボタンから追加）</p>
                         ) : (
-                            <ul style={{ listStyle: "none", paddingLeft: 0, margin: 0, display: "grid", gap: 8 }}>
-                                    {sortedOneoffs.map((t) => {
+                            <SortableList
+                                items={sortedOneoffs}
+                                getId={(t) => t.id}
+                                canDrag={(t) => manual && !doneTaskIds.has(t.id)}
+                                onReorder={(ids) => reorder("oneoff", ids)}
+                                renderItem={(t, handle) => {
                                         const checked = doneTaskIds.has(t.id);
                                         const isHidden = !!(t as any).is_hidden;
+                                        const state = oneoffStateOf(t.id);
+                                        const since = doingSince.get(t.id);
 
                                         return (
-                                            <li key={t.id}>
-                                                <div
-                                                    style={{ ...rowLabelStyle, ...rowCard(theme.task, checked), cursor: "pointer" }}
-                                                    onMouseEnter={(e) => { if (!checked) e.currentTarget.style.transform = "translate(0,0) scale(1.01)"; }}
-                                                    onMouseLeave={(e) => { if (!checked) e.currentTarget.style.transform = "translate(0,0) scale(1)"; }}
-                                                    onClick={() => setEditingItem({ type: "oneoff", item: t })}
-                                                >
-                                                    <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", alignSelf: "center" }}>
-                                                        <Checkbox
-                                                            checked={checked}
+                                                <TaskCard
+                                                    task={t}
+                                                    accentColor={theme.task}
+                                                    checked={checked}
+                                                    doingSince={state === "doing" ? since ?? "" : null}
+                                                    onOpen={() => setEditingItem({ type: "oneoff", item: t })}
+                                                    check={
+                                                        <TaskStatusBox
+                                                            state={state}
                                                             color={theme.task}
-                                                            onChange={(e) => toggleTaskDone(t.id, e.target.checked)}
+                                                            title={t.title}
+                                                            onTap={() => setOneoffState(t.id, nextOnTap(state))}
+                                                            onLongPress={() => {
+                                                                const next = nextOnLongPress(state);
+                                                                setOneoffState(t.id, next);
+                                                                setMsg(next === "doing" ? `「${t.title}」を対応中にしました` : `「${t.title}」を未完了に戻しました`);
+                                                            }}
                                                         />
-                                                    </div>
-
-                                                    <div style={{ display: "grid", gap: 4 }}>
-                                                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                                            <div style={titleStyle(checked, theme.task)}>{t.title}</div>
-                                                        </div>
-                                                        {t.memo && (
-                                                            <div style={{ fontSize: 12, opacity: checked ? 0.8 : 0.6, lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as any, overflow: "hidden" }}>
-                                                                {t.memo}
-                                                            </div>
-                                                        )}
-                                                        <div style={metaLineStyle}>
-                                                            <PriorityBadge value={(t as any).priority} />
-                                                            <VolBar value={(t as any).volume} isReverse={checked} />
-                                                            {isHidden && checked ? <small style={{ opacity: 0.6 }}>（非表示・当日完了のため表示）</small> : null}
-                                                        </div>
-
-                                                        {t.due_date ? (
-                                                            <div style={dueStyle}>
-                                                                <span style={{ marginRight: 4 }}>期限：</span>
-                                                                {t.due_date}
-                                                            </div>
-                                                        ) : null}
-                                                        {goalChip(t.id)}
-                                                    </div>
-                                                </div>
-                                            </li>
+                                                    }
+                                                    hiddenNote={isHidden && checked ? "（非表示・当日完了のため表示）" : null}
+                                                    footer={goalChip(t.id)}
+                                                    right={gripFor(handle, t.title)}
+                                                />
                                         );
-                                    })}
-                                </ul>
+                                }}
+                            />
                         )}
                     </div>
                 )}
 
-                {(filter === "all" || filter === "action") && (
+                {(filter === "all" || filter === "rule") && (
+                    <div>
+                        <SectionTitle title="マイルール" icon={<ShieldIcon size={18} />} accentColor={theme.rule} style={{ marginBottom: 4 }} />
+                        <p style={{ margin: "0 0 8px", fontSize: 12, color: theme.subtext }}>
+                            一日の終わりに、守れたら ○、守れなかったら × をつけます。翌朝に前の日の分をつけても大丈夫です。
+                        </p>
+                        {sortedRules.length === 0 ? (
+                            <p style={{ margin: 0, opacity: 0.5, fontSize: 14 }}>まだありません（＋ボタンから追加）</p>
+                        ) : (
+                            <SortableList
+                                items={sortedRules}
+                                getId={(t) => t.id}
+                                canDrag={() => manual}
+                                onReorder={(ids) => reorder("rule", ids)}
+                                renderItem={(t, handle) => {
+                                        const answer = ruleAnswerOf(t.id);
+                                        const isHidden = !!t.is_hidden;
+
+                                        return (
+                                                <TaskCard
+                                                    task={t}
+                                                    accentColor={theme.rule}
+                                                    checked={answer === "done"}
+                                                    onOpen={() => setEditingItem({ type: "rule", item: t })}
+                                                    hiddenNote={isHidden && answer ? "（非表示・この日に答えたため表示）" : null}
+                                                    notes={[answer === "missed" ? "この日は守れなかった" : null, frequencyAt(t, day).kind !== "daily" ? frequencyLabel(frequencyAt(t, day)) : null]}
+                                                    footer={goalChip(t.id)}
+                                                    right={
+                                                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                                                            <RuleAnswerButtons value={answer} title={t.title} onAccent={answer === "done"} onChange={(next) => answerRule(t.id, next)} />
+                                                            {gripFor(handle, t.title)}
+                                                        </div>
+                                                    }
+                                                />
+                                        );
+                                }}
+                            />
+                        )}
+                        {offDayRules.length > 0 && (
+                            <p style={{ margin: "8px 0 0", fontSize: 12, opacity: 0.7 }}>
+                                この日は予定のないマイルール：{offDayRules.map((t) => `${t.title}（${frequencyLabel(frequencyAt(t, day))}）`).join("、")}
+                            </p>
+                        )}
+                    </div>
+                )}
+
+                {FEATURES.actions && (filter === "all" || filter === "action") && (
                     <div>
                         <SectionTitle title="行動" icon={<ZapIcon size={18} />} accentColor={theme.action} style={{ marginBottom: 8 }} />
                         {todayActionEntries.length === 0 ? (

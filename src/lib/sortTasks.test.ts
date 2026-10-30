@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sortTasks } from "./sortTasks";
+import { mergeManualOrder, sortTasks } from "./sortTasks";
 import type { Task } from "./types";
 
 const task = (id: string, priority: number, volume: number) =>
@@ -17,5 +17,35 @@ describe("sortTasks: 優先度・ボリュームが未設定(0)のもの", () =>
     });
     it("ボリューム小さい順でも後ろに回る", () => {
         expect(ids("volume_asc")).toEqual(["b", "c", "a"]);
+    });
+});
+
+describe("sortTasks: 対応中のタスク", () => {
+    it("対応中 → 未完了 → 完了済 の順になる", () => {
+        const tasks = [task("done", 5, 5), task("todo", 5, 5), task("doing", 1, 1)];
+        const ids = sortTasks(tasks, "priority", false, new Set(["done"]), new Set(["doing"])).map((t) => t.id);
+        expect(ids).toEqual(["doing", "todo", "done"]);
+    });
+});
+
+describe("sortTasks: 自分で並べる", () => {
+    const withOrder = (id: string, priority: number, order: number | null) => ({ ...task(id, priority, 0), sort_order: order } as Task);
+    const tasks = [withOrder("a", 5, null), withOrder("b", 1, 2), withOrder("c", 3, 1), withOrder("d", 2, null)];
+
+    it("並べた順が上、並べていないものは下に優先度順", () => {
+        expect(sortTasks(tasks, "manual", false).map((t) => t.id)).toEqual(["c", "b", "a", "d"]);
+    });
+
+    it("完了は下に回るが、対応中は並べた順のまま", () => {
+        expect(sortTasks(tasks, "manual", false, new Set(["c"]), new Set(["a"])).map((t) => t.id)).toEqual(["b", "a", "d", "c"]);
+    });
+});
+
+describe("mergeManualOrder", () => {
+    const all = ["a", "b", "c", "d", "e"].map((id) => task(id, 0, 0));
+
+    it("画面に出ていないものは、今の位置のまま", () => {
+        // b, d は画面に出ていない(予定のない日の習慣など)
+        expect(mergeManualOrder(all, ["e", "a", "c"])).toEqual(["e", "b", "a", "d", "c"]);
     });
 });

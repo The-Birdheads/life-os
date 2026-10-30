@@ -123,3 +123,16 @@ export const ChevronRightIcon = ({ size = 16, color = "currentColor", style }: I
     <path d="m9 18 6-6-6-6" />
   </svg>
 );
+
+export const GripIcon = ({ size = 16, color = "currentColor", style }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={style}>
+    <path d="M5 8h14M5 12h14M5 16h14" />
+  </svg>
+);
+
+/** マイルール(守ること) */
+export const ShieldIcon = ({ size = 16, color = "currentColor", style }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={style}>
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+  </svg>
+);

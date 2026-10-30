@@ -11,6 +11,9 @@ import { addDays } from "./dates";
 import { changeFrequencyPatch, currentFrequency, frequencyLabel, type Frequency } from "./frequency";
 import { doneDaysByTask, isCounted, type Period } from "./progress";
 import { buildSnapshot, describeDecision, type ReviewDecision } from "./review";
+import type { TaskState } from "../taskState";
+import { saveRuleAnswer, saveTaskState } from "../taskEntries";
+import { isRepeating, KIND_LABEL, type RuleAnswer } from "../taskKind";
 
 /** チャートの作成で入力する内容(作成の3ステップ) */
 export type ChartDraft = {
@@ -23,7 +26,7 @@ export type ChartDraft = {
 };
 
 export type NewTaskForCell =
-  | { type: "habit"; title: string; frequency: Frequency }
+  | { type: "habit" | "rule"; title: string; frequency: Frequency }
   | { type: "oneoff"; title: string; dueDate: string | null };
 
 export function emptyDraft(): ChartDraft {
@@ -38,12 +41,24 @@ export function emptyDraft(): ChartDraft {
 export function useMandala(
   userId: string | null,
   tasks: Task[],
-  options: { refreshKey?: unknown; reloadTasks: () => Promise<void>; onAfterWrite?: () => unknown }
+  options: {
+    refreshKey?: unknown;
+    reloadTasks: () => Promise<void>;
+    onAfterWrite?: () => unknown;
+    /** どこかの日に完了したタスク(タスクの状態を出すため) */
+    doneAnyDay?: Set<string>;
+    /** 対応中のタスク(id → 対応中にした日) */
+    doingSince?: Map<string, string>;
+    /** 完了・対応中を変えたあとに、記録タブの完了状態を読み直す */
+    reloadEntries?: () => Promise<void>;
+  }
 ) {
-  const { refreshKey, reloadTasks, onAfterWrite } = options;
+  const { refreshKey, reloadTasks, onAfterWrite, doneAnyDay, doingSince, reloadEntries } = options;
   const [chart, setChart] = useState<MandalaChart | null>(null);
   const [cells, setCells] = useState<MandalaCell[]>([]);
   const [doneByTask, setDoneByTask] = useState<Map<string, Set<string>>>(new Map());
+  // マイルールで、今日 × をつけたもの(○ は doneByTask)
+  const [missedToday, setMissedToday] = useState<Set<string>>(new Set());
   const [reviews, setReviews] = useState<MandalaReview[]>([]);
   const [loaded, setLoaded] = useState(false);
 
@@ -57,7 +72,9 @@ export function useMandala(
     setChart(c);
     setCells(c ? await sqliteRepo.getCells(userId, c.id) : []);
     setReviews(c ? await sqliteRepo.getReviews(userId, c.id) : []);
-    setDoneByTask(doneDaysByTask(await sqliteRepo.getTaskEntriesBetween(userId, period.from, period.to)));
+    const entries = await sqliteRepo.getTaskEntriesBetween(userId, period.from, period.to);
+    setDoneByTask(doneDaysByTask(entries));
+    setMissedToday(new Set(entries.filter((e) => e.status === "missed" && e.day === period.to).map((e) => e.task_id)));
     setLoaded(true);
   }, [userId, period]);
 
@@ -67,6 +84,12 @@ export function useMandala(
 
   const model: ChartModel | null = useMemo(() => (chart ? buildChartModel(chart, cells) : null), [chart, cells]);
   const byCell = useMemo(() => tasksByCell(tasks), [tasks]);
+
+  /** タスクの状態(未完了 / 対応中 / 完了)。完了はどこかの日に完了したもの */
+  const taskStateOf = useCallback((taskId: string): TaskState => {
+    if (doneAnyDay?.has(taskId)) return "done";
+    return doingSince?.has(taskId) ? "doing" : "todo";
+  }, [doneAnyDay, doingSince]);
 
   const afterWrite = useCallback(async () => {
     await load();
@@ -148,14 +171,14 @@ export function useMandala(
   /** マスから習慣・タスクを作る(作った日にひもづける) */
   const createTaskForCell = useCallback(async (cell: MandalaCell, input: NewTaskForCell) => {
     if (!userId) return;
-    const isHabit = input.type === "habit";
+    const freq = input.type === "oneoff" ? null : input.frequency;
     const task: Task = {
       id: "", user_id: userId, title: input.title.trim(), task_type: input.type,
       due_date: input.type === "oneoff" ? input.dueDate : null,
       is_active: true, is_hidden: false, priority: 0, volume: 0,
-      frequency_kind: isHabit ? input.frequency.kind : "daily",
-      frequency_count: isHabit && input.frequency.kind === "weekly_count" ? input.frequency.count : null,
-      frequency_days: isHabit && input.frequency.kind === "weekdays" ? input.frequency.days : null,
+      frequency_kind: freq ? freq.kind : "daily",
+      frequency_count: freq?.kind === "weekly_count" ? freq.count : null,
+      frequency_days: freq?.kind === "weekdays" ? freq.days : null,
       frequency_history: [],
       mandala_cell_id: cell.id,
       mandala_linked_at: todayJST(),
@@ -163,7 +186,7 @@ export function useMandala(
     await sqliteRepo.createTask(task);
     await addEvent(
       cell.id, "linked",
-      isHabit ? `習慣「${task.title}」（${frequencyLabel(input.frequency)}）を作った` : `タスク「${task.title}」を作った`,
+      freq ? `${KIND_LABEL[input.type]}「${task.title}」（${frequencyLabel(freq)}）を作った` : `タスク「${task.title}」を作った`,
       task.id
     );
     await reloadTasks();
@@ -173,7 +196,7 @@ export function useMandala(
   /** 登録済みの習慣・タスクをマスにひもづける(ほかのマスからは付け替え) */
   const linkTask = useCallback(async (task: Task, cell: MandalaCell) => {
     if (!userId) return;
-    const kind = task.task_type === "habit" ? "習慣" : "タスク";
+    const kind = KIND_LABEL[task.task_type];
     if (task.mandala_cell_id && task.mandala_cell_id !== cell.id) {
       await addEvent(task.mandala_cell_id, "unlinked", `${kind}「${task.title}」を別のマスへ付け替えた`, task.id);
     }
@@ -185,12 +208,28 @@ export function useMandala(
 
   const unlinkTask = useCallback(async (task: Task) => {
     if (!userId || !task.mandala_cell_id) return;
-    const kind = task.task_type === "habit" ? "習慣" : "タスク";
+    const kind = KIND_LABEL[task.task_type];
     await addEvent(task.mandala_cell_id, "unlinked", `${kind}「${task.title}」のひもづけを外した`, task.id);
     await sqliteRepo.updateTask(userId, task.id, { mandala_cell_id: null, mandala_linked_at: null });
     await reloadTasks();
     await afterWrite();
   }, [userId, addEvent, reloadTasks, afterWrite]);
+
+  /** 目標タブから、今日の分の完了・対応中を変える(記録タブでチェックするのと同じ) */
+  const setTaskStateToday = useCallback(async (task: Task, next: TaskState) => {
+    if (!userId) return;
+    await saveTaskState(userId, task, todayJST(), next);
+    await reloadEntries?.();
+    await afterWrite();
+  }, [userId, reloadEntries, afterWrite]);
+
+  /** 目標タブから、マイルールの今日の ○ / × を変える(記録タブでつけるのと同じ) */
+  const setRuleAnswerToday = useCallback(async (task: Task, answer: RuleAnswer) => {
+    if (!userId) return;
+    await saveRuleAnswer(userId, task.id, todayJST(), answer);
+    await reloadEntries?.();
+    await afterWrite();
+  }, [userId, reloadEntries, afterWrite]);
 
   /** 習慣・タスクの側から選べる行動目標(要素ごと)。文言のある、休止中でないマス */
   const goalOptions: GoalOptionGroup[] = useMemo(() => {
@@ -268,7 +307,8 @@ export function useMandala(
         });
         await addEvent(cell.id, "lowered", `見直し：ハードルを下げた。${before} → ${d.title.trim() || t.title}（${frequencyLabel(d.frequency)}）`, t.id);
       } else if (d.kind === "change") {
-        const habits = active.filter((t) => t.task_type === "habit");
+        // マイルールも習慣と同じく、くり返すものなので一緒に終える
+        const habits = active.filter(isRepeating);
         await endTasks(habits);
         const newText = d.newText.trim() || cell.text;
         if (newText !== cell.text) await sqliteRepo.upsertCell({ ...cell, text: newText });
@@ -336,7 +376,7 @@ export function useMandala(
    */
   const achieveCell = useCallback(async (cell: MandalaCell, endHabits: boolean) => {
     if (!userId) return;
-    const habits = (byCell.get(cell.id) ?? []).filter((t) => isCounted(t) && t.task_type === "habit");
+    const habits = (byCell.get(cell.id) ?? []).filter((t) => isCounted(t) && isRepeating(t));
     if (endHabits) {
       for (const t of habits) await sqliteRepo.updateTask(userId, t.id, { ended_at: todayJST(), is_hidden: true });
     }
@@ -355,10 +395,11 @@ export function useMandala(
   }, [userId, addEvent, afterWrite]);
 
   return {
-    loaded, model, byCell, doneByTask, period, reviews,
+    loaded, model, byCell, doneByTask, missedToday, period, reviews,
     reload: load,
     createChart, updateChart, setElementName, setActionText,
     createTaskForCell, linkTask, unlinkTask, getEvents, goalOptions, setTaskCell,
+    taskStateOf, doingSince: doingSince ?? new Map<string, string>(), setTaskStateToday, setRuleAnswerToday,
     saveReview, resumeCell, achieveCell, unachieveCell,
   };
 }

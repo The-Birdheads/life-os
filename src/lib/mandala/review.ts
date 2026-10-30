@@ -38,7 +38,7 @@ export function buildSnapshot(
           tasks: tasks.map((t) => ({
             title: t.title,
             type: t.task_type,
-            frequency: t.task_type === "habit" ? frequencyLabel(currentFrequency(t)) : null,
+            frequency: t.task_type !== "oneoff" ? frequencyLabel(currentFrequency(t)) : null,
             rate: taskProgress(t, doneByTask.get(t.id), period, c.paused_periods).rate,
           })),
         }];

@@ -16,16 +16,17 @@ export default function GoalLinkField({
     const current = groups.find((g) => g.cells.some((c) => c.id === value));
 
     return (
-        <label style={{ display: "grid", gap: 6, fontSize: 14 }}>
+        // 選択肢の長さで幅が広がらないよう、幅を親に合わせる(長い行動目標でモーダルからはみ出すため)
+        <label style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 6, fontSize: 14, minWidth: 0 }}>
             <span>行動目標<span style={{ fontSize: 12, color: theme.subtext }}>（任意）</span></span>
-            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
                 {current && <span style={{ width: 10, height: 10, borderRadius: 5, background: current.color, flexShrink: 0 }} />}
                 <select
                     aria-label="ひもづける行動目標"
                     value={value ?? ""}
                     onChange={(e) => onChange(e.target.value || null)}
                     style={{
-                        flex: 1, minWidth: 0, minHeight: 44, fontSize: 15, padding: "0 10px", borderRadius: 10,
+                        flex: 1, width: 0, minWidth: 0, minHeight: 44, textOverflow: "ellipsis", fontSize: 15, padding: "0 10px", borderRadius: 10,
                         border: `1px solid ${theme.border}`, background: "var(--bg)", color: "var(--text)", fontFamily: "inherit",
                     }}
                 >

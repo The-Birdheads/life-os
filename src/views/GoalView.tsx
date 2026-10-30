@@ -127,7 +127,7 @@ export default function GoalView({
                     </Grid3>
                     <Legend />
                     <div style={{ background: theme.card, borderRadius: 14, padding: "12px 14px", fontSize: 13 }}>
-                        ひもづいた習慣 <b>{linkedCount("habit")}</b> 件 ・ タスク <b>{linkedCount("oneoff")}</b> 件
+                        ひもづいた習慣 <b>{linkedCount("habit")}</b> 件 ・ タスク <b>{linkedCount("oneoff")}</b> 件{linkedCount("rule") > 0 && <> ・ マイルール <b>{linkedCount("rule")}</b> 件</>}
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                         <PrimaryBtn fullWidth disabled={named.length === 0} onClick={() => setView("review")} style={{ minHeight: 52 }}>見直す</PrimaryBtn>
@@ -186,9 +186,10 @@ export default function GoalView({
                             const r = actionRate(c, mandala.byCell, mandala.doneByTask, mandala.period);
                             const t = c.status === "paused" ? { bg: "#E2E8F0", fg: "#334155", border: "#CBD5E1" } : rateTint(element.color, r);
                             const h = linked.filter((x) => x.task_type === "habit").length;
-                            const k = linked.length - h;
+                            const k = linked.filter((x) => x.task_type === "oneoff").length;
+                            const rl = linked.filter((x) => x.task_type === "rule").length;
                             const meta = c.status === "paused" ? "休止中" : c.status === "achieved" ? "達成"
-                                : [h ? `習慣${h}` : "", k ? `タスク${k}` : ""].filter(Boolean).join("・");
+                                : [h ? `習慣${h}` : "", k ? `タスク${k}` : "", rl ? `ルール${rl}` : ""].filter(Boolean).join("・");
                             return (
                                 <button key={pos} type="button" aria-label={`${c.text}、${meta}、${rateText(r)}。開く`} onClick={open}
                                     style={{ ...cellBase, height: 118, background: t.bg, color: t.fg, border: `2px solid ${t.border}`, justifyContent: "space-between", cursor: "pointer" }}>

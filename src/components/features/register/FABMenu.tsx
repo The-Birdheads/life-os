@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { theme } from "../../../lib/ui/theme";
-import { RepeatIcon, CheckIcon, ZapIcon } from "../../ui/Icon";
+import { RepeatIcon, CheckIcon, ZapIcon, ShieldIcon } from "../../ui/Icon";
+import { FEATURES } from "../../../lib/features";
 
 type Props = {
-    onSelect: (type: "habit" | "oneoff" | "action") => void;
+    onSelect: (type: "habit" | "oneoff" | "rule" | "action") => void;
     onFirstPress?: () => void;
     forceOpen?: boolean;
 };
@@ -125,11 +126,20 @@ export default function FABMenu({ onSelect, onFirstPress, forceOpen }: Props) {
                 </button>
                 <button
                     style={itemBtnStyle}
-                    onClick={() => { onSelect("action"); setOpen(false); }}
+                    onClick={() => { onSelect("rule"); setOpen(false); }}
                 >
-                    <div style={iconWrapStyle}><ZapIcon size={18} color={theme.primary} /></div>
-                    行動の登録
+                    <div style={iconWrapStyle}><ShieldIcon size={18} color={theme.primary} /></div>
+                    マイルールの登録
                 </button>
+                {FEATURES.actions && (
+                    <button
+                        style={itemBtnStyle}
+                        onClick={() => { onSelect("action"); setOpen(false); }}
+                    >
+                        <div style={iconWrapStyle}><ZapIcon size={18} color={theme.primary} /></div>
+                        行動の登録
+                    </button>
+                )}
             </div>
             <button
                 data-tutorial="fab"

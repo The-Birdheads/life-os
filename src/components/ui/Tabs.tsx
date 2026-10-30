@@ -14,11 +14,12 @@ type TabItem = {
   label: string;
   icon: React.ReactNode;
 };
+// PDCA の順: 目標(P) → 記録(D) → 振り返り・推移(C)
 const items: TabItem[] = [
-  { key: "today", label: "記録", icon: <PencilIcon size={20} /> },
   { key: "goal", label: "目標", icon: <TargetIcon size={20} /> },
+  { key: "today", label: "記録", icon: <PencilIcon size={20} /> },
   { key: "review", label: "振り返り", icon: <SearchIcon size={20} /> },
-  { key: "week", label: "週", icon: <CalendarIcon size={20} /> },
+  { key: "week", label: "推移", icon: <CalendarIcon size={20} /> },
 ];
 
 export default function Tabs({ tab, setTab }: Props) {
