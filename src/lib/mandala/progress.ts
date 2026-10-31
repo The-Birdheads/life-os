@@ -1,7 +1,7 @@
 /**
  * 進み具合の計算(docs/mandala-chart.md 4-6)。保存はせず、完了の記録(task_entries)から毎回計算する。
  *
- * - 数えるのは、表示中の期間のうち、マスにひもづけた日以降だけ(決定 #5)
+ * - 数えるのは、表示中の期間のうち、マスにひもづけた日以降だけ(決定 #5)。ただし、ひもづける前の日でも完了を記録した日は数える
  * - 頻度はその日に有効だった頻度で数える(決定 #15)
  * - 予定のない曜日の完了は数えない(決定 #16)
  * - マスを休止していた日は数えない(決定 #17)
@@ -53,11 +53,12 @@ export function habitProgress(
   period: Period,
   options: { countFrom?: string | null; paused?: PausedPeriod[] } = {}
 ): Progress {
-  const start = maxDay(period.from, options.countFrom);
+  const start = period.from;
   const end = minDay(period.to, task.ended_at);
-  if (!start || !end || start > end) return EMPTY;
+  if (!end || start > end) return EMPTY;
 
   const done = doneDays ?? new Set<string>();
+  const countFrom = maxDay(period.from, options.countFrom);
   let target = 0;
   let credit = 0;
   let doneCount = 0;
@@ -65,6 +66,8 @@ export function habitProgress(
   const weeks = new Map<string, { target: number; done: number }>();
 
   for (const day of daysBetween(start, end)) {
+    // ひもづけた日より前は、完了を記録した日だけ数える(深夜に作って前日分を付けたときなど)
+    if (countFrom && day < countFrom && !done.has(day)) continue;
     if (isPausedOn(day, options.paused)) continue;
     const freq = frequencyAt(task, day);
     if (freq.kind === "weekly_count") {

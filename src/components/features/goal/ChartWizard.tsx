@@ -10,11 +10,14 @@ import { ChevronLeftIcon, ChevronRightIcon } from "../../ui/Icon";
 /**
  * チャートの作成(3ステップ: 大目標 → 8つの要素 → 要素ごとの行動目標)。
  * 全部埋めなくても「完了」できる。保存は最後にまとめて行う(キャンセルすると何も残らない)。
+ * replacing: 今のチャートを終えて、新しいチャートを作るとき
  */
 export default function ChartWizard({
+    replacing = false,
     onCancel,
     onSave,
 }: {
+    replacing?: boolean;
     onCancel: () => void;
     onSave: (draft: ChartDraft) => Promise<void>;
 }) {
@@ -62,7 +65,7 @@ export default function ChartWizard({
     return (
         <div style={{ display: "grid", gap: 14 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: theme.subtext }}>チャートの作成　ステップ {step}/3</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: theme.subtext }}>{replacing ? "新しいチャートの作成" : "チャートの作成"}　ステップ {step}/3</span>
                 <button type="button" onClick={onCancel} style={{ minHeight: 44, border: "none", background: "none", color: theme.subtext, fontSize: 13, cursor: "pointer" }}>キャンセル</button>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 6, marginTop: -8 }}>

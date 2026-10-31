@@ -538,6 +538,15 @@ export class SqliteRepository implements Repository {
         return (res.values?.[0] as MandalaChart | undefined) ?? null;
     }
 
+    async getFinishedCharts(userId: string): Promise<MandalaChart[]> {
+        const db = await this.getDb();
+        const res = await db.query(
+            `SELECT * FROM mandala_charts WHERE user_id = ? AND status = 'finished' AND deleted_at IS NULL ORDER BY updated_at DESC`,
+            [userId]
+        );
+        return (res.values ?? []) as MandalaChart[];
+    }
+
     async upsertChart(chart: MandalaChart): Promise<void> {
         if (!chart.id) chart.id = crypto.randomUUID();
         await this.upsertMandalaRow("mandala_charts", chart);

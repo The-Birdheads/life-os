@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { MandalaCell, MandalaChart, Task } from '../types';
 import { buildChartModel, tasksByCell } from './chart';
 import { doneDaysByTask } from './progress';
-import { buildSnapshot, describeDecision, parseSnapshot } from './review';
+import { buildSnapshot, describeDecision, parseSnapshot, recordKind } from './review';
 
 const chart: MandalaChart = { id: 'c1', user_id: 'u1', title: '健康的な体をつくる', start_date: '2026-10-01', end_date: null, status: 'active' };
 const cell = (id: string, e: number, a: number | null, text: string, patch: Partial<MandalaCell> = {}): MandalaCell => ({
@@ -64,5 +64,14 @@ describe('describeDecision', () => {
         }, tasks)).toBe('運動 › ジムに週3回行く：やり方を変える（「家で筋トレする」に変更、習慣「スクワット10回」（毎日）を開始）');
         expect(describeDecision('運動', '階段を使う', { kind: 'remove', endHabits: false }, tasks))
             .toBe('運動 › 階段を使う：目標から外す（習慣は記録タブに残す）');
+    });
+});
+
+describe('recordKind', () => {
+    it('tells saves apart from reviews by snapshot.kind', () => {
+        expect(recordKind({ snapshot: { title: 'a', elements: [] } })).toBe('review');
+        expect(recordKind({ snapshot: { title: 'a', elements: [], kind: 'save' } })).toBe('save');
+        expect(recordKind({ snapshot: { title: 'a', elements: [], kind: 'final' } })).toBe('final');
+        expect(recordKind({ snapshot: { kind: 'other' } })).toBe('review');
     });
 });

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState, useRef } from "react";
 import { todayJST } from "./lib/day";
 import { clampDayToToday, addDaysJST, canGoNextDay } from "./lib/dayNav";
 import type { Action, Task } from "./lib/types";
@@ -77,6 +77,12 @@ export default function App() {
 
   useEffect(() => {
     setMsg("");
+  }, [tab]);
+
+  // タブは画面全体のスクロールを共有しているので、切り替えたら一番上から見せる
+  // (前のタブの位置のままだと、振り返りタブの演出中に下のほうの空白だけが見えてしまう)
+  useLayoutEffect(() => {
+    window.scrollTo(0, 0);
   }, [tab]);
 
   // ⭐ 日付状態（唯一の真実）

@@ -3,7 +3,7 @@
  * - 見直しの記録(snapshot): 見直す前のチャートと、当時の進み具合。保存後は変えない
  * - 次の手(decision): マスごとに選ぶ。保存したときに、まとめてチャート・習慣へ反映する
  */
-import type { MandalaCell, Task } from "../types";
+import type { MandalaCell, MandalaReview, Task } from "../types";
 import { actionRate, elementRate, type ChartModel } from "./chart";
 import { currentFrequency, frequencyLabel, type Frequency } from "./frequency";
 import { isCounted, taskProgress, type Period } from "./progress";
@@ -11,7 +11,30 @@ import { isCounted, taskProgress, type Period } from "./progress";
 export type SnapshotTask = { title: string; type: Task["task_type"]; frequency: string | null; rate: number | null };
 export type SnapshotCell = { index: number; text: string; status: MandalaCell["status"]; rate: number | null; tasks: SnapshotTask[] };
 export type SnapshotElement = { index: number; name: string; color: string; rate: number | null; cells: SnapshotCell[] };
-export type ReviewSnapshot = { title: string; period: Period; elements: SnapshotElement[] };
+export type ReviewSnapshot = {
+  title: string;
+  period: Period;
+  elements: SnapshotElement[];
+  /** 見直し以外の記録の種類(無ければ見直し) */
+  kind?: "save" | "final";
+};
+
+/**
+ * 履歴の記録の種類。見直し・手動の保存・チャートを終えたときの保存。
+ * どれも mandala_reviews に残し、保存の記録は snapshot.kind で見分ける(メモは good_note)
+ */
+export type RecordKind = "review" | "save" | "final";
+
+export const RECORD_LABELS: Record<RecordKind, string> = {
+  review: "見直し",
+  save: "保存",
+  final: "終えたときの保存",
+};
+
+export function recordKind(record: Pick<MandalaReview, "snapshot">): RecordKind {
+  const kind = (record.snapshot as { kind?: unknown } | null)?.kind;
+  return kind === "save" || kind === "final" ? kind : "review";
+}
 
 export function buildSnapshot(
   model: ChartModel,

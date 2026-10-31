@@ -35,6 +35,8 @@ export interface Repository {
 
     // Mandala Chart
     getActiveChart(userId: string): Promise<MandalaChart | null>;
+    /** 終えたチャート(新しい順) */
+    getFinishedCharts(userId: string): Promise<MandalaChart[]>;
     upsertChart(chart: MandalaChart): Promise<void>;
     getCells(userId: string, chartId: string): Promise<MandalaCell[]>;
     upsertCell(cell: MandalaCell): Promise<void>;

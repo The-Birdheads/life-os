@@ -10,13 +10,15 @@ import { isCounted } from "../lib/mandala/progress";
 import ChartWizard from "../components/features/goal/ChartWizard";
 import CellSheet from "../components/features/goal/CellSheet";
 import ReviewFlow from "../components/features/goal/ReviewFlow";
-import ReviewHistory from "../components/features/goal/ReviewHistory";
+import ChartHistory from "../components/features/goal/ChartHistory";
+import PastCharts from "../components/features/goal/PastCharts";
+import ChartSheet from "../components/features/goal/ChartSheet";
 import PrimaryBtn from "../components/ui/PrimaryBtn";
 import SecondaryBtn from "../components/ui/SecondaryBtn";
-import { ChevronLeftIcon, ChevronRightIcon, GridIcon, PlusIcon, TargetIcon } from "../components/ui/Icon";
+import { ChevronLeftIcon, ChevronRightIcon, GridIcon, PencilIcon, PlusIcon, TargetIcon } from "../components/ui/Icon";
 import { todayJST } from "../lib/day";
 
-type View = "center" | "element" | "all" | "wizard" | "review" | "history";
+type View = "center" | "element" | "all" | "wizard" | "review" | "history" | "past";
 type Sheet = { element: number; cell: number | null } | null;
 
 /** 記録タブのチップなどから、特定の要素を開くための指定(nonce が変わるたびに開く) */
@@ -38,6 +40,10 @@ export default function GoalView({
     const [view, setView] = useState<View>("center");
     const [elem, setElem] = useState(0);
     const [sheet, setSheet] = useState<Sheet>(null);
+    const [chartSheet, setChartSheet] = useState(false);
+    // 新しいチャートを作るときの確認と、今のチャートを履歴に保存するか
+    const [askNew, setAskNew] = useState(false);
+    const [saveOnReplace, setSaveOnReplace] = useState(true);
     const model = mandala.model;
 
     useEffect(() => {
@@ -46,16 +52,25 @@ export default function GoalView({
 
     if (!mandala.loaded) return null;
 
+    if (view === "past") {
+        return (
+            <div style={{ paddingTop: 8 }}>
+                <PastCharts mandala={mandala} backLabel={model ? "履歴へ" : "戻る"} onBack={() => setView(model ? "history" : "center")} />
+            </div>
+        );
+    }
+
     if (view === "wizard" || !model) {
         if (view !== "wizard") {
-            return <EmptyGoal onStart={() => setView("wizard")} />;
+            return <EmptyGoal onStart={() => setView("wizard")} onOpenPast={mandala.pastCharts.length ? () => setView("past") : undefined} />;
         }
         return (
             <div style={{ paddingTop: 8 }}>
                 <ChartWizard
+                    replacing={!!model}
                     onCancel={() => setView("center")}
                     onSave={async (draft) => {
-                        await mandala.createChart(draft);
+                        await mandala.createChart(draft, { saveCurrent: saveOnReplace });
                         setView("center");
                         setMsg("チャートを作りました。要素を開いて、マスから習慣を作ってみましょう");
                     }}
@@ -75,6 +90,17 @@ export default function GoalView({
         : null;
 
     const element = model.elements[elem];
+    // 新しいチャートは、保存したときに今のチャートと入れ替わる(キャンセルなら何も変わらない)
+    const startNewChart = () => {
+        setChartSheet(false);
+        setSheet(null);
+        setAskNew(true);
+    };
+    const goWizard = (save: boolean) => {
+        setSaveOnReplace(save);
+        setAskNew(false);
+        setView("wizard");
+    };
     const step = (d: number) => {
         if (!named.length) return;
         const i = Math.max(0, named.indexOf(elem));
@@ -86,10 +112,11 @@ export default function GoalView({
             {view === "center" && (
                 <>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
-                        <div style={{ minWidth: 0 }}>
-                            <div style={{ fontSize: 12, color: theme.subtext }}>大目標</div>
+                        <button type="button" aria-label={`大目標「${model.chart.title}」を編集する`} onClick={() => setChartSheet(true)}
+                            style={{ minWidth: 0, border: "none", background: "none", padding: 0, textAlign: "left", fontFamily: "inherit", color: "var(--text)", cursor: "pointer" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: theme.subtext }}>大目標<PencilIcon size={12} /></div>
                             <h1 style={{ margin: "2px 0 0", fontSize: 20, lineHeight: 1.35 }}>{model.chart.title}</h1>
-                        </div>
+                        </button>
                         {daysLeft !== null && (
                             <div style={{ textAlign: "right", fontSize: 12, color: theme.subtext, whiteSpace: "nowrap", lineHeight: 1.6 }}>
                                 〜{model.chart.end_date!.replace(/-/g, "/")}<br />
@@ -101,7 +128,12 @@ export default function GoalView({
                     <Grid3>
                         {Array.from({ length: 9 }, (_, pos) => {
                             if (pos === 4) {
-                                return <div key={pos} style={{ ...cellBase, height: 112, background: "#1E293B", color: "#F8FAFC", justifyContent: "center", alignItems: "center", textAlign: "center", fontSize: 13 }}>{model.chart.title}</div>;
+                                return (
+                                    <button key={pos} type="button" aria-label={`大目標「${model.chart.title}」を編集する`} onClick={() => setChartSheet(true)}
+                                        style={{ ...cellBase, height: 112, border: "none", background: "#1E293B", color: "#F8FAFC", justifyContent: "center", alignItems: "center", textAlign: "center", fontSize: 13, cursor: "pointer" }}>
+                                        {model.chart.title}
+                                    </button>
+                                );
                             }
                             const el = model.elements[AROUND.indexOf(pos as (typeof AROUND)[number])];
                             if (!el.name) {
@@ -131,9 +163,13 @@ export default function GoalView({
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                         <PrimaryBtn fullWidth disabled={named.length === 0} onClick={() => setView("review")} style={{ minHeight: 52 }}>見直す</PrimaryBtn>
-                        <SecondaryBtn fullWidth onClick={() => setView("history")} style={{ minHeight: 52 }}>見直しの履歴（{mandala.reviews.length}）</SecondaryBtn>
+                        <SecondaryBtn fullWidth onClick={() => setView("history")} style={{ minHeight: 52 }}>チャートの履歴（{mandala.reviews.length}）</SecondaryBtn>
                     </div>
                     <SecondaryBtn fullWidth onClick={() => setView("all")}><GridIcon size={18} />全体を見る（9×9）</SecondaryBtn>
+                    <button type="button" onClick={startNewChart}
+                        style={{ minHeight: 44, border: "none", background: "none", color: theme.subtext, fontSize: 13, textDecoration: "underline", cursor: "pointer", fontFamily: "inherit" }}>
+                        新しいチャートを作る
+                    </button>
                 </>
             )}
 
@@ -142,7 +178,21 @@ export default function GoalView({
             )}
 
             {view === "history" && (
-                <ReviewHistory reviews={mandala.reviews} model={model} onBack={() => setView("center")} />
+                <ChartHistory
+                    title="チャートの履歴"
+                    backLabel="中心へ"
+                    onBack={() => setView("center")}
+                    records={mandala.reviews}
+                    model={model}
+                    compareNow
+                    onSave={async (note) => {
+                        await mandala.saveCurrentState(note);
+                        setMsg("今の状態を履歴に保存しました");
+                    }}
+                    pastCount={mandala.pastCharts.length}
+                    onOpenPast={() => setView("past")}
+                    emptyText="まだ記録はありません。今の状態を保存するか、チャートの「見直す」から見直すと、ここに残ります。"
+                />
             )}
 
             {view === "element" && element && (
@@ -247,6 +297,39 @@ export default function GoalView({
                 </>
             )}
 
+            {askNew && (
+                <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 110, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}
+                    onClick={() => setAskNew(false)}>
+                    <div role="dialog" aria-label="新しいチャートを作る" onClick={(e) => e.stopPropagation()}
+                        style={{ width: "100%", maxWidth: 360, background: "var(--bg)", borderRadius: 18, padding: 20, display: "grid", gap: 12 }}>
+                        <span style={{ fontSize: 16, fontWeight: 700 }}>新しいチャートを作る</span>
+                        <p style={{ margin: 0, fontSize: 13, lineHeight: 1.7, color: theme.subtext }}>
+                            今のチャートを終えて、新しいチャートを作ります。習慣・タスクと記録はそのまま残り、行動目標とのひもづけだけ外れます。
+                        </p>
+                        <p style={{ margin: 0, fontSize: 13, lineHeight: 1.7 }}>
+                            今のチャートと進み具合を、履歴に保存しますか？<br />
+                            <span style={{ fontSize: 12, color: theme.subtext }}>終えたチャートは「チャートの履歴 › 過去のチャート」から見られます。切り替わるのは、新しいチャートを保存したときです。</span>
+                        </p>
+                        <PrimaryBtn fullWidth onClick={() => goWizard(true)}>保存してから作る</PrimaryBtn>
+                        <SecondaryBtn fullWidth onClick={() => goWizard(false)}>保存せずに作る</SecondaryBtn>
+                        <button type="button" onClick={() => setAskNew(false)}
+                            style={{ minHeight: 44, border: "none", background: "none", color: theme.subtext, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>
+                            キャンセル
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {chartSheet && (
+                <ChartSheet
+                    mandala={mandala}
+                    adHeight={adHeight}
+                    setMsg={setMsg}
+                    onClose={() => setChartSheet(false)}
+                    onNewChart={startNewChart}
+                />
+            )}
+
             {sheet && (
                 <CellSheet
                     key={`${sheet.element}-${sheet.cell}`}
@@ -264,7 +347,7 @@ export default function GoalView({
     );
 }
 
-function EmptyGoal({ onStart }: { onStart: () => void }) {
+function EmptyGoal({ onStart, onOpenPast }: { onStart: () => void; onOpenPast?: () => void }) {
     return (
         <div style={{ display: "grid", justifyItems: "center", textAlign: "center", padding: "56px 8px 0", gap: 16 }}>
             <div style={{ width: 76, height: 76, borderRadius: 38, background: "#DBEAFE", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -275,6 +358,7 @@ function EmptyGoal({ onStart }: { onStart: () => void }) {
                 大きな目標を 8 つの要素と<br />64 の行動目標に分けて、<br />毎日の習慣・タスクにつなげます
             </p>
             <PrimaryBtn fullWidth onClick={onStart} style={{ marginTop: 12, minHeight: 52 }}>マンダラチャートを作る</PrimaryBtn>
+            {onOpenPast && <SecondaryBtn fullWidth onClick={onOpenPast}>過去のチャートを見る</SecondaryBtn>}
         </div>
     );
 }

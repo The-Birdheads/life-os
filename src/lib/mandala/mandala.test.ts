@@ -66,9 +66,16 @@ describe('habitProgress', () => {
     });
 
     it('counts only from the day it was linked (#5)', () => {
-        const p = habitProgress(habit(), days('2026-10-31', '2026-11-01'), WEEK, { countFrom: '2026-11-01' });
-        expect(p.rate).toBe(100);
-        expect(p.target).toBe(1);
+        const p = habitProgress(habit(), days('2026-11-01'), WEEK, { countFrom: '2026-10-31' });
+        expect(p).toEqual({ done: 1, target: 2, rate: 50 });
+    });
+
+    it('also counts done days recorded before the link day (e.g. made after midnight for the day before)', () => {
+        const p = habitProgress(habit(), days('2026-10-30'), WEEK, { countFrom: '2026-10-31' });
+        // 10/30(○) と 10/31・11/1(未記録)。ひもづけ前の未記録の日は数えない
+        expect(p).toEqual({ done: 1, target: 3, rate: 33 });
+        const before = habitProgress(habit(), days('2026-10-30'), { from: '2026-10-24', to: '2026-10-30' }, { countFrom: '2026-10-31' });
+        expect(before).toEqual({ done: 1, target: 1, rate: 100 });
     });
 
     it('weekdays: counts scheduled days only, and ignores done on other days (#16)', () => {

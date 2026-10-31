@@ -60,6 +60,7 @@ export function useMandala(
   // マイルールで、今日 × をつけたもの(○ は doneByTask)
   const [missedToday, setMissedToday] = useState<Set<string>>(new Set());
   const [reviews, setReviews] = useState<MandalaReview[]>([]);
+  const [pastCharts, setPastCharts] = useState<MandalaChart[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   // 進み具合は「直近7日(今日を含む)」で数える
@@ -72,6 +73,7 @@ export function useMandala(
     setChart(c);
     setCells(c ? await sqliteRepo.getCells(userId, c.id) : []);
     setReviews(c ? await sqliteRepo.getReviews(userId, c.id) : []);
+    setPastCharts(await sqliteRepo.getFinishedCharts(userId));
     const entries = await sqliteRepo.getTaskEntriesBetween(userId, period.from, period.to);
     setDoneByTask(doneDaysByTask(entries));
     setMissedToday(new Set(entries.filter((e) => e.status === "missed" && e.day === period.to).map((e) => e.task_id)));
@@ -122,8 +124,43 @@ export function useMandala(
     return cell;
   }, [userId, cells, addEvent]);
 
-  const createChart = useCallback(async (draft: ChartDraft) => {
+  /** 今のチャートと進み具合(直近7日)を、履歴に残す */
+  const addSnapshotRecord = useCallback(async (kind: "save" | "final", note: string) => {
+    if (!userId || !model) return;
+    const snapshot = { ...buildSnapshot(model, byCell, doneByTask, period), kind };
+    await sqliteRepo.createReview({
+      user_id: userId, chart_id: model.chart.id, reviewed_at: new Date().toISOString(),
+      good_note: note.trim() || null, next_note: null,
+      decisions: [], snapshot: snapshot as unknown as Record<string, unknown>,
+    });
+  }, [userId, model, byCell, doneByTask, period]);
+
+  /** 履歴の画面から、今の状態を保存する */
+  const saveCurrentState = useCallback(async (note: string) => {
+    await addSnapshotRecord("save", note);
+    await afterWrite();
+  }, [addSnapshotRecord, afterWrite]);
+
+  /**
+   * 今のチャートを終える(過去のチャートとして残す)。save なら、終える前の状態を履歴に残す。
+   * ひもづいた習慣・タスクは消さずに、ひもづけだけ外す(新しいチャートで改めてひもづける)
+   */
+  const finishCurrentChart = useCallback(async (save: boolean) => {
+    if (!userId || !chart) return;
+    if (save) await addSnapshotRecord("final", "");
+    const cellIds = new Set(cells.map((c) => c.id));
+    for (const t of tasks.filter((t) => t.mandala_cell_id && cellIds.has(t.mandala_cell_id))) {
+      await addEvent(t.mandala_cell_id!, "unlinked", `チャートを終えたので、${KIND_LABEL[t.task_type]}「${t.title}」のひもづけを外した`, t.id);
+      await sqliteRepo.updateTask(userId, t.id, { mandala_cell_id: null, mandala_linked_at: null });
+    }
+    await sqliteRepo.upsertChart({ ...chart, status: "finished" });
+    await reloadTasks();
+  }, [userId, chart, cells, tasks, addEvent, reloadTasks, addSnapshotRecord]);
+
+  /** チャートを作る。今のチャートがあれば、終えてから作る(saveCurrent なら、終える前の状態を履歴に残す) */
+  const createChart = useCallback(async (draft: ChartDraft, options: { saveCurrent?: boolean } = {}) => {
     if (!userId) return;
+    await finishCurrentChart(!!options.saveCurrent);
     const newChart: MandalaChart = {
       id: "", user_id: userId, title: draft.title.trim(), start_date: todayJST(),
       end_date: draft.endDate || null, status: "active",
@@ -148,7 +185,7 @@ export function useMandala(
       }
     }
     await afterWrite();
-  }, [userId, addEvent, afterWrite]);
+  }, [userId, addEvent, afterWrite, finishCurrentChart]);
 
   const updateChart = useCallback(async (patch: Partial<Pick<MandalaChart, "title" | "end_date">>) => {
     if (!chart) return;
@@ -394,10 +431,18 @@ export function useMandala(
     await afterWrite();
   }, [userId, addEvent, afterWrite]);
 
+  /** 過去のチャートの中身と履歴(見るだけ) */
+  const loadPastChart = useCallback(async (c: MandalaChart): Promise<{ model: ChartModel; reviews: MandalaReview[] } | null> => {
+    if (!userId) return null;
+    const pastCells = await sqliteRepo.getCells(userId, c.id);
+    const pastReviews = await sqliteRepo.getReviews(userId, c.id);
+    return { model: buildChartModel(c, pastCells), reviews: pastReviews };
+  }, [userId]);
+
   return {
-    loaded, model, byCell, doneByTask, missedToday, period, reviews,
+    loaded, model, byCell, doneByTask, missedToday, period, reviews, pastCharts,
     reload: load,
-    createChart, updateChart, setElementName, setActionText,
+    createChart, updateChart, saveCurrentState, loadPastChart, setElementName, setActionText,
     createTaskForCell, linkTask, unlinkTask, getEvents, goalOptions, setTaskCell,
     taskStateOf, doingSince: doingSince ?? new Map<string, string>(), setTaskStateToday, setRuleAnswerToday,
     saveReview, resumeCell, achieveCell, unachieveCell,

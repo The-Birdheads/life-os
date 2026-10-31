@@ -6,7 +6,7 @@ import { actionRate, elementRate, namedElements, rateText, type ElementModel } f
 import { currentFrequency, frequencyLabel, isValidFrequency, type Frequency } from "../../../lib/mandala/frequency";
 import { isCounted } from "../../../lib/mandala/progress";
 import { isRepeating, KIND_LABEL } from "../../../lib/taskKind";
-import { DECISION_LABELS, parseSnapshot, type ReviewDecision } from "../../../lib/mandala/review";
+import { DECISION_LABELS, parseSnapshot, RECORD_LABELS, recordKind, type ReviewDecision } from "../../../lib/mandala/review";
 import { localDateLabel } from "../../../lib/mandala/dates";
 import PrimaryBtn from "../../ui/PrimaryBtn";
 import SecondaryBtn from "../../ui/SecondaryBtn";
@@ -94,7 +94,7 @@ export default function ReviewFlow({
             </div>
             <p style={{ margin: "-6px 0 0", fontSize: 12, lineHeight: 1.7, color: theme.subtext }}>
                 {lastReview
-                    ? `直近7日の結果と、前回の見直し（${localDateLabel(lastReview.reviewed_at)}）との差です。`
+                    ? `直近7日の結果と、前回の${RECORD_LABELS[recordKind(lastReview)]}（${localDateLabel(lastReview.reviewed_at)}）との差です。`
                     : "直近7日の結果です。初めての見直しです。"}
                 決めた内容は、保存したときにチャートと習慣に反映されます。
             </p>

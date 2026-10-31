@@ -16,9 +16,28 @@ const reducedMotion = () => {
     try { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch { return false; }
 };
 
+// 一度流した日は、しばらく自動では流さない(「もう一度見る」でいつでも見られる)
+const SEEN_KEY = "habitas.mandalaReplay.seen";
+const QUIET_MS = 6 * 60 * 60 * 1000;
+
+function readSeen(): Record<string, number> {
+    try { return JSON.parse(localStorage.getItem(SEEN_KEY) ?? "{}") ?? {}; } catch { return {}; }
+}
+function seenRecently(day: string): boolean {
+    const at = readSeen()[day];
+    return typeof at === "number" && Date.now() - at < QUIET_MS;
+}
+function markSeen(day: string) {
+    try {
+        const recent = Object.entries({ ...readSeen(), [day]: Date.now() }).sort((a, b) => b[1] - a[1]).slice(0, 14);
+        localStorage.setItem(SEEN_KEY, JSON.stringify(Object.fromEntries(recent)));
+    } catch { /* 保存できなくても、毎回流れるだけ */ }
+}
+
 /**
  * 振り返りタブの「目標の進み」。その日に進めたマスを、昨日までの色から今日の色へ育てて見せる。
- * 開くたびに流れ、「もう一度見る」で何度でも見られる。動きを減らす設定のときは、結果だけを出す
+ * 一度流した日は 6 時間は自動で流さず、結果だけを出す。「もう一度見る」で何度でも見られ、再生中は「スキップ」できる。
+ * 動きを減らす設定のときは、結果だけを出す
  */
 export default function MandalaReplay({
     userId, day, model, byCell, refreshKey, onOpenGoal,
@@ -66,15 +85,25 @@ export default function MandalaReplay({
         return progress.elements.filter((e) => set.has(e.index));
     }, [progress]);
 
+    /** 演出を止めて、結果だけを出す */
+    const showResult = useCallback(() => {
+        if (!progress) return;
+        run.current++;
+        setShown(progress.elements.map((e) => e.after));
+        setGains(new Map(moved.map((e) => [e.index, gain(e)])));
+        setRevealed(progress.cells.length);
+        setActive(null);
+        setPlaying(false);
+    }, [progress, moved]);
+
     const play = useCallback(async () => {
         if (!progress) return;
-        const id = ++run.current;
-        const after = progress.elements.map((e) => e.after);
-        const finalGains = new Map(moved.map((e) => [e.index, gain(e)]));
         if (reducedMotion() || moved.length === 0) {
-            setShown(after); setGains(finalGains); setRevealed(progress.cells.length); setActive(null); setPlaying(false);
+            showResult();
             return;
         }
+        const id = ++run.current;
+        markSeen(progress.day);
         setPlaying(true);
         setShown(progress.elements.map((e) => e.before));
         setGains(new Map());
@@ -98,12 +127,14 @@ export default function MandalaReplay({
             await wait(160);
         }
         setPlaying(false);
-    }, [progress, moved]);
+    }, [progress, moved, showResult]);
 
     // 進めたマスが変わったときだけ流しなおす(読み直しのたびに流れないように)
     const signature = progress ? `${progress.day}|${progress.cells.map((c) => `${c.cell.id}:${c.after}`).join(",")}` : "";
     useEffect(() => {
-        if (signature) play();
+        if (!signature || !progress) return;
+        if (seenRecently(progress.day)) showResult();
+        else play();
         return () => { run.current++; };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [signature]);
@@ -123,10 +154,15 @@ export default function MandalaReplay({
                 isLarge
                 style={{ marginBottom: 8 }}
                 right={count > 0 ? (
-                    <button type="button" onClick={play} disabled={playing} aria-label="進み具合の動きをもう一度見る"
-                        style={{ minHeight: 34, display: "inline-flex", alignItems: "center", gap: 4, border: "1px solid rgba(255,255,255,0.6)", borderRadius: 8, background: "transparent", color: "#fff", fontSize: 12, fontWeight: 700, padding: "0 10px", cursor: playing ? "default" : "pointer", opacity: playing ? 0.5 : 1, fontFamily: "inherit" }}>
-                        <RepeatIcon size={14} />もう一度見る
-                    </button>
+                    playing ? (
+                        <button type="button" onClick={showResult} aria-label="進み具合の動きをスキップする" style={headerBtn}>
+                            <SkipIcon />スキップ
+                        </button>
+                    ) : (
+                        <button type="button" onClick={play} aria-label="進み具合の動きをもう一度見る" style={headerBtn}>
+                            <RepeatIcon size={14} />もう一度見る
+                        </button>
+                    )
                 ) : undefined}
             />
 
@@ -235,6 +271,16 @@ export default function MandalaReplay({
     );
 }
 
+/** スキップ(▶▶|) */
+function SkipIcon() {
+    return (
+        <svg width={14} height={14} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M4 5.5v13l8-6.5-8-6.5zm8 0v13l8-6.5-8-6.5z" />
+            <rect x="20" y="5" width="2" height="14" rx="1" />
+        </svg>
+    );
+}
+
 /** 数字を前の値から新しい値まで数え上げる */
 function CountUp({ value }: { value: number | null }) {
     const [n, setN] = useState(value);
@@ -261,6 +307,10 @@ const KEYFRAMES = `
 @keyframes mr-pop { 0% { transform: scale(0.4); opacity: 0; } 70% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1); } }
 `;
 
+const headerBtn: React.CSSProperties = {
+    minHeight: 34, display: "inline-flex", alignItems: "center", gap: 4, border: "1px solid rgba(255,255,255,0.6)", borderRadius: 8,
+    background: "transparent", color: "#fff", fontSize: 12, fontWeight: 700, padding: "0 10px", cursor: "pointer", fontFamily: "inherit",
+};
 const cellBase: React.CSSProperties = {
     height: 104, borderRadius: 14, boxSizing: "border-box", padding: 9, display: "flex", flexDirection: "column",
     gap: 4, fontFamily: "inherit", textAlign: "left", width: "100%",
