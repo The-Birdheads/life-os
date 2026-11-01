@@ -1,12 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import type { Action, Task } from "../lib/types";
 import LevelFields from "../components/features/register/LevelFields";
 import GoalLinkField from "../components/features/goal/GoalLinkField";
 import type { GoalLinkApi } from "../lib/mandala/useMandala";
 import FrequencyPicker from "../components/features/register/FrequencyPicker";
 import { changeFrequencyPatch, currentFrequency, frequencyAt, frequencyLabel, isScheduledOn, isValidFrequency, type Frequency } from "../lib/mandala/frequency";
-import { doneDaysByTask, weekCountStatus } from "../lib/mandala/progress";
-import { weekStart } from "../lib/mandala/dates";
 import { todayJST } from "../lib/day";
 import { sqliteRepo } from "../lib/db/instance";
 import { useUserSettings } from "../lib/context/UserSettingsContext";
@@ -25,6 +23,8 @@ import { space } from "../lib/ui/spacing";
 import Checkbox from "../components/ui/Checkbox";
 import TaskStatusBox from "../components/ui/TaskStatusBox";
 import TaskCard from "../components/features/tasks/TaskCard";
+import GoalChip, { type GoalChipInfo } from "../components/features/tasks/GoalChip";
+import { useHabitFrequencyNote } from "../components/features/tasks/useHabitFrequencyNote";
 import { nextOnLongPress, nextOnTap, oneoffState, type TaskState } from "../lib/taskState";
 import { saveRuleAnswer, saveTaskState } from "../lib/taskEntries";
 import RuleAnswerButtons from "../components/features/tasks/RuleAnswerButtons";
@@ -74,7 +74,7 @@ type Props = {
     onAfterWrite?: () => Promise<void>;
     adHeight?: number;
     /** マンダラチャートにひもづいた習慣・タスクの id → 要素(カードに色のチップを出す) */
-    goalChips?: Map<string, { label: string; color: string; element: number }>;
+    goalChips?: Map<string, GoalChipInfo>;
     /** チップをタップしたときに、目標タブのその要素を開く */
     onOpenGoal?: (element: number) => void;
     /** 編集で、目標タブの行動目標にひもづける */
@@ -105,25 +105,7 @@ export default function TodayView({
     onOpenGoal,
     goal,
 }: Props) {
-    const goalChip = (taskId: string) => {
-        const chip = goalChips?.get(taskId);
-        if (!chip) return null;
-        return (
-            <button
-                type="button"
-                aria-label={`目標「${chip.label}」のチャートを開く`}
-                onClick={(e) => { e.stopPropagation(); onOpenGoal?.(chip.element); }}
-                style={{
-                    justifySelf: "start", minHeight: 28, display: "inline-flex", alignItems: "center", gap: 6,
-                    background: "#FFFFFF", color: "#0F172A", border: "1px solid #CBD5E1", borderRadius: 999,
-                    padding: "2px 10px", fontSize: 12, fontWeight: 500, cursor: "pointer", fontFamily: "inherit",
-                }}
-            >
-                <span style={{ width: 9, height: 9, borderRadius: 5, background: chip.color }} />
-                {chip.label}
-            </button>
-        );
-    };
+    const goalChip = (taskId: string) => <GoalChip chip={goalChips?.get(taskId)} onOpen={onOpenGoal} />;
     const { sortRule, prioritizeDue } = useUserSettings();
 
     // ✅ Segmented filter（コンポーネント内）
@@ -164,28 +146,7 @@ export default function TodayView({
         (t) => !t.is_hidden && !isScheduledOn(frequencyAt(t, day), day) && !doneTaskIds.has(t.id)
     );
 
-    // 週n回の習慣の「今週 n/m回」のため、選択中の日を含む週(月曜〜選択中の日)の完了日
-    const [weekDoneDays, setWeekDoneDays] = useState<Map<string, Set<string>>>(new Map());
-    useEffect(() => {
-        let cancelled = false;
-        sqliteRepo.getTaskEntriesBetween(userId, weekStart(day), day).then((entries) => {
-            if (!cancelled) setWeekDoneDays(doneDaysByTask(entries));
-        }).catch(() => { /* 表示だけなので失敗は無視 */ });
-        return () => { cancelled = true; };
-    }, [userId, day, doneTaskIds]);
-
-    const habitFrequencyNote = (t: Task): string | null => {
-        const freq = frequencyAt(t, day);
-        if (freq.kind === "weekly_count") {
-            // チェックは保存より先に画面へ反映されるため、選択中の日は画面の状態(doneTaskIds)を使う
-            const doneDays = new Set(weekDoneDays.get(t.id));
-            if (doneTaskIds.has(t.id)) doneDays.add(day); else doneDays.delete(day);
-            const { done, target } = weekCountStatus(t, doneDays, day);
-            return `${frequencyLabel(freq)} ・ 今週 ${done}/${target}回${done >= target ? "（達成）" : ""}`;
-        }
-        if (freq.kind === "weekdays") return frequencyLabel(freq);
-        return null;
-    };
+    const habitFrequencyNote = useHabitFrequencyNote(userId, day, doneTaskIds);
 
     /**
      * ✅ タスク（oneoff）の表示ルール（あなた指定）
@@ -454,9 +415,13 @@ export default function TodayView({
         };
         const modalStyle: React.CSSProperties = {
             // 画面上部のバナー広告・ノッチに重ならない高さに抑える
-            width: "100%", maxWidth: 600, maxHeight: `calc(100dvh - max(env(safe-area-inset-top, 0px), 24px) - ${adHeight}px)`,
+            // 使い方の案内が上に出ているあいだは、そのぶん低くする(--guide-modal)。
+            // 高さは余白込みで数える(余白のぶん高くなって、上の広告に重なっていたため)
+            width: "100%", maxWidth: 600, boxSizing: "border-box", maxHeight: `calc(100dvh - max(env(safe-area-inset-top, 0px), 24px) - ${adHeight}px - var(--guide-modal, 0px))`,
             background: "var(--bg)", borderTopLeftRadius: 20, borderTopRightRadius: 20,
             padding: "24px 16px", overflowY: "auto",
+            // 閉じるボタン(absolute)をこの枠の右上に置く(画面の右上だと広告の裏に隠れるため)
+            position: "relative",
             boxShadow: "0 -4px 20px rgba(0,0,0,0.15)",
             animation: "slideUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.2)",
         };
@@ -538,7 +503,7 @@ export default function TodayView({
 
         return (
             <div style={overlayStyle} onClick={() => setEditingItem(null)}>
-                <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
+                <div style={modalStyle} data-tutorial="edit-item" onClick={(e) => e.stopPropagation()}>
                     <button style={closeBtnStyle} onClick={() => setEditingItem(null)}>×</button>
                     <h2 style={{ marginTop: 0, marginBottom: 20, fontSize: 20 }}>{modalTitle}</h2>
 
@@ -854,7 +819,7 @@ export default function TodayView({
                                                     footer={goalChip(t.id)}
                                                     right={
                                                         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                                                            <RuleAnswerButtons value={answer} title={t.title} onAccent={answer === "done"} onChange={(next) => answerRule(t.id, next)} />
+                                                            <RuleAnswerButtons value={answer} title={t.title} onAccent={answer === "done"} onChange={(next) => answerRule(t.id, next)} tutorial={`check-${t.id}`} />
                                                             {gripFor(handle, t.title)}
                                                         </div>
                                                     }

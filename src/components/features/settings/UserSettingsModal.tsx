@@ -98,7 +98,8 @@ export default function UserSettingsModal({
     };
     const modalStyle: React.CSSProperties = {
         width: "100%", maxWidth: 600,
-        height: `calc(100dvh - max(env(safe-area-inset-top, 0px), 24px) - ${adHeight}px)`,
+        // 使い方の案内が上に出ているあいだは、そのぶん低くする(--guide-modal)
+        height: `calc(100dvh - max(env(safe-area-inset-top, 0px), 24px) - ${adHeight}px - var(--guide-modal, 0px))`,
         background: "var(--bg)", borderTopLeftRadius: 20, borderTopRightRadius: 20,
         display: "flex", flexDirection: "column",
         overflowX: "hidden",
@@ -117,7 +118,7 @@ export default function UserSettingsModal({
 
     return (
         <div style={overlayStyle} onClick={onClose}>
-            <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
+            <div style={modalStyle} data-tutorial="user-settings" onClick={(e) => e.stopPropagation()}>
                 <div style={{ position: "relative", padding: "24px 16px 16px", flexShrink: 0 }}>
                     <button style={closeBtnStyle} onClick={onClose}>×</button>
                     <h2 style={{ margin: 0, fontSize: 20 }}>ユーザ設定</h2>

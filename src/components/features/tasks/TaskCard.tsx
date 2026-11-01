@@ -35,6 +35,7 @@ export default function TaskCard({
 
     return (
         <div
+            data-tutorial={`card-${task.id}`}
             style={{
                 display: "grid",
                 gridTemplateColumns: [check ? "22px" : null, "minmax(0, 1fr)", right ? "auto" : null].filter(Boolean).join(" "),
@@ -58,7 +59,7 @@ export default function TaskCard({
             onClick={onOpen}
         >
             {check && (
-                <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", alignSelf: "center" }}>
+                <div data-tutorial={`check-${task.id}`} onClick={(e) => e.stopPropagation()} style={{ display: "flex", alignSelf: "center" }}>
                     {check}
                 </div>
             )}

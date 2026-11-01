@@ -8,14 +8,12 @@ import Slider from "../../ui/Slider";
  * スライダーを左端まで動かすか「クリア」で未設定に戻せる。
  */
 export default function LevelFields({
-    priority, volume, onPriority, onVolume, tutorial = false,
+    priority, volume, onPriority, onVolume,
 }: {
     priority: number;
     volume: number;
     onPriority: (v: number) => void;
     onVolume: (v: number) => void;
-    /** 習慣の追加フォームだけ、チュートリアルの吹き出しの位置にする */
-    tutorial?: boolean;
 }) {
     const { volumeUnit } = useUserSettings();
     const volumeText = volume > 0
@@ -36,11 +34,11 @@ export default function LevelFields({
 
     return (
         <>
-            <label data-tutorial={tutorial ? "habit-priority" : undefined}>
+            <label>
                 {row("優先度", priority > 0 ? String(priority) : "未設定", priority > 0, () => onPriority(0))}
                 <Slider min="0" max="5" step="1" value={priority} onChange={(e) => onPriority(Number(e.target.value))} fullWidth />
             </label>
-            <label data-tutorial={tutorial ? "habit-volume" : undefined}>
+            <label>
                 {row("ボリューム", volumeText, volume > 0, () => onVolume(0))}
                 <Slider min="0" max="10" step="1" value={volume} onChange={(e) => onVolume(Number(e.target.value))} fullWidth />
             </label>

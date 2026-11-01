@@ -10,8 +10,12 @@ import FABMenu from "./components/features/register/FABMenu";
 import RegisterModals from "./components/features/register/RegisterModals";
 import NotificationSettingsModal from "./components/features/settings/NotificationSettingsModal";
 import UserSettingsModal from "./components/features/settings/UserSettingsModal";
-import SpotlightTutorial from "./components/features/onboarding/SpotlightTutorial";
-import HabitTutorial from "./components/features/onboarding/HabitTutorial";
+import IntroSlides, { type IntroAction } from "./components/features/onboarding/IntroSlides";
+import Guide from "./components/features/onboarding/Guide";
+import { buildStory } from "./components/features/onboarding/stories";
+import { findHowTo } from "./components/features/onboarding/howtos";
+import HowToSheet from "./components/features/onboarding/HowToSheet";
+import type { GuideCtx, GuideState, GuideStep, Story } from "./components/features/onboarding/guideTypes";
 import { UserSettingsContext } from "./lib/context/UserSettingsContext";
 import type { SortRule } from "./lib/context/UserSettingsContext";
 import { initSqlite } from "./lib/db/initSqlite";
@@ -40,7 +44,7 @@ import {
 // グローバルなリポジトリインスタンスは ./lib/db/instance.ts へ移動しました
 
 import type { Tab } from "./lib/tabs";
-import GoalView, { type GoalFocus } from "./views/GoalView";
+import GoalView, { type GoalCommand, type GoalFocus } from "./views/GoalView";
 import { useMandala } from "./lib/mandala/useMandala";
 import { doingSinceByTask } from "./lib/taskState";
 
@@ -203,9 +207,12 @@ export default function App() {
   const [openModal, setOpenModal] = useState<"habit" | "oneoff" | "rule" | "action" | null>(null);
   const [notifSettingsOpen, setNotifSettingsOpen] = useState(false);
   const [userSettingsOpen, setUserSettingsOpen] = useState(false);
-  const [onboardingOpen, setOnboardingOpen] = useState(false);
-  const [habTutOpen, setHabTutOpen] = useState(false);
-  const [fabForceOpen, setFabForceOpen] = useState(false);
+  // 使い方: アプリの紹介(スライド)と、選んだストーリーの案内(key は始めるたびに変える)
+  const [introOpen, setIntroOpen] = useState(false);
+  const [guide, setGuide] = useState<{ steps: GuideStep[]; key: number; finishLabel?: string } | null>(null);
+  // やりたいことから探す使い方の一覧
+  const [howToOpen, setHowToOpen] = useState(false);
+  const [goalCommand, setGoalCommand] = useState<GoalCommand>(null);
   const [volumeUnit, setVolumeUnit] = useState("30");
   const [sortRule, setSortRule] = useState<SortRule>("manual");
   const [prioritizeDue, setPrioritizeDue] = useState(false);
@@ -644,30 +651,9 @@ export default function App() {
 
   useEffect(() => {
     if (!userId) return;
-    if (!localStorage.getItem("onboarding_done")) setOnboardingOpen(true);
+    // 1.4.0 で紹介を作り直したので、キーを変えて、前の案内を見た人にも一度だけ見せる
+    if (!localStorage.getItem("intro_done_v2")) setIntroOpen(true);
   }, [userId]);
-
-  const handleOnboardingClose = () => {
-    setOnboardingOpen(false);
-    localStorage.setItem("onboarding_done", "1");
-  };
-
-  const handleHabTutOpen = () => {
-    setFabForceOpen(true);   // チュートリアル開始時はFABメニューを開いた状態にする
-    setHabTutOpen(true);
-  };
-
-  const handleOpenHabitTutorialFromMenu = () => {
-    setTab("today");         // 記録タブに移動
-    setFabForceOpen(true);   // ＋ボタンが押下された状態を再現
-    setHabTutOpen(true);
-  };
-
-  const handleHabTutClose = () => {
-    setHabTutOpen(false);
-    setFabForceOpen(false);
-    localStorage.setItem("fab_tutorial_done", "1");
-  };
 
   useEffect(() => {
     if (!userId) return;
@@ -718,6 +704,40 @@ export default function App() {
     reloadTasks: () => loadBase(),
     onAfterWrite: webAutoSync,
   });
+
+  // 案内の条件で読む、今の状態(案内は始めたときの関数を持ち続けるので、ref で最新を渡す)
+  const guideStateRef = useRef<GuideState>({ tasks: [], doneTaskIds: new Set(), missedTaskIds: new Set(), doingTaskIds: new Set(), hasChart: false });
+  guideStateRef.current = {
+    tasks,
+    doneTaskIds,
+    missedTaskIds,
+    doingTaskIds: new Set(doingSince.keys()),
+    hasChart: !!mandala.model,
+  };
+  const guideCtx = useMemo<GuideCtx>(() => ({
+    setTab,
+    openRegister: (type) => setOpenModal(type),
+    goal: (kind) => setGoalCommand({ kind, nonce: Date.now() }),
+    openSettings: (kind) => (kind === "user" ? setUserSettingsOpen(true) : setNotifSettingsOpen(true)),
+    state: () => guideStateRef.current,
+  }), []);
+
+  const startStory = (story: Story) => {
+    setGuide({ steps: buildStory(story, guideCtx), key: Date.now() });
+  };
+
+  const startHowTo = (id: string) => {
+    setHowToOpen(false);
+    const howTo = findHowTo(id);
+    if (howTo) setGuide({ steps: howTo.build(guideCtx), key: Date.now(), finishLabel: "閉じる" });
+  };
+
+  const handleIntroClose = (action: IntroAction) => {
+    setIntroOpen(false);
+    localStorage.setItem("intro_done_v2", "1");
+    if (action === "dismiss") setMsg("使い方は、右上のメニュー ≡ の「使い方を見る」からいつでも見られます");
+    else startStory(action);
+  };
   // ------- Widget Sync -------
   // ウィジェットのチャートは、目標タブと同じ直近7日の進み具合
   const widgetMandala = useMemo(
@@ -731,7 +751,7 @@ export default function App() {
     syncWidgetData(tasks, doneTaskIds, doneTaskIdsAnyDay, widgetMandala, sortRule);
   }, [tasks, doneTaskIds, doneTaskIdsAnyDay, widgetMandala, sortRule]);
 
-  // 記録タブのカードに出す、要素のチップ(習慣・タスクの id → 要素)
+  // 記録タブ・振り返りタブのカードに出す、要素のチップ(習慣・タスクの id → 要素)
   const goalChips = useMemo(() => {
     const map = new Map<string, { label: string; color: string; element: number }>();
     for (const el of mandala.model?.elements ?? []) {
@@ -849,8 +869,9 @@ export default function App() {
       onDateSelect={safeSetDay}
       onOpenNotificationSettings={() => setNotifSettingsOpen(true)}
       onOpenUserSettings={() => setUserSettingsOpen(true)}
-      onOpenOnboarding={() => setOnboardingOpen(true)}
-      onOpenHabitTutorial={handleOpenHabitTutorialFromMenu}
+      onOpenOnboarding={() => setIntroOpen(true)}
+      onStartStory={startStory}
+      onOpenHowTo={() => setHowToOpen(true)}
     >
       {tab === "today" && (
         <TodayView
@@ -886,6 +907,7 @@ export default function App() {
           adHeight={adHeight}
           setMsg={setMsg}
           focus={goalFocus}
+          command={goalCommand}
         />
       )}
 
@@ -907,6 +929,7 @@ export default function App() {
           cardStyle={cardStyle}
           dataVersion={dataVersion}
           mandala={mandala}
+          goalChips={goalChips}
           onOpenGoal={(element) => { setGoalFocus({ element, nonce: Date.now() }); setTab("goal"); }}
         />
       )}
@@ -925,11 +948,7 @@ export default function App() {
       )}
 
       {tab === "today" && (
-        <FABMenu
-            onSelect={(type) => setOpenModal(type)}
-            onFirstPress={handleHabTutOpen}
-            forceOpen={fabForceOpen}
-          />
+        <FABMenu onSelect={(type) => setOpenModal(type)} />
       )}
 
       <RegisterModals
@@ -979,15 +998,11 @@ export default function App() {
         if (legacyAdoptedRef.current) clearLegacySession();
       }}
     />
-    <SpotlightTutorial isOpen={onboardingOpen} onClose={handleOnboardingClose} onSetTab={setTab} />
-    <HabitTutorial
-      isOpen={habTutOpen}
-      onClose={handleHabTutClose}
-      callbacks={{
-        closeFABMenu: () => setFabForceOpen(false),
-        openHabitModal: () => setOpenModal("habit"),
-      }}
-    />
+    <IntroSlides isOpen={introOpen} adHeight={adHeight} onClose={handleIntroClose} />
+    <HowToSheet isOpen={howToOpen} adHeight={adHeight} onClose={() => setHowToOpen(false)} onPick={startHowTo} />
+    {guide && (
+      <Guide key={guide.key} steps={guide.steps} finishLabel={guide.finishLabel} onClose={() => setGuide(null)} onSetTab={setTab} adHeight={adHeight} />
+    )}
     </UserSettingsContext.Provider>
   );
 }

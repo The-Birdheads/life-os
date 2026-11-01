@@ -259,7 +259,7 @@ export default function TrendView({ userId, tasks, day, setDay, setTab, setMsg, 
     return (
         <div style={{ display: "grid", gap: space.lg }}>
             {/* 期間の切り替え */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+            <div data-tutorial="trend-period" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                 <div role="tablist" aria-label="期間の単位" style={{ display: "flex", gap: 4, background: "rgba(0,0,0,0.05)", borderRadius: 10, padding: 3 }}>
                     {(["week", "month"] as const).map((u) => (
                         <button key={u} type="button" role="tab" aria-selected={unit === u} onClick={() => setUnit(u)}

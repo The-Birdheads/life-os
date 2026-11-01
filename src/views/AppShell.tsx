@@ -14,6 +14,8 @@ import type { AppId, DeleteConfirmVariant } from "../lib/accountApi";
 
 
 import type { Tab } from "../lib/tabs";
+import type { Story } from "../components/features/onboarding/guideTypes";
+import { STORIES } from "../components/features/onboarding/stories";
 
 type Props = {
   userEmail: string | null;
@@ -42,7 +44,10 @@ type Props = {
   onOpenNotificationSettings?: () => void;
   onOpenUserSettings?: () => void;
   onOpenOnboarding?: () => void;
-  onOpenHabitTutorial?: () => void;
+  /** はじめかたのストーリーの案内を始める */
+  onStartStory?: (story: Story) => void;
+  /** やりたいことから探す使い方の一覧を開く */
+  onOpenHowTo?: () => void;
   onDeleteAccount?: () => Promise<void>;
   /** アカウントが使っているアプリの一覧(削除確認の文言の出し分け用)。取得できなければ null */
   onFetchAccountUsage?: () => Promise<AppId[] | null>;
@@ -72,7 +77,8 @@ export default function AppShell({
   onOpenNotificationSettings,
   onOpenUserSettings,
   onOpenOnboarding,
-  onOpenHabitTutorial,
+  onStartStory,
+  onOpenHowTo,
   onDeleteAccount,
   onFetchAccountUsage,
   isDeleting,
@@ -184,6 +190,7 @@ export default function AppShell({
 
         {/* HEADER */}
         <div
+          data-spotlight-cover="top"
           style={{
             position: "fixed",
             left: 0,
@@ -376,7 +383,7 @@ export default function AppShell({
                         </span>
                       );
 
-                      const tutorialBlock = (onOpenOnboarding || onOpenHabitTutorial) ? (
+                      const tutorialBlock = (onOpenOnboarding || onStartStory) ? (
                         <>
                           <PrimaryBtn fullWidth onClick={() => setTutorialOpen(o => !o)} style={btnL}>
                             {accordionInner("使い方を見る", tutorialOpen)}
@@ -385,13 +392,23 @@ export default function AppShell({
                             <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 6 }}>
                               {onOpenOnboarding && (
                                 <PrimaryBtn fullWidth onClick={() => { setMenuOpen(false); onOpenOnboarding(); }} style={subL}>
-                                  アプリの基本操作
+                                  アプリの紹介
                                 </PrimaryBtn>
                               )}
-                              {onOpenHabitTutorial && (
-                                <PrimaryBtn fullWidth onClick={() => { setMenuOpen(false); onOpenHabitTutorial(); }} style={subL}>
-                                  習慣の追加
+                              {onOpenHowTo && (
+                                <PrimaryBtn fullWidth onClick={() => { setMenuOpen(false); onOpenHowTo(); }} style={subL}>
+                                  やりたいことから探す
                                 </PrimaryBtn>
+                              )}
+                              {onStartStory && (
+                                <>
+                                  <div style={{ fontSize: 12, opacity: 0.7, margin: "6px 0 0 4px" }}>はじめかた</div>
+                                  {STORIES.map((s) => (
+                                    <PrimaryBtn key={s.id} fullWidth onClick={() => { setMenuOpen(false); onStartStory(s.id); }} style={subL}>
+                                      {s.title}
+                                    </PrimaryBtn>
+                                  ))}
+                                </>
                               )}
                             </div>
                           )}
@@ -513,7 +530,8 @@ export default function AppShell({
           style={{
             ...railStyle,
             minHeight: `calc(100vh - ${topBarHeight}px - ${bottomNavHeight}px)`,
-            paddingTop: `calc(env(safe-area-inset-top, 0px) + ${adHeight + topBarHeight + 8}px)`,
+            // 使い方の案内が上に出ているあいだは、そのぶん下げる(--guide-page)
+            paddingTop: `calc(env(safe-area-inset-top, 0px) + ${adHeight + topBarHeight + 8}px + var(--guide-page, 0px))`,
             paddingBottom: 120,
             display: "flex",
             flexDirection: "column",
@@ -526,6 +544,7 @@ export default function AppShell({
         {/* BOTTOM NAV */}
         <div
           data-tutorial="bottom-tabs"
+          data-spotlight-cover="bottom"
           style={{
             position: "fixed",
             left: 0,

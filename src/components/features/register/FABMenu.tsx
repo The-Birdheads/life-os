@@ -5,13 +5,11 @@ import { FEATURES } from "../../../lib/features";
 
 type Props = {
     onSelect: (type: "habit" | "oneoff" | "rule" | "action") => void;
-    onFirstPress?: () => void;
-    forceOpen?: boolean;
 };
 
-export default function FABMenu({ onSelect, onFirstPress, forceOpen }: Props) {
+export default function FABMenu({ onSelect }: Props) {
     const [open, setOpen] = useState(false);
-    const isMenuOpen = forceOpen || open;
+    const isMenuOpen = open;
 
     // 外側クリックで閉じる
     useEffect(() => {
@@ -93,7 +91,7 @@ export default function FABMenu({ onSelect, onFirstPress, forceOpen }: Props) {
 
     return (
         <>
-            {isMenuOpen && !forceOpen && (
+            {isMenuOpen && (
                 <div
                     style={{
                         position: "fixed",
@@ -108,7 +106,7 @@ export default function FABMenu({ onSelect, onFirstPress, forceOpen }: Props) {
                     onClick={() => setOpen(false)}
                 />
             )}
-            <div style={menuStyle}>
+            <div style={menuStyle} data-tutorial="fab-menu" data-open={isMenuOpen}>
                 <button
                     data-tutorial="fab-menu-habit"
                     style={itemBtnStyle}
@@ -118,6 +116,7 @@ export default function FABMenu({ onSelect, onFirstPress, forceOpen }: Props) {
                     習慣の登録
                 </button>
                 <button
+                    data-tutorial="fab-menu-oneoff"
                     style={itemBtnStyle}
                     onClick={() => { onSelect("oneoff"); setOpen(false); }}
                 >
@@ -125,6 +124,7 @@ export default function FABMenu({ onSelect, onFirstPress, forceOpen }: Props) {
                     タスクの登録
                 </button>
                 <button
+                    data-tutorial="fab-menu-rule"
                     style={itemBtnStyle}
                     onClick={() => { onSelect("rule"); setOpen(false); }}
                 >
@@ -144,14 +144,7 @@ export default function FABMenu({ onSelect, onFirstPress, forceOpen }: Props) {
             <button
                 data-tutorial="fab"
                 style={fabStyle}
-                onClick={() => {
-                    if (forceOpen) return;
-                    if (onFirstPress && !localStorage.getItem("fab_tutorial_done")) {
-                        onFirstPress();
-                        return;
-                    }
-                    setOpen(!open);
-                }}
+                onClick={() => setOpen(!open)}
                 aria-label="メニューを開く"
             >
                 {/* SVG の + をボタン中央に正確に配置 */}

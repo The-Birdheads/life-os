@@ -8,18 +8,21 @@ import Card from "../components/ui/Card";
 import IconBtn from "../components/ui/IconBtn";
 
 import CategoryBadge from "../components/badges/CategoryBadge";
-import PriorityBadge from "../components/badges/PriorityBadge";
 import VolBar from "../components/badges/VolBar";
 import PrimaryBtn from "../components/ui/PrimaryBtn";
 import SegmentedBar from "../components/ui/SegmentedBar";
 import { FEATURES } from "../lib/features";
 import SectionTitle from "../components/ui/SectionTitle";
 import { RepeatIcon, CheckIcon, ZapIcon, PencilIcon, ShieldIcon, GridIcon } from "../components/ui/Icon";
-import { frequencyAt, isScheduledOn } from "../lib/mandala/frequency";
+import { frequencyAt, frequencyLabel, isScheduledOn } from "../lib/mandala/frequency";
 import { space } from "../lib/ui/spacing";
 import { theme } from "../lib/ui/theme";
 import TextInput from "../components/ui/TextInput";
 import Slider from "../components/ui/Slider";
+import TaskCard from "../components/features/tasks/TaskCard";
+import GoalChip, { type GoalChipInfo } from "../components/features/tasks/GoalChip";
+import RuleAnswerButtons from "../components/features/tasks/RuleAnswerButtons";
+import { useHabitFrequencyNote } from "../components/features/tasks/useHabitFrequencyNote";
 
 type Filter = "all" | "habit" | "task" | "rule" | "action";
 
@@ -56,6 +59,8 @@ type Props = {
   mandala?: { model: ChartModel | null; byCell: Map<string, Task[]> };
   /** 目標タブで要素を開く */
   onOpenGoal?: (element: number) => void;
+  /** カードに出す、要素のチップ(記録タブと同じ) */
+  goalChips?: Map<string, GoalChipInfo>;
 };
 
 import { sqliteRepo } from "../lib/db/instance";
@@ -79,6 +84,7 @@ export default function ReviewView({
   dataVersion,
   mandala,
   onOpenGoal,
+  goalChips,
 }: Props) {
   const { sortRule, prioritizeDue } = useUserSettings();
   const [reviewLoading, setReviewLoading] = useState(false);
@@ -157,9 +163,16 @@ export default function ReviewView({
   const sortedRules = sortTasks(tasks.filter((t) => t.task_type === "rule" && t.is_active), sortRule, false);
   const keptRules = sortedRules.filter((t) => doneTaskIds.has(t.id));
   const missedRules = sortedRules.filter((t) => missedTaskIds.has(t.id));
+  // 記録タブと同じく、○ と × を分けずにいつもの並びで出す
+  const answeredRules = sortedRules.filter((t) => doneTaskIds.has(t.id) || missedTaskIds.has(t.id));
   const unansweredRules = sortedRules.filter(
     (t) => !t.is_hidden && !doneTaskIds.has(t.id) && !missedTaskIds.has(t.id) && isScheduledOn(frequencyAt(t, day), day)
   );
+
+  // カードは記録タブと同じもの(チェックだけ無し)
+  const habitFrequencyNote = useHabitFrequencyNote(userId, day, doneTaskIds);
+  const goalChip = (taskId: string) => <GoalChip chip={goalChips?.get(taskId)} onOpen={onOpenGoal} />;
+  const hiddenNote = (t: Task) => (t.is_hidden ? "（非表示・当日完了のため表示）" : null);
 
   // ✅ 行動（その日のログを表示）
   const actionById = new Map(actions.map((a) => [a.id, a]));
@@ -368,14 +381,16 @@ export default function ReviewView({
 
         {/* ── 目標の進み（チャートがあるときだけ） ── */}
         {mandala?.model && namedElements(mandala.model).length > 0 && (
-          <MandalaReplay
-            userId={userId}
-            day={day}
-            model={mandala.model}
-            byCell={mandala.byCell}
-            refreshKey={`${dataVersion}|${[...doneTaskIds].join(",")}`}
-            onOpenGoal={onOpenGoal}
-          />
+          <div data-tutorial="review-goal">
+            <MandalaReplay
+              userId={userId}
+              day={day}
+              model={mandala.model}
+              byCell={mandala.byCell}
+              refreshKey={`${dataVersion}|${[...doneTaskIds].join(",")}`}
+              onOpenGoal={onOpenGoal}
+            />
+          </div>
         )}
 
         {/* ── 目標の達成チェック（前日に tomorrow_note がある場合のみ表示） ── */}
@@ -659,15 +674,15 @@ export default function ReviewView({
             ) : (
               <div style={listWrap}>
                 {doneHabits.map((t) => (
-                  <div key={t.id} style={getItemCardStyle(theme.habit)}>
-                    <div style={{ minWidth: 0, width: "100%" }}>
-                      <div style={itemTitle}>{t.title}</div>
-                      <div style={metaLine}>
-                        <PriorityBadge value={(t as any).priority} />
-                        <VolBar value={(t as any).volume} isReverse={true} />
-                      </div>
-                    </div>
-                  </div>
+                  <TaskCard
+                    key={t.id}
+                    task={t}
+                    accentColor={theme.habit}
+                    checked
+                    hiddenNote={hiddenNote(t)}
+                    notes={[habitFrequencyNote(t)]}
+                    footer={goalChip(t.id)}
+                  />
                 ))}
               </div>
             )}
@@ -694,23 +709,14 @@ export default function ReviewView({
             ) : (
               <div style={listWrap}>
                 {doneOneoffs.map((t) => (
-                  <div key={t.id} style={getItemCardStyle(theme.task)}>
-                    <div style={{ minWidth: 0, width: "100%" }}>
-                      <div style={itemTitle}>{t.title}</div>
-
-                      <div style={metaLine}>
-                        <PriorityBadge value={(t as any).priority} />
-                        <VolBar value={(t as any).volume} isReverse={true} />
-                      </div>
-
-                      {t.due_date ? (
-                        <div style={{ ...metaLine, marginTop: 4 }}>
-                          <span style={smallLabel}>期限：</span>
-                          <span style={smallLabel}>{t.due_date}</span>
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
+                  <TaskCard
+                    key={t.id}
+                    task={t}
+                    accentColor={theme.task}
+                    checked
+                    hiddenNote={hiddenNote(t)}
+                    footer={goalChip(t.id)}
+                  />
                 ))}
               </div>
             )}
@@ -736,18 +742,20 @@ export default function ReviewView({
               <p style={{ margin: 0, opacity: 0.5, fontSize: 14 }}>まだありません</p>
             ) : (
               <div style={listWrap}>
-                {[...keptRules, ...missedRules].map((t) => {
+                {answeredRules.map((t) => {
                   const kept = doneTaskIds.has(t.id);
+                  const freq = frequencyAt(t, day);
                   return (
-                    <div
+                    <TaskCard
                       key={t.id}
-                      style={kept ? getItemCardStyle(theme.rule) : { ...getItemCardStyle(theme.rule), background: "var(--card)", color: "var(--text)" }}
-                    >
-                      <div style={{ ...itemTitle, flex: 1 }}>{t.title}</div>
-                      <span style={{ flexShrink: 0, fontSize: 13, fontWeight: 700, opacity: kept ? 1 : 0.7 }}>
-                        {kept ? "○ 守れた" : "× 守れなかった"}
-                      </span>
-                    </div>
+                      task={t}
+                      accentColor={theme.rule}
+                      checked={kept}
+                      hiddenNote={t.is_hidden ? "（非表示・この日に答えたため表示）" : null}
+                      notes={[kept ? null : "この日は守れなかった", freq.kind !== "daily" ? frequencyLabel(freq) : null]}
+                      footer={goalChip(t.id)}
+                      right={<RuleAnswerButtons value={kept ? "done" : "missed"} title={t.title} onAccent={kept} readOnly />}
+                    />
                   );
                 })}
               </div>

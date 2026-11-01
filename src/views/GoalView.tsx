@@ -24,18 +24,23 @@ type Sheet = { element: number; cell: number | null } | null;
 /** 記録タブのチップなどから、特定の要素を開くための指定(nonce が変わるたびに開く) */
 export type GoalFocus = { element: number; nonce: number } | null;
 
+/** 使い方の案内から: チャートの作成を開く / 中心の画面に戻す(nonce が変わるたびに行う) */
+export type GoalCommand = { kind: "wizard" | "center"; nonce: number } | null;
+
 export default function GoalView({
     mandala,
     tasks,
     adHeight,
     setMsg,
     focus,
+    command = null,
 }: {
     mandala: MandalaState;
     tasks: Task[];
     adHeight: number;
     setMsg: (s: string) => void;
     focus: GoalFocus;
+    command?: GoalCommand;
 }) {
     const [view, setView] = useState<View>("center");
     const [elem, setElem] = useState(0);
@@ -49,6 +54,14 @@ export default function GoalView({
     useEffect(() => {
         if (focus) { setElem(focus.element); setView("element"); setSheet(null); }
     }, [focus?.nonce]);
+
+    useEffect(() => {
+        if (!command) return;
+        setSheet(null);
+        setChartSheet(false);
+        setAskNew(false);
+        setView(command.kind);
+    }, [command?.nonce]);
 
     if (!mandala.loaded) return null;
 
@@ -112,7 +125,7 @@ export default function GoalView({
             {view === "center" && (
                 <>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
-                        <button type="button" aria-label={`大目標「${model.chart.title}」を編集する`} onClick={() => setChartSheet(true)}
+                        <button type="button" data-tutorial="goal-title" aria-label={`大目標「${model.chart.title}」を編集する`} onClick={() => setChartSheet(true)}
                             style={{ minWidth: 0, border: "none", background: "none", padding: 0, textAlign: "left", fontFamily: "inherit", color: "var(--text)", cursor: "pointer" }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: theme.subtext }}>大目標<PencilIcon size={12} /></div>
                             <h1 style={{ margin: "2px 0 0", fontSize: 20, lineHeight: 1.35 }}>{model.chart.title}</h1>
@@ -125,7 +138,7 @@ export default function GoalView({
                         )}
                     </div>
                     <div style={{ fontSize: 12, color: theme.subtext }}>直近 7 日の進み具合　・　要素をタップして開く</div>
-                    <Grid3>
+                    <Grid3 tutorial="goal-grid">
                         {Array.from({ length: 9 }, (_, pos) => {
                             if (pos === 4) {
                                 return (
@@ -161,7 +174,7 @@ export default function GoalView({
                     <div style={{ background: theme.card, borderRadius: 14, padding: "12px 14px", fontSize: 13 }}>
                         ひもづいた習慣 <b>{linkedCount("habit")}</b> 件 ・ タスク <b>{linkedCount("oneoff")}</b> 件{linkedCount("rule") > 0 && <> ・ マイルール <b>{linkedCount("rule")}</b> 件</>}
                     </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                    <div data-tutorial="goal-review" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                         <PrimaryBtn fullWidth disabled={named.length === 0} onClick={() => setView("review")} style={{ minHeight: 52 }}>見直す</PrimaryBtn>
                         <SecondaryBtn fullWidth onClick={() => setView("history")} style={{ minHeight: 52 }}>チャートの履歴（{mandala.reviews.length}）</SecondaryBtn>
                     </div>
@@ -208,7 +221,7 @@ export default function GoalView({
                         </div>
                     </div>
                     <div style={{ fontSize: 12, color: theme.subtext }}>マスをタップすると、習慣・タスクを作ったり、ひもづけたりできます</div>
-                    <Grid3>
+                    <Grid3 tutorial="goal-element-grid">
                         {Array.from({ length: 9 }, (_, pos) => {
                             if (pos === 4) {
                                 return (
@@ -363,8 +376,8 @@ function EmptyGoal({ onStart, onOpenPast }: { onStart: () => void; onOpenPast?: 
     );
 }
 
-function Grid3({ children }: { children: React.ReactNode }) {
-    return <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 6 }}>{children}</div>;
+function Grid3({ children, tutorial }: { children: React.ReactNode; tutorial?: string }) {
+    return <div data-tutorial={tutorial} style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 6 }}>{children}</div>;
 }
 
 function CellText({ text }: { text: string }) {

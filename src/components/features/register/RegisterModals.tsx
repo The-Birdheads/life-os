@@ -148,7 +148,8 @@ export default function RegisterModals({
     const modalStyle: React.CSSProperties = {
         width: "100%", maxWidth: 600,
         // コンテンツ量に関わらず常にステータスバー直下まで固定高さ
-        height: `calc(100dvh - max(env(safe-area-inset-top, 0px), 24px) - ${adHeight}px)`,
+        // 使い方の案内が上に出ているあいだは、そのぶん低くする(--guide-modal)
+        height: `calc(100dvh - max(env(safe-area-inset-top, 0px), 24px) - ${adHeight}px - var(--guide-modal, 0px))`,
         background: "var(--bg)", borderTopLeftRadius: 20, borderTopRightRadius: 20,
         display: "flex", flexDirection: "column",
         overflowX: "hidden", // 左右スクロール禁止
@@ -331,7 +332,7 @@ function TaskListModal({
     );
 
     return (
-        <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
+        <div style={modalStyle} data-tutorial={`register-${type}`} onClick={(e) => e.stopPropagation()}>
             <div style={{ position: "relative", padding: "24px 16px 16px", flexShrink: 0 }}>
                 <button aria-label="モーダルを閉じる" style={{ ...closeBtnStyle, padding: 0 }} onClick={() => setOpenModal(null)}>
                     <CloseIcon size={20} />
@@ -352,7 +353,7 @@ function TaskListModal({
                         <PrimaryBtn
                             fullWidth
                             onClick={() => setAdding(true)}
-                            data-tutorial={type === "habit" ? "habit-modal-add-btn" : undefined}
+                            data-tutorial="register-add-btn"
                         >
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
                                 <PlusIcon size={18} />
@@ -360,7 +361,7 @@ function TaskListModal({
                             </div>
                         </PrimaryBtn>
                     ) : (
-                        <Card style={{ padding: 16 }}>
+                        <Card style={{ padding: 16 }} data-tutorial="register-form">
                             <form onSubmit={async (e) => {
                                 e.preventDefault();
                                 setMsg("");
@@ -387,14 +388,13 @@ function TaskListModal({
                                 }
                             }} style={{ display: "grid", gap: 12 }}>
                                 <h3 style={{ margin: 0, fontSize: 16 }}>新規追加 ({subTab === "hidden" ? "非表示" : "表示中"})</h3>
-                                <label data-tutorial={type === "habit" ? "habit-title-input" : undefined}>
+                                <label>
                                     タイトル
                                     <TextInput aria-label="アイテムタイトル入力" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} fullWidth required />
                                 </label>
                                 {!showNewMemo ? (
                                     <button
                                         type="button"
-                                        data-tutorial={type === "habit" ? "habit-memo" : undefined}
                                         onClick={() => setShowNewMemo(true)}
                                         style={{ background: "none", border: `1px dashed ${theme.border}`, borderRadius: 8, padding: "8px 12px", cursor: "pointer", color: theme.subtext, fontSize: 13, display: "flex", alignItems: "center", gap: 6, width: "100%" }}
                                     >
@@ -418,10 +418,12 @@ function TaskListModal({
                                 )}
                                 <GoalLinkField groups={goal?.goalOptions ?? []} value={newGoalCell} onChange={setNewGoalCell} />
                                 {/* マイルールは時間をかけてやるものではないので、優先度・ボリュームは持たない */}
-                                {type !== "rule" && <LevelFields priority={priority} volume={volume} onPriority={setPriority} onVolume={setVolume} tutorial={type === "habit"} />}
-                                {repeating && <FrequencyPicker value={newFreq} onChange={setNewFreq} />}
+                                {type !== "rule" && <LevelFields priority={priority} volume={volume} onPriority={setPriority} onVolume={setVolume} />}
+                                {repeating && (
+                                    <FrequencyPicker value={newFreq} onChange={setNewFreq} />
+                                )}
                                 {type === "habit" && (
-                                    <div data-tutorial="habit-remind" style={{ display: "grid", gap: 8 }}>
+                                    <div style={{ display: "grid", gap: 8 }}>
                                         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                                             <ToggleSwitch
                                                 checked={newRemindOn}
@@ -648,7 +650,7 @@ function TaskEditModal({
 
     return (
         <div style={{ ...overlayStyle, zIndex: 110 }} onClick={() => setEditingItem(null)}>
-            <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
+            <div style={modalStyle} data-tutorial="edit-item" onClick={(e) => e.stopPropagation()}>
                 <div style={{ position: "relative", padding: "24px 16px 16px", flexShrink: 0 }}>
                     <button style={{ ...closeBtnStyle, padding: 0 }} onClick={() => setEditingItem(null)}>
                         <CloseIcon size={20} />

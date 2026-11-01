@@ -122,7 +122,8 @@ export default function CellSheet({
     };
     const sheet: React.CSSProperties = {
         width: "100%", maxWidth: 600, boxSizing: "border-box",
-        maxHeight: `calc(100dvh - max(env(safe-area-inset-top, 0px), 24px) - ${adHeight}px)`,
+        // 使い方の案内が上に出ているあいだは、そのぶん低くする(--guide-modal)
+        maxHeight: `calc(100dvh - max(env(safe-area-inset-top, 0px), 24px) - ${adHeight}px - var(--guide-modal, 0px))`,
         background: "var(--bg)", borderTopLeftRadius: 20, borderTopRightRadius: 20,
         padding: "20px 16px calc(24px + env(safe-area-inset-bottom, 0px))", overflowY: "auto", overflowX: "hidden",
         display: "grid", gap: 14, alignContent: "start",
@@ -229,7 +230,7 @@ export default function CellSheet({
 
     return (
         <div style={overlay} onClick={onClose}>
-            <div role="dialog" aria-label="マスの詳細" style={sheet} onClick={(e) => e.stopPropagation()}>
+            <div role="dialog" aria-label="マスの詳細" data-tutorial={cellIndex === null ? "element-sheet" : "cell-sheet"} style={sheet} onClick={(e) => e.stopPropagation()}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 700, minWidth: 0 }}>
                         <span style={{ width: 10, height: 10, borderRadius: 5, background: element.color, flexShrink: 0 }} />
