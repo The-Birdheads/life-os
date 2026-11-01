@@ -82,7 +82,7 @@ export default function ChartSheet({
                 <div style={{ display: "grid", gap: 8, marginTop: 8, paddingTop: 16, borderTop: `1px solid ${theme.border}` }}>
                     <h3 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: theme.subtext }}>新しいチャート</h3>
                     <p style={{ margin: 0, fontSize: 12, lineHeight: 1.7, color: theme.subtext }}>
-                        今のチャートを終えて、新しい大目標でチャートを作ります。習慣・タスクと記録はそのまま残り、行動目標とのひもづけだけ外れます。
+                        今のチャートを終えて、新しいチャートを作ります。今の内容を引き継いで直すことも、白紙から作ることもできます。進み具合は、作った日から数え直します。
                     </p>
                     <SecondaryBtn fullWidth disabled={busy} onClick={onNewChart}>新しいチャートを作る</SecondaryBtn>
                 </div>

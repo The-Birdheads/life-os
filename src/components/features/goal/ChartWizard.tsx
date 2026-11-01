@@ -11,17 +11,21 @@ import { ChevronLeftIcon, ChevronRightIcon } from "../../ui/Icon";
  * チャートの作成(3ステップ: 大目標 → 8つの要素 → 要素ごとの行動目標)。
  * 全部埋めなくても「完了」できる。保存は最後にまとめて行う(キャンセルすると何も残らない)。
  * replacing: 今のチャートを終えて、新しいチャートを作るとき
+ * initial: 今のチャートを引き継ぐときの下書き(大目標・要素・行動目標を入れた状態で始める)
  */
 export default function ChartWizard({
     replacing = false,
+    initial,
     onCancel,
     onSave,
 }: {
     replacing?: boolean;
+    initial?: ChartDraft;
     onCancel: () => void;
     onSave: (draft: ChartDraft) => Promise<void>;
 }) {
-    const [draft, setDraft] = useState<ChartDraft>(emptyDraft);
+    const [draft, setDraft] = useState<ChartDraft>(() => initial ?? emptyDraft());
+    const carrying = !!initial;
     const [step, setStep] = useState<1 | 2 | 3>(1);
     const [wizElem, setWizElem] = useState(0);
     const [saving, setSaving] = useState(false);
@@ -75,6 +79,11 @@ export default function ChartWizard({
             {step === 1 && (
                 <div style={{ display: "grid", gap: 12 }}>
                     <h2 style={{ margin: "8px 0 0", fontSize: 20 }}>どんな自分になりたい？</h2>
+                    {carrying && (
+                        <p style={{ margin: 0, fontSize: 12, lineHeight: 1.7, color: theme.subtext, background: theme.card, borderRadius: 10, padding: "8px 10px" }}>
+                            今のチャートの内容が入っています。直したいところだけ変えてください。文言を変えなかった行動目標は、ひもづいた習慣・タスクを引き継ぎます。進み具合は、作った日から数え直します。
+                        </p>
+                    )}
                     <label style={{ display: "grid", gap: 6, fontSize: 14 }}>
                         大目標
                         <TextInput value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} placeholder="例: 健康的な体をつくる" fullWidth />
@@ -124,7 +133,11 @@ export default function ChartWizard({
                         <SecondaryBtn fullWidth disabled={saving} onClick={save}>あとで</SecondaryBtn>
                         <PrimaryBtn fullWidth disabled={saving} onClick={save}>完了</PrimaryBtn>
                     </div>
-                    <p style={{ margin: 0, fontSize: 12, color: theme.subtext }}>「あとで」でも、ここまでの内容は保存されます。空いたマスは、チャートからいつでも書けます。</p>
+                    <p style={{ margin: 0, fontSize: 12, color: theme.subtext }}>
+                        {carrying
+                            ? "文言を変えた行動目標は、習慣・タスクのひもづけが外れます（習慣・タスクと記録は残ります）。"
+                            : "「あとで」でも、ここまでの内容は保存されます。空いたマスは、チャートからいつでも書けます。"}
+                    </p>
                 </div>
             )}
         </div>

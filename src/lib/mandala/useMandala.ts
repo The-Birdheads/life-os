@@ -8,6 +8,8 @@ import { todayJST } from "../day";
 import type { MandalaCell, MandalaCellEvent, MandalaCellEventKind, MandalaChart, MandalaReview, Task } from "../types";
 import { buildChartModel, ELEMENT_COLORS, tasksByCell, type ChartModel } from "./chart";
 import { addDays } from "./dates";
+import { periodEndingOn } from "./dayProgress";
+import { carriedCells } from "./carryOver";
 import { changeFrequencyPatch, currentFrequency, frequencyLabel, type Frequency } from "./frequency";
 import { doneDaysByTask, isCounted, type Period } from "./progress";
 import { buildSnapshot, describeDecision, type ReviewDecision } from "./review";
@@ -28,6 +30,8 @@ export type ChartDraft = {
 export type NewTaskForCell =
   | { type: "habit" | "rule"; title: string; frequency: Frequency }
   | { type: "oneoff"; title: string; dueDate: string | null };
+
+export { draftFromModel } from "./carryOver";
 
 export function emptyDraft(): ChartDraft {
   return {
@@ -63,9 +67,10 @@ export function useMandala(
   const [pastCharts, setPastCharts] = useState<MandalaChart[]>([]);
   const [loaded, setLoaded] = useState(false);
 
-  // 進み具合は「直近7日(今日を含む)」で数える
+  // 進み具合は「直近7日(今日を含む)」で数える。チャートを始めた日より前は数えない(新しく作り直したら、そこから数え直す)
   const today = todayJST();
-  const period: Period = useMemo(() => ({ from: addDays(today, -6), to: today }), [today]);
+  const startDate = chart?.start_date ?? null;
+  const period: Period = useMemo(() => periodEndingOn(today, startDate), [today, startDate]);
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -143,24 +148,37 @@ export function useMandala(
 
   /**
    * 今のチャートを終える(過去のチャートとして残す)。save なら、終える前の状態を履歴に残す。
-   * ひもづいた習慣・タスクは消さずに、ひもづけだけ外す(新しいチャートで改めてひもづける)
+   * ひもづいた習慣・タスクは消さずに、ひもづけだけ外す(新しいチャートで改めてひもづける)。
+   * keep のマスにひもづいたものは外さない(新しいチャートへ引き継ぐ)
    */
-  const finishCurrentChart = useCallback(async (save: boolean) => {
+  const finishCurrentChart = useCallback(async (save: boolean, keep: Set<string> = new Set()) => {
     if (!userId || !chart) return;
     if (save) await addSnapshotRecord("final", "");
     const cellIds = new Set(cells.map((c) => c.id));
     for (const t of tasks.filter((t) => t.mandala_cell_id && cellIds.has(t.mandala_cell_id))) {
-      await addEvent(t.mandala_cell_id!, "unlinked", `チャートを終えたので、${KIND_LABEL[t.task_type]}「${t.title}」のひもづけを外した`, t.id);
+      const kind = KIND_LABEL[t.task_type];
+      if (keep.has(t.mandala_cell_id!)) {
+        await addEvent(t.mandala_cell_id!, "unlinked", `チャートを作り直したので、${kind}「${t.title}」を新しいチャートへ引き継いだ`, t.id);
+        continue;
+      }
+      await addEvent(t.mandala_cell_id!, "unlinked", `チャートを終えたので、${kind}「${t.title}」のひもづけを外した`, t.id);
       await sqliteRepo.updateTask(userId, t.id, { mandala_cell_id: null, mandala_linked_at: null });
     }
     await sqliteRepo.upsertChart({ ...chart, status: "finished" });
     await reloadTasks();
   }, [userId, chart, cells, tasks, addEvent, reloadTasks, addSnapshotRecord]);
 
-  /** チャートを作る。今のチャートがあれば、終えてから作る(saveCurrent なら、終える前の状態を履歴に残す) */
-  const createChart = useCallback(async (draft: ChartDraft, options: { saveCurrent?: boolean } = {}) => {
+  /**
+   * チャートを作る。今のチャートがあれば、終えてから作る(saveCurrent なら、終える前の状態を履歴に残す)。
+   * carryOver なら、文言を変えなかった行動目標のマスは、状態(休止・達成)とひもづいた習慣・タスクを引き継ぐ。
+   * 進み具合は、新しいチャートを始めた日から数え直す
+   */
+  const createChart = useCallback(async (draft: ChartDraft, options: { saveCurrent?: boolean; carryOver?: boolean } = {}) => {
     if (!userId) return;
-    await finishCurrentChart(!!options.saveCurrent);
+    const carried = options.carryOver && model ? carriedCells(model, draft) : new Map<string, MandalaCell>();
+    const carriedTasks = new Map<string, Task[]>();
+    for (const [key, old] of carried) carriedTasks.set(key, tasks.filter((t) => t.mandala_cell_id === old.id));
+    await finishCurrentChart(!!options.saveCurrent, new Set([...carried.values()].map((c) => c.id)));
     const newChart: MandalaChart = {
       id: "", user_id: userId, title: draft.title.trim(), start_date: todayJST(),
       end_date: draft.endDate || null, status: "active",
@@ -176,16 +194,26 @@ export function useMandala(
       for (let a = 0; a < 8; a++) {
         const text = draft.actions[e][a].trim();
         if (!text) continue;
+        const old = carried.get(`${e}-${a}`);
         const cell: MandalaCell = {
           id: "", user_id: userId, chart_id: newChart.id, element_index: e, cell_index: a,
-          text, color: null, status: "active", paused_periods: [],
+          text, color: null, status: old?.status ?? "active", paused_periods: old?.paused_periods ?? [],
         };
         await sqliteRepo.upsertCell(cell);
-        await addEvent(cell.id, "created", `「${text}」を書いた`);
+        if (!old) {
+          await addEvent(cell.id, "created", `「${text}」を書いた`);
+          continue;
+        }
+        await addEvent(cell.id, "created", `「${text}」を前のチャートから引き継いだ`);
+        for (const t of carriedTasks.get(`${e}-${a}`) ?? []) {
+          await sqliteRepo.updateTask(userId, t.id, { mandala_cell_id: cell.id });
+          await addEvent(cell.id, "linked", `${KIND_LABEL[t.task_type]}「${t.title}」を前のチャートから引き継いだ`, t.id);
+        }
       }
     }
+    if (carried.size > 0) await reloadTasks();
     await afterWrite();
-  }, [userId, addEvent, afterWrite, finishCurrentChart]);
+  }, [userId, model, tasks, addEvent, afterWrite, finishCurrentChart, reloadTasks]);
 
   const updateChart = useCallback(async (patch: Partial<Pick<MandalaChart, "title" | "end_date">>) => {
     if (!chart) return;

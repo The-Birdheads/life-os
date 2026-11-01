@@ -1,10 +1,11 @@
 /**
  * その日に、チャートのどこをどれだけ進めたか(振り返りタブの演出に使う)。
- * 進み具合は目標タブと同じく「その日までの直近7日」で数え、その日の完了を入れる前と入れた後を比べる。
+ * 進み具合は目標タブと同じく「その日までの直近7日(チャートを始めた日より前は数えない)」で数え、
+ * その日の完了を入れる前と入れた後を比べる。
  */
 import type { MandalaCell, Task } from "../types";
 import { type ChartModel } from "./chart";
-import { addDays } from "./dates";
+import { addDays, maxDay } from "./dates";
 import { average, cellRate, type Period } from "./progress";
 
 export type CellStep = {
@@ -31,9 +32,9 @@ export type DayProgress = {
   cells: CellStep[];
 };
 
-/** その日までの直近7日 */
-export function periodEndingOn(day: string): Period {
-  return { from: addDays(day, -6), to: day };
+/** その日までの直近7日。startFrom(チャートを始めた日)があれば、それより前は含めない */
+export function periodEndingOn(day: string, startFrom?: string | null): Period {
+  return { from: maxDay(addDays(day, -6), startFrom)!, to: day };
 }
 
 /** その日の完了を除いた記録 */
@@ -57,7 +58,7 @@ export function dayProgress(
   day: string,
   achievedOn: Set<string> = new Set()
 ): DayProgress {
-  const period = periodEndingOn(day);
+  const period = periodEndingOn(day, model.chart.start_date);
   const before = withoutDay(doneByTask, day);
   const elements: ElementStep[] = [];
   const cells: CellStep[] = [];

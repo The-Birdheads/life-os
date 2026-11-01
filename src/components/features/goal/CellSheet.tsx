@@ -5,7 +5,7 @@ import type { ElementModel } from "../../../lib/mandala/chart";
 import type { MandalaState } from "../../../lib/mandala/useMandala";
 import { currentFrequency, frequencyLabel, isValidFrequency, type Frequency } from "../../../lib/mandala/frequency";
 import { isCounted, taskProgress, weekCountStatus } from "../../../lib/mandala/progress";
-import { localDateLabel } from "../../../lib/mandala/dates";
+import { addDays, localDateLabel, maxDay } from "../../../lib/mandala/dates";
 import PrimaryBtn from "../../ui/PrimaryBtn";
 import SecondaryBtn from "../../ui/SecondaryBtn";
 import TextInput from "../../ui/TextInput";
@@ -87,8 +87,9 @@ export default function CellSheet({
             const w = weekCountStatus(t, mandala.doneByTask.get(t.id), mandala.period.to);
             return `${frequencyLabel(freq)} ・ 今週 ${rule ? "○ " : ""}${w.done}/${w.target}${rule ? "日" : "回"}`;
         }
-        const from = t.mandala_linked_at && t.mandala_linked_at > mandala.period.from
-            ? `${t.mandala_linked_at.slice(5).replace("-", "/")}から` : "直近7日";
+        // ひもづけた日か、チャートを始めた日が直近7日の中にあれば、その日から数えている
+        const since = maxDay(t.mandala_linked_at, mandala.period.from)!;
+        const from = since > addDays(mandala.period.to, -6) ? `${since.slice(5).replace("-", "/")}から` : "直近7日";
         return `${frequencyLabel(freq)} ・ ${from} ${rule ? "○ " : ""}${p.done}/${p.target}${rule ? "日" : "回"}`;
     };
 

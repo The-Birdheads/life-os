@@ -56,7 +56,7 @@ export default function MandalaReplay({
         if (!userId) return;
         let alive = true;
         (async () => {
-            const period = periodEndingOn(day);
+            const period = periodEndingOn(day, model.chart.start_date);
             const [entries, achieved] = await Promise.all([
                 sqliteRepo.getTaskEntriesBetween(userId, period.from, period.to),
                 sqliteRepo.getCellEventsByKind(userId, "achieved"),

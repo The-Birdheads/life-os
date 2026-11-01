@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import type { MandalaCell, MandalaChart, Task } from '../types';
 import { buildChartModel, tasksByCell } from './chart';
-import { dayProgress, gain } from './dayProgress';
+import { dayProgress, gain, periodEndingOn } from './dayProgress';
+import { carriedCells, draftFromModel } from './carryOver';
 import { doneDaysByTask } from './progress';
 import { buildWidgetMandala } from './widget';
 
@@ -83,5 +84,43 @@ describe('buildWidgetMandala', () => {
         expect(w.elements[1].cells[2]).toEqual({ text: '昼寝しない', level: -1 });
         expect(w.elements[2]).toMatchObject({ name: '', rate: -1, level: -1 });
         expect(w.todayCount).toBe(2);
+    });
+});
+
+describe('チャートを始めた日から数える', () => {
+    it('直近7日でも、チャートを始めた日より前は数えない', () => {
+        expect(periodEndingOn(DAY, '2026-10-31')).toEqual({ from: '2026-10-31', to: DAY });
+        expect(periodEndingOn(DAY, '2026-10-01')).toEqual({ from: '2026-10-26', to: DAY });
+        expect(periodEndingOn(DAY, null)).toEqual({ from: '2026-10-26', to: DAY });
+    });
+
+    it('作り直した当日は、前の日に完了した分を数えない', () => {
+        const fresh = buildChartModel({ ...chart, start_date: DAY }, cells);
+        const p = dayProgress(fresh, tasksByCell(tasks), done, DAY);
+        // 毎朝走る: 当日だけを数えて 0% → 100%(前日の完了は入らない)
+        expect(p.cells.find((c) => c.cell.id === 'a0')).toMatchObject({ before: 0, after: 100 });
+    });
+});
+
+describe('今のチャートを引き継ぐ', () => {
+    it('下書きに大目標・期限・要素・行動目標が入る', () => {
+        const d = draftFromModel(buildChartModel({ ...chart, end_date: '2027-03-31' }, cells));
+        expect(d.title).toBe('健康的な体をつくる');
+        expect(d.endDate).toBe('2027-03-31');
+        expect(d.elements.slice(0, 3)).toEqual(['運動', '睡眠', '']);
+        expect(d.actions[0].slice(0, 3)).toEqual(['毎朝走る', '階段を使う', '']);
+    });
+
+    it('同じ場所に同じ文言が残ったマスだけ引き継ぐ(前後の空白は無視、書き換え・空にしたマスは外す)', () => {
+        const d = draftFromModel(model);
+        d.actions[0][0] = ' 毎朝走る ';
+        d.actions[0][1] = '階段を2階分使う';
+        d.actions[1][0] = '';
+        d.elements[1] = 'ねむり';
+        const carried = carriedCells(model, d);
+        expect([...carried.keys()].sort()).toEqual(['0-0', '1-1', '1-2']);
+        // 要素の名前を変えても、行動目標の文言が同じなら引き継ぐ。状態(達成・休止)は前のマスのものを使う
+        expect(carried.get('1-1')?.status).toBe('achieved');
+        expect(carried.get('1-2')?.status).toBe('paused');
     });
 });

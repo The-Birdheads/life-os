@@ -5,7 +5,7 @@ import {
     actionRate, AROUND, elementRate, namedElements, rateText, rateTint, rateLevel,
     type ElementModel,
 } from "../lib/mandala/chart";
-import type { MandalaState } from "../lib/mandala/useMandala";
+import { draftFromModel, type MandalaState } from "../lib/mandala/useMandala";
 import { isCounted } from "../lib/mandala/progress";
 import ChartWizard from "../components/features/goal/ChartWizard";
 import CellSheet from "../components/features/goal/CellSheet";
@@ -46,9 +46,10 @@ export default function GoalView({
     const [elem, setElem] = useState(0);
     const [sheet, setSheet] = useState<Sheet>(null);
     const [chartSheet, setChartSheet] = useState(false);
-    // 新しいチャートを作るときの確認と、今のチャートを履歴に保存するか
+    // 新しいチャートを作るときの確認と、今のチャートを履歴に保存するか・今のチャートを引き継ぐか
     const [askNew, setAskNew] = useState(false);
     const [saveOnReplace, setSaveOnReplace] = useState(true);
+    const [carryOver, setCarryOver] = useState(false);
     const model = mandala.model;
 
     useEffect(() => {
@@ -60,6 +61,7 @@ export default function GoalView({
         setSheet(null);
         setChartSheet(false);
         setAskNew(false);
+        setCarryOver(false);
         setView(command.kind);
     }, [command?.nonce]);
 
@@ -77,15 +79,19 @@ export default function GoalView({
         if (view !== "wizard") {
             return <EmptyGoal onStart={() => setView("wizard")} onOpenPast={mandala.pastCharts.length ? () => setView("past") : undefined} />;
         }
+        const carry = carryOver && !!model;
         return (
             <div style={{ paddingTop: 8 }}>
                 <ChartWizard
                     replacing={!!model}
+                    initial={carry ? draftFromModel(model) : undefined}
                     onCancel={() => setView("center")}
                     onSave={async (draft) => {
-                        await mandala.createChart(draft, { saveCurrent: saveOnReplace });
+                        await mandala.createChart(draft, { saveCurrent: saveOnReplace, carryOver: carry });
                         setView("center");
-                        setMsg("チャートを作りました。要素を開いて、マスから習慣を作ってみましょう");
+                        setMsg(carry
+                            ? "新しいチャートを作りました。変えなかった行動目標の習慣・タスクは引き継いでいます"
+                            : "チャートを作りました。要素を開いて、マスから習慣を作ってみましょう");
                     }}
                 />
             </div>
@@ -107,10 +113,11 @@ export default function GoalView({
     const startNewChart = () => {
         setChartSheet(false);
         setSheet(null);
+        setSaveOnReplace(true);
         setAskNew(true);
     };
-    const goWizard = (save: boolean) => {
-        setSaveOnReplace(save);
+    const goWizard = (carry: boolean) => {
+        setCarryOver(carry);
         setAskNew(false);
         setView("wizard");
     };
@@ -317,14 +324,25 @@ export default function GoalView({
                         style={{ width: "100%", maxWidth: 360, background: "var(--bg)", borderRadius: 18, padding: 20, display: "grid", gap: 12 }}>
                         <span style={{ fontSize: 16, fontWeight: 700 }}>新しいチャートを作る</span>
                         <p style={{ margin: 0, fontSize: 13, lineHeight: 1.7, color: theme.subtext }}>
-                            今のチャートを終えて、新しいチャートを作ります。習慣・タスクと記録はそのまま残り、行動目標とのひもづけだけ外れます。
+                            今のチャートを終えて、新しいチャートを作ります。進み具合は、作った日から数え直します。習慣・タスクと記録はそのまま残ります。
+                            切り替わるのは、新しいチャートを保存したときです。
                         </p>
-                        <p style={{ margin: 0, fontSize: 13, lineHeight: 1.7 }}>
-                            今のチャートと進み具合を、履歴に保存しますか？<br />
-                            <span style={{ fontSize: 12, color: theme.subtext }}>終えたチャートは「チャートの履歴 › 過去のチャート」から見られます。切り替わるのは、新しいチャートを保存したときです。</span>
-                        </p>
-                        <PrimaryBtn fullWidth onClick={() => goWizard(true)}>保存してから作る</PrimaryBtn>
-                        <SecondaryBtn fullWidth onClick={() => goWizard(false)}>保存せずに作る</SecondaryBtn>
+                        <label style={{ display: "flex", alignItems: "flex-start", gap: 10, fontSize: 13, lineHeight: 1.6, cursor: "pointer" }}>
+                            <input type="checkbox" checked={saveOnReplace} onChange={(e) => setSaveOnReplace(e.target.checked)}
+                                style={{ width: 20, height: 20, marginTop: 1, flexShrink: 0, accentColor: theme.habit }} />
+                            <span>
+                                今のチャートと進み具合を、履歴に保存する<br />
+                                <span style={{ fontSize: 12, color: theme.subtext }}>終えたチャートは「チャートの履歴 › 過去のチャート」から見られます</span>
+                            </span>
+                        </label>
+                        <PrimaryBtn fullWidth onClick={() => goWizard(true)} style={{ minHeight: 56, display: "grid", gap: 2 }}>
+                            <span>今のチャートを引き継いで作る</span>
+                            <span style={{ fontSize: 11, fontWeight: 500, opacity: 0.85 }}>直したいところだけ変え、習慣は続ける</span>
+                        </PrimaryBtn>
+                        <SecondaryBtn fullWidth onClick={() => goWizard(false)} style={{ minHeight: 56, display: "grid", gap: 2 }}>
+                            <span>白紙から作る</span>
+                            <span style={{ fontSize: 11, fontWeight: 500, opacity: 0.85 }}>習慣・タスクのひもづけは外れる</span>
+                        </SecondaryBtn>
                         <button type="button" onClick={() => setAskNew(false)}
                             style={{ minHeight: 44, border: "none", background: "none", color: theme.subtext, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>
                             キャンセル
