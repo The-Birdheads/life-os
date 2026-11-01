@@ -22,6 +22,8 @@ type Props = {
   onSignOut: () => void;
 
   msg: string;
+  /** 通知を閉じる(× と、時間がたったとき) */
+  onDismissMsg: () => void;
 
   tab: Tab;
   setTab: (t: Tab) => void;
@@ -59,6 +61,7 @@ export default function AppShell({
   userEmail,
   onSignOut,
   msg,
+  onDismissMsg,
   tab,
   setTab,
   layoutStyle,
@@ -523,7 +526,12 @@ export default function AppShell({
           </div>
         </div>
 
-        <Toast msg={msg} wrapStyle={toastWrapStyle} />
+        {/* 通知はヘッダーの下に出す(日付やメニューを隠さない) */}
+        <Toast
+          msg={msg}
+          onDismiss={onDismissMsg}
+          wrapStyle={{ ...toastWrapStyle, top: `calc(max(env(safe-area-inset-top, 0px), 32px) + ${adHeight + topBarHeight + 8}px)` }}
+        />
 
         {/* MAIN CONTENT AREA */}
         <div

@@ -69,12 +69,6 @@ export default function App() {
   // アカウント削除中は、サインアウトに伴う「ログアウトしました」の表示を出さない(削除完了の表示を優先)
   const deletingRef = useRef(false);
 
-  useEffect(() => {
-    if (!msg) return;
-    const t = setTimeout(() => setMsg(""), 3000);
-    return () => clearTimeout(t);
-  }, [msg]);
-
   // ------- UI -------
   // 起動時は目標タブ(PDCA の P)から
   const [tab, setTab] = useState<Tab>("goal");
@@ -852,6 +846,7 @@ export default function App() {
       isDeleting={isDeleting}
       isSyncing={isSyncing}
       msg={msg}
+      onDismissMsg={() => setMsg("")}
       tab={tab}
       setTab={setTab}
       layoutStyle={layoutStyle}

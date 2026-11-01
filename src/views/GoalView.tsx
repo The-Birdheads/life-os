@@ -15,7 +15,7 @@ import PastCharts from "../components/features/goal/PastCharts";
 import ChartSheet from "../components/features/goal/ChartSheet";
 import PrimaryBtn from "../components/ui/PrimaryBtn";
 import SecondaryBtn from "../components/ui/SecondaryBtn";
-import { ChevronLeftIcon, ChevronRightIcon, GridIcon, PencilIcon, PlusIcon, TargetIcon } from "../components/ui/Icon";
+import { ChevronLeftIcon, ChevronRightIcon, ClockIcon, CloseIcon, GridIcon, PencilIcon, PlusIcon, TargetIcon } from "../components/ui/Icon";
 import { todayJST } from "../lib/day";
 
 type View = "center" | "element" | "all" | "wizard" | "review" | "history" | "past";
@@ -131,6 +131,16 @@ export default function GoalView({
         <div style={{ display: "grid", gap: 12, paddingTop: 8 }}>
             {view === "center" && (
                 <>
+                    {daysLeft !== null && daysLeft < 0 && (
+                        <DeadlineBanner
+                            // 期限を変えたら作り直す(閉じた状態を、新しい期限には持ち越さない)
+                            key={`${model.chart.id}:${model.chart.end_date}`}
+                            chartId={model.chart.id}
+                            endDate={model.chart.end_date!}
+                            onExtend={() => setChartSheet(true)}
+                            onNext={startNewChart}
+                        />
+                    )}
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
                         <button type="button" data-tutorial="goal-title" aria-label={`大目標「${model.chart.title}」を編集する`} onClick={() => setChartSheet(true)}
                             style={{ minWidth: 0, border: "none", background: "none", padding: 0, textAlign: "left", fontFamily: "inherit", color: "var(--text)", cursor: "pointer" }}>
@@ -374,6 +384,61 @@ export default function GoalView({
                     onOpenElement={(e) => { setSheet(null); setElem(e); setView("element"); }}
                 />
             )}
+        </div>
+    );
+}
+
+const DEADLINE_DISMISSED_KEY = "habitas.deadlineBanner.dismissed";
+
+/** 閉じた帯を覚えておく(チャートと期限の組み合わせごと。期限を変えて、また過ぎたら出す) */
+function readDismissed(): string[] {
+    try {
+        const v = JSON.parse(localStorage.getItem(DEADLINE_DISMISSED_KEY) ?? "[]");
+        return Array.isArray(v) ? v : [];
+    } catch {
+        return [];
+    }
+}
+
+/**
+ * 期限を過ぎたチャートの帯。期限を延ばすか、次のチャートを作るかを選べる。× で閉じると、同じ期限では出さない
+ */
+function DeadlineBanner({ chartId, endDate, onExtend, onNext }: { chartId: string; endDate: string; onExtend: () => void; onNext: () => void }) {
+    const key = `${chartId}:${endDate}`;
+    const [dismissed, setDismissed] = useState(() => readDismissed().includes(key));
+    if (dismissed) return null;
+
+    const dismiss = () => {
+        setDismissed(true);
+        try {
+            localStorage.setItem(DEADLINE_DISMISSED_KEY, JSON.stringify([...readDismissed().filter((k) => k !== key), key].slice(-20)));
+        } catch { /* 覚えられなくても、閉じることはできる */ }
+    };
+    const actionBtn: React.CSSProperties = {
+        minHeight: 40, padding: "0 14px", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+    };
+
+    return (
+        <div role="status" style={{ display: "grid", gap: 10, background: "#FFFBEB", border: "1px solid #FCD34D", borderRadius: 14, padding: "12px 6px 12px 14px" }}>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                <span style={{ width: 32, height: 32, borderRadius: 16, flexShrink: 0, background: "#FEF3C7", color: "#B45309", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <ClockIcon size={18} />
+                </span>
+                <div style={{ flex: 1, minWidth: 0, display: "grid", gap: 2, paddingTop: 2 }}>
+                    <b style={{ fontSize: 14, color: "#78350F" }}>{Number(endDate.slice(5, 7))}/{Number(endDate.slice(8, 10))} の期限を過ぎました</b>
+                    <span style={{ fontSize: 12, lineHeight: 1.6, color: "#92400E" }}>
+                        続けるなら期限を延ばし、区切るなら進み具合を履歴に残して次のチャートへ進みましょう。
+                    </span>
+                </div>
+                <button type="button" onClick={dismiss} aria-label="期限のお知らせを閉じる"
+                    style={{ width: 44, height: 44, margin: "-8px 0 -8px 0", flexShrink: 0, border: "none", background: "none", padding: 0, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#92400E", borderRadius: 12 }}>
+                    <CloseIcon size={18} />
+                </button>
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, paddingLeft: 42, paddingRight: 8 }}>
+                <button type="button" onClick={onExtend} style={{ ...actionBtn, border: "1px solid #F59E0B", background: "#FFFFFF", color: "#92400E" }}>期限を延ばす</button>
+                <button type="button" onClick={onNext} style={{ ...actionBtn, border: "none", background: "#B45309", color: "#FFFFFF" }}>次のチャートを作る</button>
+            </div>
         </div>
     );
 }
