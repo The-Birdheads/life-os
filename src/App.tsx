@@ -740,10 +740,15 @@ export default function App() {
       : null),
     [mandala.model, mandala.byCell, mandala.doneByTask, mandala.period]
   );
+  // ウィジェットの習慣は、アプリで選んでいる日ではなく、いつも今日の状況(doneTaskIds は選択中の日の分)
+  const doneToday = useMemo(() => {
+    const today = mandala.period.to;
+    return new Set([...mandala.doneByTask].filter(([, days]) => days.has(today)).map(([id]) => id));
+  }, [mandala.doneByTask, mandala.period]);
   useEffect(() => {
     if (!userId || tasks.length === 0) return;
-    syncWidgetData(tasks, doneTaskIds, doneTaskIdsAnyDay, widgetMandala, sortRule);
-  }, [tasks, doneTaskIds, doneTaskIdsAnyDay, widgetMandala, sortRule]);
+    syncWidgetData(tasks, doneToday, doneTaskIdsAnyDay, widgetMandala, sortRule);
+  }, [tasks, doneToday, doneTaskIdsAnyDay, widgetMandala, sortRule]);
 
   // 記録タブ・振り返りタブのカードに出す、要素のチップ(習慣・タスクの id → 要素)
   const goalChips = useMemo(() => {
