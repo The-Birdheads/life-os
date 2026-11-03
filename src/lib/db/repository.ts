@@ -1,6 +1,6 @@
 import type {
     Task, Action, TaskEntry, ActionEntry, DailyLog,
-    MandalaChart, MandalaCell, MandalaCellEvent, MandalaReview, TaskEntryBounds,
+    MandalaChart, MandalaCell, MandalaCellEvent, MandalaReview, TaskEntryBounds, TaskCellEvent,
 } from "../types";
 
 export interface Repository {
@@ -50,6 +50,10 @@ export interface Repository {
     createReview(review: Omit<MandalaReview, "id"> & { id?: string }): Promise<void>;
     getTaskEntriesBetween(userId: string, from: string, to: string): Promise<TaskEntry[]>;
     getTaskEntryBounds(userId: string): Promise<TaskEntryBounds[]>;
+    /** ひとつの習慣・タスクの、すべての日の記録(完了・対応中・×) */
+    getTaskEntriesForTask(userId: string, taskId: string): Promise<TaskEntry[]>;
+    /** 習慣・タスクにかかわる、目標でのできごと(古い順、マスの文言つき) */
+    getCellEventsForTask(userId: string, taskId: string): Promise<TaskCellEvent[]>;
 
     // Account Deletion
     deleteAllUserData(userId: string): Promise<void>;

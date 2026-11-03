@@ -1,6 +1,6 @@
 import type {
     Task, Action, TaskEntry, ActionEntry, DailyLog, NotificationSettings,
-    MandalaChart, MandalaCell, MandalaCellEvent, MandalaReview, TaskEntryBounds,
+    MandalaChart, MandalaCell, MandalaCellEvent, MandalaReview, TaskEntryBounds, TaskCellEvent,
 } from "../types";
 import type { Repository } from "./repository";
 import { Capacitor } from "@capacitor/core";
@@ -588,6 +588,18 @@ export class SqliteRepository implements Repository {
         return (res.values ?? []) as MandalaCellEvent[];
     }
 
+    /** 習慣・タスクにかかわる、目標でのできごと(ひもづけ・見直しなど)。履歴に出す */
+    async getCellEventsForTask(userId: string, taskId: string): Promise<TaskCellEvent[]> {
+        const db = await this.getDb();
+        const res = await db.query(
+            `SELECT e.*, c.text AS cell_text FROM mandala_cell_events e
+             LEFT JOIN mandala_cells c ON c.id = e.cell_id AND c.user_id = e.user_id
+             WHERE e.user_id = ? AND e.task_id = ? AND e.deleted_at IS NULL ORDER BY e.created_at ASC`,
+            [userId, taskId]
+        );
+        return (res.values ?? []) as TaskCellEvent[];
+    }
+
     async getReviews(userId: string, chartId: string): Promise<MandalaReview[]> {
         const db = await this.getDb();
         const res = await db.query(
@@ -612,6 +624,16 @@ export class SqliteRepository implements Repository {
         const res = await db.query(
             `SELECT * FROM task_entries WHERE user_id = ? AND day >= ? AND day <= ?`,
             [userId, from, to]
+        );
+        return (res.values ?? []) as TaskEntry[];
+    }
+
+    /** ひとつの習慣・タスクの、すべての日の記録。履歴に出す */
+    async getTaskEntriesForTask(userId: string, taskId: string): Promise<TaskEntry[]> {
+        const db = await this.getDb();
+        const res = await db.query(
+            `SELECT * FROM task_entries WHERE user_id = ? AND task_id = ? AND status IN ('done', 'doing', 'missed') ORDER BY day ASC`,
+            [userId, taskId]
         );
         return (res.values ?? []) as TaskEntry[];
     }

@@ -97,6 +97,9 @@ export type MandalaCellEvent = {
   created_at: string;
 };
 
+/** 習慣・タスクの履歴に出す、目標でのできごと(そのマスの文言つき) */
+export type TaskCellEvent = MandalaCellEvent & { cell_text?: string | null };
+
 export type MandalaReview = {
   id: string;
   user_id: string;

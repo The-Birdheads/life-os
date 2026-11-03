@@ -16,13 +16,14 @@ import VolBar from "../components/badges/VolBar";
 import SegmentedBar from "../components/ui/SegmentedBar";
 import { FEATURES } from "../lib/features";
 import SectionTitle from "../components/ui/SectionTitle";
-import { RepeatIcon, CheckIcon, ZapIcon, MemoIcon, GripIcon, ShieldIcon, GridIcon } from "../components/ui/Icon";
+import { RepeatIcon, CheckIcon, ZapIcon, MemoIcon, GripIcon, ShieldIcon, GridIcon, ClockIcon } from "../components/ui/Icon";
 import ToggleSwitch from "../components/ui/ToggleSwitch";
 import { checkOrRequestNotifPermission } from "../lib/notifications";
 import { space } from "../lib/ui/spacing";
 import Checkbox from "../components/ui/Checkbox";
 import TaskStatusBox from "../components/ui/TaskStatusBox";
 import TaskCard from "../components/features/tasks/TaskCard";
+import TaskHistorySheet from "../components/features/tasks/TaskHistorySheet";
 import GoalChip, { type GoalChipInfo } from "../components/features/tasks/GoalChip";
 import { useHabitFrequencyNote } from "../components/features/tasks/useHabitFrequencyNote";
 import { nextOnLongPress, nextOnTap, oneoffState, type TaskState } from "../lib/taskState";
@@ -406,6 +407,8 @@ export default function TodayView({
 
         const [actionId, setActionId] = useState(item.action_id || "");
         const [note, setNote] = useState(item.note || "");
+        // 履歴は編集画面の上に重ねる(編集中の入力を消さないよう、この画面の中で持つ)
+        const [showHistory, setShowHistory] = useState(false);
 
         const overlayStyle: React.CSSProperties = {
             position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
@@ -505,7 +508,16 @@ export default function TodayView({
             <div style={overlayStyle} onClick={() => setEditingItem(null)}>
                 <div style={modalStyle} data-tutorial="edit-item" onClick={(e) => e.stopPropagation()}>
                     <button style={closeBtnStyle} onClick={() => setEditingItem(null)}>×</button>
-                    <h2 style={{ marginTop: 0, marginBottom: 20, fontSize: 20 }}>{modalTitle}</h2>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "0 44px 20px 0", minHeight: 32 }}>
+                        <h2 style={{ margin: 0, fontSize: 20 }}>{modalTitle}</h2>
+                        {type !== "action" && (
+                            <button type="button" onClick={() => setShowHistory(true)} data-tutorial="edit-history"
+                                style={{ display: "inline-flex", alignItems: "center", gap: 4, minHeight: 32, padding: "4px 12px", borderRadius: 999, border: `1px solid ${theme.border}`, background: "var(--card)", color: "var(--text)", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+                                <ClockIcon size={14} />履歴
+                            </button>
+                        )}
+                    </div>
+                    <TaskHistorySheet userId={userId} task={showHistory ? item : null} adHeight={adHeight} onClose={() => setShowHistory(false)} />
 
                     <form onSubmit={handleSave} style={{ display: "grid", gap: 16 }}>
                         {type !== "action" && (
