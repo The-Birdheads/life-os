@@ -20,6 +20,7 @@ import { UserSettingsContext } from "./lib/context/UserSettingsContext";
 import type { SortRule } from "./lib/context/UserSettingsContext";
 import { initSqlite } from "./lib/db/initSqlite";
 import { getLocalUserId } from "./lib/db/localUser";
+import { storedSessionUser } from "./lib/storedSession";
 import { Capacitor } from "@capacitor/core";
 import { App as CapApp } from "@capacitor/app";
 import { SplashScreen } from "@capacitor/splash-screen";
@@ -267,13 +268,19 @@ export default function App() {
         const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Supabase Timeout")), 5000));
 
         let initialSession: any = null;
+        // ログインの確認が終わらなかった・失敗した(電波が弱いなど)。このときはログアウト扱いにしない
+        let sessionUnsure = false;
         try {
           const res: any = await Promise.race([sessionPromise, timeoutPromise]);
           initialSession = res.data?.session;
-          console.log("[App] Supabase session fetch result:", initialSession ? "session found" : "no session");
+          sessionUnsure = !initialSession && !!res.error;
+          console.log("[App] Supabase session fetch result:", initialSession ? "session found" : "no session", res.error?.message ?? "");
         } catch (e) {
-          console.warn("[App] Supabase session fetch timed out or failed, proceeding as local.", e);
+          sessionUnsure = true;
+          console.warn("[App] Supabase session fetch timed out or failed.", e);
         }
+        // 確認できなくても、ログインが端末に残っていれば、そのユーザーのまま始める(つながったら同期する)
+        const storedUser = sessionUnsure ? storedSessionUser() : null;
 
         // 3. 初期IDの設定
         let initialId: string;
@@ -284,6 +291,10 @@ export default function App() {
           console.log("[App] Initial ID from Supabase session:", initialId);
           // no_ads フラグをフェッチ（非同期・ノンブロッキング）
           fetchNoAds(initialId);
+        } else if (storedUser) {
+          initialId = storedUser.id;
+          setUserEmail(storedUser.email);
+          console.log("[App] Session not confirmed yet; keeping the signed-in user:", initialId);
         } else {
           initialId = await getLocalUserId();
           setUserEmail("offline-user@local");
@@ -372,9 +383,10 @@ export default function App() {
               setMsg("クラウドから同期中...");
               // Safari からの復帰直後はネットワーク復元を 2 秒待ってから sync
               doSync(newUserId, 2000);
-            } else if (event === "SIGNED_IN" || event === "INITIAL_SESSION") {
+            } else if (event === "SIGNED_IN" || event === "INITIAL_SESSION" || event === "TOKEN_REFRESHED") {
               // バックグラウンド復帰時も SIGNED_IN が再発行されることがあるため、
-              // INITIAL_SESSION と同様に5分以内ならスキップ、それ以外はバックグラウンドで静かに同期
+              // INITIAL_SESSION と同様に5分以内ならスキップ、それ以外はバックグラウンドで静かに同期。
+              // TOKEN_REFRESHED は、つながらずにログインの更新が遅れていたとき、送れなかった記録を送るため
               console.log(`[App] ${event} event for existing user. Checking sync cooldown...`);
               try {
                 const { Preferences } = await import('@capacitor/preferences');
@@ -390,8 +402,9 @@ export default function App() {
               // バックグラウンドで同期（UIをブロックしない）
               doSync(newUserId, 0, true);
             }
-          } else if (event === "SIGNED_OUT") {
-            console.log("[App] SIGNED_OUT event.");
+          } else if (event === "SIGNED_OUT" || (event === "INITIAL_SESSION" && !storedSessionUser())) {
+            // INITIAL_SESSION でセッションなしでも、ログインが端末に残っていれば(つながらないだけ)ログアウト扱いにしない
+            console.log(`[App] ${event} without session.`);
             setNoAds(false);
             const localId = await getLocalUserId();
             if (prevUserIdRef.current !== localId) {
