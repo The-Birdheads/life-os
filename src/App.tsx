@@ -71,8 +71,8 @@ export default function App() {
   const deletingRef = useRef(false);
 
   // ------- UI -------
-  // 起動時は目標タブ(PDCA の P)から
-  const [tab, setTab] = useState<Tab>("goal");
+  // 起動時は記録タブから(その日の習慣・タスクをすぐつけられるように)
+  const [tab, setTab] = useState<Tab>("today");
 
   useEffect(() => {
     setMsg("");

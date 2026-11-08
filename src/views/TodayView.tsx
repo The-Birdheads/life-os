@@ -24,6 +24,7 @@ import Checkbox from "../components/ui/Checkbox";
 import TaskStatusBox from "../components/ui/TaskStatusBox";
 import TaskCard from "../components/features/tasks/TaskCard";
 import TaskHistorySheet from "../components/features/tasks/TaskHistorySheet";
+import TodaySummary from "../components/features/tasks/TodaySummary";
 import GoalChip, { type GoalChipInfo } from "../components/features/tasks/GoalChip";
 import { useHabitFrequencyNote } from "../components/features/tasks/useHabitFrequencyNote";
 import { nextOnLongPress, nextOnTap, oneoffState, type TaskState } from "../lib/taskState";
@@ -715,6 +716,15 @@ export default function TodayView({
 
             {/* ✅ カード群（フィルタに応じて出し分け） */}
             <div style={{ display: "grid", gap: space.lg, marginTop: space.md }}>
+                {/* 「すべて」のときだけ、その日のまとめ(押すとそのサブタブへ) */}
+                {filter === "all" && (
+                    <TodaySummary
+                        habits={{ done: habits.filter((t) => doneTaskIds.has(t.id)).length, total: habits.length }}
+                        tasks={{ done: visibleOneoffs.filter((t) => doneTaskIds.has(t.id)).length, total: visibleOneoffs.length, doing: doingIds.size }}
+                        rules={{ checked: rules.filter((t) => ruleAnswerOf(t.id) !== null).length, total: rules.length }}
+                        onOpen={setFilter}
+                    />
+                )}
                 {(filter === "all" || filter === "habit") && (
                     <div>
                         <SectionTitle title="習慣" icon={<RepeatIcon size={18} />} accentColor={theme.habit} style={{ marginBottom: 8 }} />
