@@ -1,5 +1,6 @@
 import PrimaryBtn from "../../ui/PrimaryBtn";
 import { theme } from "../../../lib/ui/theme";
+import { CloseIcon } from "../../ui/Icon";
 
 type Props = {
   isOpen: boolean;
@@ -40,7 +41,13 @@ export default function LegacyAuthNotice({ isOpen, onClose }: Props) {
           color: theme.text,
         }}
       >
-        <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 12 }}>ログイン方法のお知らせ</div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 12 }}>
+          <div style={{ fontWeight: 700, fontSize: 16 }}>ログイン方法のお知らせ</div>
+          <button type="button" onClick={onClose} aria-label="お知らせを閉じる"
+            style={{ width: 44, height: 44, margin: "-10px -10px -10px 0", border: "none", background: "none", padding: 0, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: theme.subtext, borderRadius: 12 }}>
+            <CloseIcon size={18} />
+          </button>
+        </div>
         <div style={{ fontSize: 14, lineHeight: 1.7, marginBottom: 20 }}>
           Habitasのログイン基盤を、Memory Calendarと共通のものに変更しました。
           <br />

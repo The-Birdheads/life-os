@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { theme } from "../../lib/ui/theme";
 import { radius } from "../../lib/ui/radius";
 
@@ -5,6 +6,8 @@ type Item<K extends string> = {
   key: K;
   label: string;
   badge?: number | string;
+  /** あれば、アイコンの下に小さい文字で名前を出す(項目が多くて文字が切れるとき用) */
+  icon?: ReactNode;
 };
 
 type Props<K extends string> = {
@@ -53,6 +56,7 @@ export default function SegmentedBar<K extends string>({
       <div style={{ display: "flex", gap: 6, width: "100%", maxWidth }}>
         {items.map((it) => {
           const active = it.key === value;
+          const stacked = it.icon != null;
 
           return (
             <button
@@ -64,8 +68,8 @@ export default function SegmentedBar<K extends string>({
               style={{
                 flex: 1,
                 minWidth: 0,
-                height: 36,
-                padding: "0 12px",
+                height: stacked ? 44 : 36,
+                padding: stacked ? "0 2px" : "0 12px",
                 borderRadius: radius.md,
                 border: "none",
 
@@ -75,12 +79,13 @@ export default function SegmentedBar<K extends string>({
                 opacity: active ? 1 : 0.7,
 
                 fontWeight: active ? "bold" : 600,
-                fontSize: 14,
+                fontSize: stacked ? 11 : 14,
 
                 display: "flex",
+                flexDirection: stacked ? "column" : "row",
                 alignItems: "center",
                 justifyContent: "center",
-                gap: 8,
+                gap: stacked ? 2 : 8,
 
                 cursor: "pointer",
                 transition: "0.15s",
@@ -100,8 +105,11 @@ export default function SegmentedBar<K extends string>({
                 e.currentTarget.style.opacity = "0.7";
               }}
             >
+              {it.icon}
               <span
                 style={{
+                  maxWidth: "100%",
+                  lineHeight: 1.2,
                   overflow: "hidden",
                   textOverflow: "ellipsis",
                   whiteSpace: "nowrap",

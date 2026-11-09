@@ -92,6 +92,25 @@ body {
   animation: toastSlideDown 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+/* 通知が自動で消えるまでの残り時間(下の細い線が縮む) */
+@keyframes toast-countdown {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+
+/* 処理中の通知の印 */
+.toast-spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid;
+  box-sizing: border-box;
+  animation: toast-spin 0.8s linear infinite;
+}
+@keyframes toast-spin {
+  to { transform: rotate(360deg); }
+}
+
 /* iOS での入力フォーカス時の自動ズーム防止（inline style より優先させるため !important） */
 input, textarea, select {
   font-size: 16px !important;

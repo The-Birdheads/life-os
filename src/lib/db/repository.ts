@@ -1,4 +1,7 @@
-import type { Task, Action, TaskEntry, ActionEntry, DailyLog } from "../types";
+import type {
+    Task, Action, TaskEntry, ActionEntry, DailyLog,
+    MandalaChart, MandalaCell, MandalaCellEvent, MandalaReview, TaskEntryBounds, TaskCellEvent,
+} from "../types";
 
 export interface Repository {
     // Tasks
@@ -17,6 +20,8 @@ export interface Repository {
     getTodayTaskEntries(userId: string, day: string): Promise<TaskEntry[]>;
     getDoneTaskEntryIds(userId: string): Promise<string[]>;
     upsertTaskEntry(entry: TaskEntry): Promise<void>;
+    getDoingTaskEntries(userId: string): Promise<{ task_id: string; day: string }[]>;
+    resetTaskEntries(userId: string, taskId: string, statuses: ("done" | "doing")[]): Promise<void>;
 
     // Action Entries
     getTodayActionEntries(userId: string, day: string): Promise<ActionEntry[]>;
@@ -27,6 +32,28 @@ export interface Repository {
     // Daily Logs
     getDailyLog(userId: string, day: string): Promise<DailyLog | null>;
     upsertDailyLog(log: DailyLog): Promise<void>;
+
+    // Mandala Chart
+    getActiveChart(userId: string): Promise<MandalaChart | null>;
+    /** 終えたチャート(新しい順) */
+    getFinishedCharts(userId: string): Promise<MandalaChart[]>;
+    upsertChart(chart: MandalaChart): Promise<void>;
+    getCells(userId: string, chartId: string): Promise<MandalaCell[]>;
+    upsertCell(cell: MandalaCell): Promise<void>;
+    addCellEvent(event: Omit<MandalaCellEvent, "id" | "created_at"> & { id?: string }): Promise<void>;
+    getCellEvents(userId: string, cellId: string): Promise<MandalaCellEvent[]>;
+    /** 自分で並べた順を保存する(ids の順に上から) */
+    setTaskOrder(userId: string, ids: string[]): Promise<void>;
+    /** 種類ごとの変更の履歴(全部のマス、古い順) */
+    getCellEventsByKind(userId: string, kind: MandalaCellEvent["kind"]): Promise<MandalaCellEvent[]>;
+    getReviews(userId: string, chartId: string): Promise<MandalaReview[]>;
+    createReview(review: Omit<MandalaReview, "id"> & { id?: string }): Promise<void>;
+    getTaskEntriesBetween(userId: string, from: string, to: string): Promise<TaskEntry[]>;
+    getTaskEntryBounds(userId: string): Promise<TaskEntryBounds[]>;
+    /** ひとつの習慣・タスクの、すべての日の記録(完了・対応中・×) */
+    getTaskEntriesForTask(userId: string, taskId: string): Promise<TaskEntry[]>;
+    /** 習慣・タスクにかかわる、目標でのできごと(古い順、マスの文言つき) */
+    getCellEventsForTask(userId: string, taskId: string): Promise<TaskCellEvent[]>;
 
     // Account Deletion
     deleteAllUserData(userId: string): Promise<void>;

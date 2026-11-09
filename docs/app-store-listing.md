@@ -1,5 +1,46 @@
 # App Store 掲載情報（Habitas）
 
+## 1.4.0
+
+### このバージョンの最新情報
+
+```
+・目標タブを追加しました。大きな目標をマンダラチャートで8つの要素と行動目標に分け、毎日の習慣・タスクにひもづけて、直近7日の進み具合を色で確かめられます
+・チャートの見直しと履歴の保存、過去のチャートの確認、新しいチャートの作成ができます
+・振り返りタブに「目標の進み」を追加しました。その日に進めた行動目標がわかります
+・マイルールを追加しました。「夜更かししない」など、守りたいことに一日の終わりに ○× をつけられます
+・週タブを「推移」タブにしました。週・月ごとに、記録の抜けや、習慣・マイルールの日ごとの記録、完了したタスクを確かめられます
+・習慣の頻度（毎日・週n回・曜日指定）を選べるようにしました
+・タスクの「対応中」と、並べ替えができるようにしました
+・ホーム画面のウィジェットで、目標の進み具合を見られるようにしました
+・「行動」の記録と「今日の振り返り」（充実度など）の入力をなくしました。これまでの記録は消えていません
+```
+
+### TestFlight のテスト内容
+
+```
+1.4.0 のテスト版です。主に次を試してください。
+・目標タブ：チャートの作成、マスから習慣・タスク・マイルールを作る/ひもづける、見直し、チャートの履歴の保存、過去のチャート、大目標の編集、新しいチャートの作成
+・記録タブ：マイルールの ○×、タスクの対応中（長押し）、並べ替え、習慣の頻度
+・振り返りタブ：目標の進み（スキップ・もう一度見る）
+・推移タブ：週/月の切り替え、記録の抜けから記録タブへの移動
+・ホーム画面ウィジェット（目標）
+・複数の端末でログインしたときの同期
+```
+
+### 審査メモ（1.3.1 からの差分）
+
+```
+What's new in this version (1.4.0):
+- New "Goal" tab: users break a main goal into 8 areas and up to 64 action goals (a Mandala chart), link them to habits and tasks, and see progress over the last 7 days. Charts can be reviewed, saved to history, and replaced with a new chart; past charts are view-only.
+- "My rules": items the user marks kept (○) or missed (×) at the end of the day.
+- The "Week" tab is replaced by a "Trend" tab (weekly/monthly view of records).
+- Habit frequency (daily / n times a week / specific weekdays), task "in progress" state and manual ordering.
+- A home screen widget shows goal progress.
+- The "Action" log and the daily fulfillment input were removed from the UI (existing data is kept).
+All new data is stored on the device and, when logged in, synced to the same Supabase backend as before. No new external services, permissions, or tracking were added.
+```
+
 ## 1.3.1
 
 ### このバージョンの最新情報

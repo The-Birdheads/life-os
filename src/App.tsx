@@ -1,21 +1,26 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState, useRef } from "react";
 import { todayJST } from "./lib/day";
 import { clampDayToToday, addDaysJST, canGoNextDay } from "./lib/dayNav";
 import type { Action, Task } from "./lib/types";
 import AppShell from "./views/AppShell";
-import WeekView from "./views/WeekView";
+import TrendView from "./views/TrendView";
 import ReviewView from "./views/ReviewView";
 import TodayView from "./views/TodayView";
 import FABMenu from "./components/features/register/FABMenu";
 import RegisterModals from "./components/features/register/RegisterModals";
 import NotificationSettingsModal from "./components/features/settings/NotificationSettingsModal";
 import UserSettingsModal from "./components/features/settings/UserSettingsModal";
-import SpotlightTutorial from "./components/features/onboarding/SpotlightTutorial";
-import HabitTutorial from "./components/features/onboarding/HabitTutorial";
+import IntroSlides, { type IntroAction } from "./components/features/onboarding/IntroSlides";
+import Guide from "./components/features/onboarding/Guide";
+import { buildStory } from "./components/features/onboarding/stories";
+import { findHowTo } from "./components/features/onboarding/howtos";
+import HowToSheet from "./components/features/onboarding/HowToSheet";
+import type { GuideCtx, GuideState, GuideStep, Story } from "./components/features/onboarding/guideTypes";
 import { UserSettingsContext } from "./lib/context/UserSettingsContext";
 import type { SortRule } from "./lib/context/UserSettingsContext";
 import { initSqlite } from "./lib/db/initSqlite";
 import { getLocalUserId } from "./lib/db/localUser";
+import { storedSessionUser } from "./lib/storedSession";
 import { Capacitor } from "@capacitor/core";
 import { App as CapApp } from "@capacitor/app";
 import { SplashScreen } from "@capacitor/splash-screen";
@@ -24,6 +29,8 @@ import BannerAd from "./components/ui/BannerAd";
 import { supabase } from "./lib/supabase";
 import { scheduleNotifications, setupNotificationListeners, cancelAllNotifications, requestNotificationPermissions } from "./lib/notifications";
 import { syncWidgetData, processPendingCompletions } from "./lib/widgetData";
+import { buildWidgetMandala } from "./lib/mandala/widget";
+import { namedElements } from "./lib/mandala/chart";
 import { sqliteRepo } from "./lib/db/instance";
 import { registerAppUse, getAccountUsage, deleteAppData, deleteDoneMessage, revokeAppleAuthorizationIfNeeded } from "./lib/accountApi";
 import { adoptLegacyUserData, clearLegacySession } from "./lib/legacyAuthMigration";
@@ -37,7 +44,10 @@ import {
 
 // グローバルなリポジトリインスタンスは ./lib/db/instance.ts へ移動しました
 
-type Tab = "today" | "review" | "week";
+import type { Tab } from "./lib/tabs";
+import GoalView, { type GoalCommand, type GoalFocus } from "./views/GoalView";
+import { useMandala } from "./lib/mandala/useMandala";
+import { doingSinceByTask } from "./lib/taskState";
 
 function toHeaderDateLabel(dayISO: string) {
   const [y, m, d] = dayISO.split("-");
@@ -60,17 +70,18 @@ export default function App() {
   // アカウント削除中は、サインアウトに伴う「ログアウトしました」の表示を出さない(削除完了の表示を優先)
   const deletingRef = useRef(false);
 
-  useEffect(() => {
-    if (!msg) return;
-    const t = setTimeout(() => setMsg(""), 3000);
-    return () => clearTimeout(t);
-  }, [msg]);
-
   // ------- UI -------
+  // 起動時は記録タブから(その日の習慣・タスクをすぐつけられるように)
   const [tab, setTab] = useState<Tab>("today");
 
   useEffect(() => {
     setMsg("");
+  }, [tab]);
+
+  // タブは画面全体のスクロールを共有しているので、切り替えたら一番上から見せる
+  // (前のタブの位置のままだと、振り返りタブの演出中に下のほうの空白だけが見えてしまう)
+  useLayoutEffect(() => {
+    window.scrollTo(0, 0);
   }, [tab]);
 
   // ⭐ 日付状態（唯一の真実）
@@ -133,7 +144,13 @@ export default function App() {
     CapApp.addListener('appUrlOpen', async (data: any) => {
       console.log('App opened with URL:', data.url);
       const url = new URL(data.url);
-      
+
+      // チャートのウィジェットから開いたときは、目標タブへ(habitas://goal)
+      if (url.protocol === 'habitas:' && url.host === 'goal') {
+        setTab("goal");
+        return;
+      }
+
       // habitas://login-callback#access_token=... 形式を処理
       if (url.host === 'login-callback') {
         const hash = url.hash.substring(1); // # を除く
@@ -169,22 +186,34 @@ export default function App() {
   const [actions, setActions] = useState<Action[]>([]);
   const [doneTaskIds, setDoneTaskIds] = useState<Set<string>>(new Set());
   const [doneTaskIdsAnyDay, setDoneTaskIdsAnyDay] = useState<Set<string>>(new Set());
+  // 対応中のタスク(id → 対応中にした日)
+  const [doingSince, setDoingSince] = useState<Map<string, string>>(new Map());
+  // マイルールで、選択中の日に × をつけたもの(○ は doneTaskIds)
+  const [missedTaskIds, setMissedTaskIds] = useState<Set<string>>(new Set());
+  // 読み込みの途中で日付を変えたときに、前の日の内容で上書きしないため
+  const dayRef = useRef(day);
+  dayRef.current = day;
   const [todayActionEntries, setTodayActionEntries] = useState<any[]>([]);
   const [note, setNote] = useState("");
   const [fulfillment, setFulfillment] = useState(0);
   const [yesterdayGoal, setYesterdayGoal] = useState<string | null>(null);
 
   // ------- Modals -------
-  const [openModal, setOpenModal] = useState<"habit" | "oneoff" | "action" | null>(null);
+  const [openModal, setOpenModal] = useState<"habit" | "oneoff" | "rule" | "action" | null>(null);
   const [notifSettingsOpen, setNotifSettingsOpen] = useState(false);
   const [userSettingsOpen, setUserSettingsOpen] = useState(false);
-  const [onboardingOpen, setOnboardingOpen] = useState(false);
-  const [habTutOpen, setHabTutOpen] = useState(false);
-  const [fabForceOpen, setFabForceOpen] = useState(false);
+  // 使い方: アプリの紹介(スライド)と、選んだストーリーの案内(key は始めるたびに変える)
+  const [introOpen, setIntroOpen] = useState(false);
+  const [guide, setGuide] = useState<{ steps: GuideStep[]; key: number; finishLabel?: string } | null>(null);
+  // やりたいことから探す使い方の一覧
+  const [howToOpen, setHowToOpen] = useState(false);
+  const [goalCommand, setGoalCommand] = useState<GoalCommand>(null);
   const [volumeUnit, setVolumeUnit] = useState("30");
-  const [sortRule, setSortRule] = useState<SortRule>("priority");
+  const [sortRule, setSortRule] = useState<SortRule>("manual");
   const [prioritizeDue, setPrioritizeDue] = useState(false);
   const [dataVersion, setDataVersion] = useState(0);
+  // 記録タブのチップから、目標タブの要素を開く
+  const [goalFocus, setGoalFocus] = useState<GoalFocus>(null);
 
   const prevUserIdRef = useRef<string | null>(null);
 
@@ -239,13 +268,19 @@ export default function App() {
         const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Supabase Timeout")), 5000));
 
         let initialSession: any = null;
+        // ログインの確認が終わらなかった・失敗した(電波が弱いなど)。このときはログアウト扱いにしない
+        let sessionUnsure = false;
         try {
           const res: any = await Promise.race([sessionPromise, timeoutPromise]);
           initialSession = res.data?.session;
-          console.log("[App] Supabase session fetch result:", initialSession ? "session found" : "no session");
+          sessionUnsure = !initialSession && !!res.error;
+          console.log("[App] Supabase session fetch result:", initialSession ? "session found" : "no session", res.error?.message ?? "");
         } catch (e) {
-          console.warn("[App] Supabase session fetch timed out or failed, proceeding as local.", e);
+          sessionUnsure = true;
+          console.warn("[App] Supabase session fetch timed out or failed.", e);
         }
+        // 確認できなくても、ログインが端末に残っていれば、そのユーザーのまま始める(つながったら同期する)
+        const storedUser = sessionUnsure ? storedSessionUser() : null;
 
         // 3. 初期IDの設定
         let initialId: string;
@@ -256,6 +291,10 @@ export default function App() {
           console.log("[App] Initial ID from Supabase session:", initialId);
           // no_ads フラグをフェッチ（非同期・ノンブロッキング）
           fetchNoAds(initialId);
+        } else if (storedUser) {
+          initialId = storedUser.id;
+          setUserEmail(storedUser.email);
+          console.log("[App] Session not confirmed yet; keeping the signed-in user:", initialId);
         } else {
           initialId = await getLocalUserId();
           setUserEmail("offline-user@local");
@@ -313,7 +352,7 @@ export default function App() {
                   const s = await sqliteRepo.getNotificationSettings(uid);
                   if (s) {
                     setVolumeUnit(s.volume_unit ?? "30");
-                    setSortRule((s.sort_rule as SortRule) ?? "priority");
+                    setSortRule((s.sort_rule as SortRule) ?? "manual");
                     setPrioritizeDue(!!s.prioritize_due);
                   }
                 }
@@ -344,9 +383,10 @@ export default function App() {
               setMsg("クラウドから同期中...");
               // Safari からの復帰直後はネットワーク復元を 2 秒待ってから sync
               doSync(newUserId, 2000);
-            } else if (event === "SIGNED_IN" || event === "INITIAL_SESSION") {
+            } else if (event === "SIGNED_IN" || event === "INITIAL_SESSION" || event === "TOKEN_REFRESHED") {
               // バックグラウンド復帰時も SIGNED_IN が再発行されることがあるため、
-              // INITIAL_SESSION と同様に5分以内ならスキップ、それ以外はバックグラウンドで静かに同期
+              // INITIAL_SESSION と同様に5分以内ならスキップ、それ以外はバックグラウンドで静かに同期。
+              // TOKEN_REFRESHED は、つながらずにログインの更新が遅れていたとき、送れなかった記録を送るため
               console.log(`[App] ${event} event for existing user. Checking sync cooldown...`);
               try {
                 const { Preferences } = await import('@capacitor/preferences');
@@ -362,8 +402,9 @@ export default function App() {
               // バックグラウンドで同期（UIをブロックしない）
               doSync(newUserId, 0, true);
             }
-          } else if (event === "SIGNED_OUT") {
-            console.log("[App] SIGNED_OUT event.");
+          } else if (event === "SIGNED_OUT" || (event === "INITIAL_SESSION" && !storedSessionUser())) {
+            // INITIAL_SESSION でセッションなしでも、ログインが端末に残っていれば(つながらないだけ)ログアウト扱いにしない
+            console.log(`[App] ${event} without session.`);
             setNoAds(false);
             const localId = await getLocalUserId();
             if (prevUserIdRef.current !== localId) {
@@ -578,12 +619,18 @@ export default function App() {
 
       const teToday = await sqliteRepo.getTodayTaskEntries(uid, day);
       const doneToday = new Set<string>();
+      const missedToday = new Set<string>();
       for (const t of teToday) {
         if (t.status === "done") doneToday.add(t.task_id);
+        if (t.status === "missed") missedToday.add(t.task_id);
       }
+      const doing = doingSinceByTask(await sqliteRepo.getDoingTaskEntries(uid));
+      if (dayRef.current !== day) return;
 
       setDoneTaskIds(doneToday);
+      setMissedTaskIds(missedToday);
       setDoneTaskIdsAnyDay(new Set(doneIds));
+      setDoingSince(doing);
       setTodayActionEntries(ae);
 
       // 前日の目標を取得（同期後も確実に更新されるようApp側で管理）
@@ -611,41 +658,15 @@ export default function App() {
 
   useEffect(() => {
     if (!userId) return;
-    if (!localStorage.getItem("onboarding_done")) setOnboardingOpen(true);
+    // 1.4.0 で紹介を作り直したので、キーを変えて、前の案内を見た人にも一度だけ見せる
+    if (!localStorage.getItem("intro_done_v2")) setIntroOpen(true);
   }, [userId]);
-
-  const handleOnboardingClose = () => {
-    setOnboardingOpen(false);
-    localStorage.setItem("onboarding_done", "1");
-  };
-
-  const handleHabTutOpen = () => {
-    setFabForceOpen(true);   // チュートリアル開始時はFABメニューを開いた状態にする
-    setHabTutOpen(true);
-  };
-
-  const handleOpenHabitTutorialFromMenu = () => {
-    setTab("today");         // 記録タブに移動
-    setFabForceOpen(true);   // ＋ボタンが押下された状態を再現
-    setHabTutOpen(true);
-  };
-
-  const handleHabTutClose = () => {
-    setHabTutOpen(false);
-    setFabForceOpen(false);
-    localStorage.setItem("fab_tutorial_done", "1");
-  };
 
   useEffect(() => {
     if (!userId) return;
     loadTodayEntries().catch((e: any) => setMsg(e?.message ?? "読み込みエラー"));
   }, [userId, day]);
 
-  // ------- Widget Sync -------
-  useEffect(() => {
-    if (!userId || tasks.length === 0) return;
-    syncWidgetData(tasks, doneTaskIds, doneTaskIdsAnyDay);
-  }, [tasks, doneTaskIds, doneTaskIdsAnyDay]);
 
   // ウィジェットからの習慣完了をフォアグラウンド復帰時に処理
   useEffect(() => {
@@ -679,6 +700,82 @@ export default function App() {
     });
     return () => { listener.then(l => l.remove()); };
   }, [userId]);
+
+  // 目標タブ(マンダラチャート)。同期・完了の切り替え・習慣の変更のたびに読み直す
+  const mandalaRefreshKey = useMemo(() => ({}), [dataVersion, doneTaskIds, tasks]);
+  const mandala = useMandala(userId, tasks, {
+    refreshKey: mandalaRefreshKey,
+    doneAnyDay: doneTaskIdsAnyDay,
+    doingSince,
+    reloadEntries: () => loadTodayEntries(),
+    reloadTasks: () => loadBase(),
+    onAfterWrite: webAutoSync,
+  });
+
+  // 案内の条件で読む、今の状態(案内は始めたときの関数を持ち続けるので、ref で最新を渡す)
+  const guideStateRef = useRef<GuideState>({ tasks: [], doneTaskIds: new Set(), missedTaskIds: new Set(), doingTaskIds: new Set(), hasChart: false });
+  guideStateRef.current = {
+    tasks,
+    doneTaskIds,
+    missedTaskIds,
+    doingTaskIds: new Set(doingSince.keys()),
+    hasChart: !!mandala.model,
+  };
+  const guideCtx = useMemo<GuideCtx>(() => ({
+    setTab,
+    openRegister: (type) => setOpenModal(type),
+    goal: (kind) => setGoalCommand({ kind, nonce: Date.now() }),
+    openSettings: (kind) => (kind === "user" ? setUserSettingsOpen(true) : setNotifSettingsOpen(true)),
+    state: () => guideStateRef.current,
+  }), []);
+
+  const startStory = (story: Story) => {
+    setGuide({ steps: buildStory(story, guideCtx), key: Date.now() });
+  };
+
+  const startHowTo = (id: string) => {
+    setHowToOpen(false);
+    const howTo = findHowTo(id);
+    if (howTo) setGuide({ steps: howTo.build(guideCtx), key: Date.now(), finishLabel: "閉じる" });
+  };
+
+  const handleIntroClose = (action: IntroAction) => {
+    setIntroOpen(false);
+    localStorage.setItem("intro_done_v2", "1");
+    if (action === "dismiss") setMsg("使い方は、右上のメニュー ≡ の「使い方を見る」からいつでも見られます");
+    else startStory(action);
+  };
+  // ------- Widget Sync -------
+  // ウィジェットのチャートは、目標タブと同じ直近7日の進み具合
+  const widgetMandala = useMemo(
+    () => (mandala.model && namedElements(mandala.model).length > 0
+      ? buildWidgetMandala(mandala.model, mandala.byCell, mandala.doneByTask, mandala.period)
+      : null),
+    [mandala.model, mandala.byCell, mandala.doneByTask, mandala.period]
+  );
+  // ウィジェットの習慣は、アプリで選んでいる日ではなく、いつも今日の状況(doneTaskIds は選択中の日の分)
+  const doneToday = useMemo(() => {
+    const today = mandala.period.to;
+    return new Set([...mandala.doneByTask].filter(([, days]) => days.has(today)).map(([id]) => id));
+  }, [mandala.doneByTask, mandala.period]);
+  useEffect(() => {
+    if (!userId || tasks.length === 0) return;
+    syncWidgetData(tasks, doneToday, doneTaskIdsAnyDay, widgetMandala, sortRule);
+  }, [tasks, doneToday, doneTaskIdsAnyDay, widgetMandala, sortRule]);
+
+  // 記録タブ・振り返りタブのカードに出す、要素のチップ(習慣・タスクの id → 要素)
+  const goalChips = useMemo(() => {
+    const map = new Map<string, { label: string; color: string; element: number }>();
+    for (const el of mandala.model?.elements ?? []) {
+      if (!el.name) continue;
+      for (const c of el.actions) {
+        for (const t of c ? mandala.byCell.get(c.id) ?? [] : []) {
+          map.set(t.id, { label: el.name, color: el.color, element: el.index });
+        }
+      }
+    }
+    return map;
+  }, [mandala.model, mandala.byCell]);
 
   // ------- Render -------
   if (!userId) {
@@ -767,6 +864,7 @@ export default function App() {
       isDeleting={isDeleting}
       isSyncing={isSyncing}
       msg={msg}
+      onDismissMsg={() => setMsg("")}
       tab={tab}
       setTab={setTab}
       layoutStyle={layoutStyle}
@@ -784,8 +882,9 @@ export default function App() {
       onDateSelect={safeSetDay}
       onOpenNotificationSettings={() => setNotifSettingsOpen(true)}
       onOpenUserSettings={() => setUserSettingsOpen(true)}
-      onOpenOnboarding={() => setOnboardingOpen(true)}
-      onOpenHabitTutorial={handleOpenHabitTutorialFromMenu}
+      onOpenOnboarding={() => setIntroOpen(true)}
+      onStartStory={startStory}
+      onOpenHowTo={() => setHowToOpen(true)}
     >
       {tab === "today" && (
         <TodayView
@@ -796,7 +895,11 @@ export default function App() {
           actions={actions}
           doneTaskIds={doneTaskIds}
           setDoneTaskIds={setDoneTaskIds}
+          missedTaskIds={missedTaskIds}
+          setMissedTaskIds={setMissedTaskIds}
           doneTaskIdsAnyDay={doneTaskIdsAnyDay}
+          doingSince={doingSince}
+          setDoingSince={setDoingSince}
           todayActionEntries={todayActionEntries}
           yesterdayGoal={yesterdayGoal}
           setMsg={setMsg}
@@ -804,10 +907,22 @@ export default function App() {
           loadBase={loadBase}
           onAfterWrite={webAutoSync}
           adHeight={adHeight}
+          goalChips={goalChips}
+          goal={mandala}
+          onOpenGoal={(element) => { setGoalFocus({ element, nonce: Date.now() }); setTab("goal"); }}
         />
       )}
 
-
+      {tab === "goal" && (
+        <GoalView
+          mandala={mandala}
+          tasks={tasks}
+          adHeight={adHeight}
+          setMsg={setMsg}
+          focus={goalFocus}
+          command={goalCommand}
+        />
+      )}
 
       {tab === "review" && (
         <ReviewView
@@ -816,6 +931,7 @@ export default function App() {
           setDay={safeSetDay}
           tasks={tasks}
           doneTaskIds={doneTaskIds}
+          missedTaskIds={missedTaskIds}
           actions={actions}
           todayActionEntries={todayActionEntries}
           note={note}
@@ -825,11 +941,14 @@ export default function App() {
           setMsg={setMsg}
           cardStyle={cardStyle}
           dataVersion={dataVersion}
+          mandala={mandala}
+          goalChips={goalChips}
+          onOpenGoal={(element) => { setGoalFocus({ element, nonce: Date.now() }); setTab("goal"); }}
         />
       )}
 
       {tab === "week" && (
-        <WeekView
+        <TrendView
           userId={userId}
           tasks={tasks}
           day={day}
@@ -842,11 +961,7 @@ export default function App() {
       )}
 
       {tab === "today" && (
-        <FABMenu
-            onSelect={(type) => setOpenModal(type)}
-            onFirstPress={handleHabTutOpen}
-            forceOpen={fabForceOpen}
-          />
+        <FABMenu onSelect={(type) => setOpenModal(type)} />
       )}
 
       <RegisterModals
@@ -862,6 +977,7 @@ export default function App() {
         loadTodayEntries={loadTodayEntries}
         onAfterWrite={webAutoSync}
         adHeight={adHeight}
+        goal={mandala}
       />
 
       <NotificationSettingsModal
@@ -895,15 +1011,11 @@ export default function App() {
         if (legacyAdoptedRef.current) clearLegacySession();
       }}
     />
-    <SpotlightTutorial isOpen={onboardingOpen} onClose={handleOnboardingClose} onSetTab={setTab} />
-    <HabitTutorial
-      isOpen={habTutOpen}
-      onClose={handleHabTutClose}
-      callbacks={{
-        closeFABMenu: () => setFabForceOpen(false),
-        openHabitModal: () => setOpenModal("habit"),
-      }}
-    />
+    <IntroSlides isOpen={introOpen} adHeight={adHeight} onClose={handleIntroClose} />
+    <HowToSheet isOpen={howToOpen} adHeight={adHeight} onClose={() => setHowToOpen(false)} onPick={startHowTo} />
+    {guide && (
+      <Guide key={guide.key} steps={guide.steps} finishLabel={guide.finishLabel} onClose={() => setGuide(null)} onSetTab={setTab} adHeight={adHeight} />
+    )}
     </UserSettingsContext.Provider>
   );
 }

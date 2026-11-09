@@ -18,6 +18,15 @@ import Select from "../../ui/Select";
 import { PlusIcon, CloseIcon, EyeIcon, EyeOffIcon, MemoIcon, BellIcon } from "../../ui/Icon";
 import ToggleSwitch from "../../ui/ToggleSwitch";
 import { checkOrRequestNotifPermission } from "../../../lib/notifications";
+import FrequencyPicker from "./FrequencyPicker";
+import LevelFields from "./LevelFields";
+import GoalLinkField from "../goal/GoalLinkField";
+import type { GoalLinkApi } from "../../../lib/mandala/useMandala";
+import { changeFrequencyPatch, currentFrequency, frequencyLabel, isValidFrequency, type Frequency } from "../../../lib/mandala/frequency";
+import { todayJST } from "../../../lib/day";
+import { isRepeating } from "../../../lib/taskKind";
+
+const DAILY: Frequency = { kind: "daily", count: null, days: null };
 
 type SubTab = "shown" | "hidden";
 const subTabItems = [
@@ -26,8 +35,8 @@ const subTabItems = [
 ] as const;
 
 type Props = {
-    openModal: "habit" | "oneoff" | "action" | null;
-    setOpenModal: (m: "habit" | "oneoff" | "action" | null) => void;
+    openModal: "habit" | "oneoff" | "rule" | "action" | null;
+    setOpenModal: (m: "habit" | "oneoff" | "rule" | "action" | null) => void;
     userId: string;
     day: string;
     tasks: Task[];
@@ -38,6 +47,8 @@ type Props = {
     loadTodayEntries: () => Promise<void>;
     adHeight?: number;
     onAfterWrite?: () => Promise<void>;
+    /** 目標タブの行動目標にひもづける(チャートが無ければ選択肢が出ない) */
+    goal?: GoalLinkApi;
 };
 
 import { sqliteRepo } from "../../../lib/db/instance";
@@ -55,19 +66,25 @@ export default function RegisterModals({
     loadTodayEntries,
     adHeight = 0,
     onAfterWrite,
+    goal,
 }: Props) {
     // --- Action Category Modal State ---
     const [categoryModalOpen, setCategoryModalOpen] = useState(false);
 
     // --- DB Helpers ---
-    async function addTask(form: { title: string; task_type: "habit" | "oneoff"; priority: number; volume: number; due_date: string | null; is_hidden: boolean; memo?: string | null; remind_on?: boolean; remind_hour?: number; remind_minute?: number; }) {
-        await sqliteRepo.createTask({
+    async function addTask(form: { title: string; task_type: Task["task_type"]; priority: number; volume: number; due_date: string | null; is_hidden: boolean; memo?: string | null; remind_on?: boolean; remind_hour?: number; remind_minute?: number; frequency?: Frequency; goalCellId?: string | null; }) {
+        const freq = isRepeating(form) && form.frequency ? form.frequency : DAILY;
+        const task: Task = {
+            frequency_kind: freq.kind,
+            frequency_count: freq.kind === "weekly_count" ? freq.count : null,
+            frequency_days: freq.kind === "weekdays" ? freq.days : null,
+            frequency_history: [],
             id: "", // auto-generated inside createTask
             user_id: userId,
             title: form.title,
             task_type: form.task_type,
-            priority: Math.min(5, Math.max(1, form.priority)),
-            volume: Math.min(10, Math.max(1, form.volume)),
+            priority: Math.min(5, Math.max(0, form.priority)),
+            volume: Math.min(10, Math.max(0, form.volume)),
             due_date: form.task_type === "oneoff" ? form.due_date : null,
             is_active: true,
             is_hidden: form.is_hidden,
@@ -75,7 +92,9 @@ export default function RegisterModals({
             remind_on: form.remind_on,
             remind_hour: form.remind_hour,
             remind_minute: form.remind_minute,
-        });
+        };
+        await sqliteRepo.createTask(task);
+        if (form.goalCellId && goal) await goal.setTaskCell(task, form.goalCellId);
         await loadBase();
         onAfterWrite?.();
     }
@@ -129,7 +148,8 @@ export default function RegisterModals({
     const modalStyle: React.CSSProperties = {
         width: "100%", maxWidth: 600,
         // コンテンツ量に関わらず常にステータスバー直下まで固定高さ
-        height: `calc(100dvh - max(env(safe-area-inset-top, 0px), 24px) - ${adHeight}px)`,
+        // 使い方の案内が上に出ているあいだは、そのぶん低くする(--guide-modal)
+        height: `calc(100dvh - max(env(safe-area-inset-top, 0px), 24px) - ${adHeight}px - var(--guide-modal, 0px))`,
         background: "var(--bg)", borderTopLeftRadius: 20, borderTopRightRadius: 20,
         display: "flex", flexDirection: "column",
         overflowX: "hidden", // 左右スクロール禁止
@@ -203,11 +223,13 @@ export default function RegisterModals({
                             closeBtnStyle={closeBtnStyle}
                             overlayStyle={overlayStyle}
                             getRowCardStyle={getRowCardStyle}
+                            goal={goal}
                         />
-                    ) : openModal === "oneoff" ? (
+                    ) : openModal === "oneoff" || openModal === "rule" ? (
                         <TaskListModal
-                            type="oneoff"
-                            title="タスク"
+                            key={openModal}
+                            type={openModal}
+                            title={openModal === "rule" ? "マイルール" : "タスク"}
                             tasks={tasks}
                             doneTaskIdsAnyDay={doneTaskIdsAnyDay}
                             userId={userId}
@@ -220,6 +242,7 @@ export default function RegisterModals({
                             closeBtnStyle={closeBtnStyle}
                             overlayStyle={overlayStyle}
                             getRowCardStyle={getRowCardStyle}
+                            goal={goal}
                         />
                     ) : openModal === "action" ? (
                         <ActionEntryModal
@@ -256,9 +279,10 @@ function TaskListModal({
     modalStyle,
     closeBtnStyle,
     overlayStyle,
-    getRowCardStyle
+    getRowCardStyle,
+    goal,
 }: {
-    type: "habit" | "oneoff";
+    type: Task["task_type"];
     title: string;
     tasks: Task[];
     doneTaskIdsAnyDay: Set<string>;
@@ -272,22 +296,26 @@ function TaskListModal({
     closeBtnStyle: React.CSSProperties;
     overlayStyle: React.CSSProperties;
     getRowCardStyle: (accentColor?: string, isDone?: boolean) => React.CSSProperties;
+    goal?: GoalLinkApi;
 }) {
-    const { volumeUnit, sortRule, prioritizeDue } = useUserSettings();
+    const { sortRule, prioritizeDue } = useUserSettings();
     const [subTab, setSubTab] = useState<SubTab>("shown");
     const [adding, setAdding] = useState(false);
     const [editingItem, setEditingItem] = useState<Task | null>(null);
 
     // Add Form State
     const [newTitle, setNewTitle] = useState("");
-    const [priority, setPriority] = useState(3);
-    const [volume, setVolume] = useState(5);
+    const [priority, setPriority] = useState(0);
+    const [volume, setVolume] = useState(0);
+    const [newGoalCell, setNewGoalCell] = useState<string | null>(null);
     const [dueDate, setDueDate] = useState("");
     const [newMemo, setNewMemo] = useState("");
     const [showNewMemo, setShowNewMemo] = useState(false);
     const [newRemindOn, setNewRemindOn] = useState(false);
     const [newRemindHour, setNewRemindHour] = useState(8);
     const [newRemindMinute, setNewRemindMinute] = useState(0);
+    const [newFreq, setNewFreq] = useState<Frequency>(DAILY);
+    const repeating = type !== "oneoff";
 
     const shownTasks = tasks.filter((t) => t.task_type === type);
     const baseList = shownTasks.filter((t) => {
@@ -304,7 +332,7 @@ function TaskListModal({
     );
 
     return (
-        <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
+        <div style={modalStyle} data-tutorial={`register-${type}`} onClick={(e) => e.stopPropagation()}>
             <div style={{ position: "relative", padding: "24px 16px 16px", flexShrink: 0 }}>
                 <button aria-label="モーダルを閉じる" style={{ ...closeBtnStyle, padding: 0 }} onClick={() => setOpenModal(null)}>
                     <CloseIcon size={20} />
@@ -313,6 +341,11 @@ function TaskListModal({
             </div>
 
             <div style={{ padding: "0 16px 24px", overflowY: "auto", overflowX: "hidden", flex: 1, display: "flex", flexDirection: "column" }}>
+                {type === "rule" && (
+                    <p style={{ margin: "0 0 12px", fontSize: 13, lineHeight: 1.6, color: theme.subtext }}>
+                        「23時までに寝る」「人の悪口を言わない」のように、一日を通して守りたいことを登録します。記録タブで、一日の終わりに ○ / × をつけます。
+                    </p>
+                )}
                 <SegmentedBar items={subTabItems as any} value={subTab} onChange={(v: any) => { setSubTab(v); setAdding(false); }} ariaLabel="表示切り替え" />
 
                 <div style={{ marginTop: 16, marginBottom: 16 }}>
@@ -320,7 +353,7 @@ function TaskListModal({
                         <PrimaryBtn
                             fullWidth
                             onClick={() => setAdding(true)}
-                            data-tutorial={type === "habit" ? "habit-modal-add-btn" : undefined}
+                            data-tutorial="register-add-btn"
                         >
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
                                 <PlusIcon size={18} />
@@ -328,7 +361,7 @@ function TaskListModal({
                             </div>
                         </PrimaryBtn>
                     ) : (
-                        <Card style={{ padding: 16 }}>
+                        <Card style={{ padding: 16 }} data-tutorial="register-form">
                             <form onSubmit={async (e) => {
                                 e.preventDefault();
                                 setMsg("");
@@ -341,10 +374,13 @@ function TaskListModal({
                                         remind_on: type === "habit" ? newRemindOn : false,
                                         remind_hour: newRemindHour,
                                         remind_minute: newRemindMinute,
+                                        frequency: newFreq,
+                                        goalCellId: newGoalCell,
                                     });
-                                    setNewTitle(""); setDueDate(""); setPriority(3); setVolume(5);
+                                    setNewTitle(""); setDueDate(""); setPriority(0); setVolume(0); setNewGoalCell(null);
                                     setNewMemo(""); setShowNewMemo(false);
                                     setNewRemindOn(false); setNewRemindHour(8); setNewRemindMinute(0);
+                                    setNewFreq(DAILY);
                                     setAdding(false);
                                     setMsg("追加しました。");
                                 } catch (err: any) {
@@ -352,14 +388,13 @@ function TaskListModal({
                                 }
                             }} style={{ display: "grid", gap: 12 }}>
                                 <h3 style={{ margin: 0, fontSize: 16 }}>新規追加 ({subTab === "hidden" ? "非表示" : "表示中"})</h3>
-                                <label data-tutorial={type === "habit" ? "habit-title-input" : undefined}>
+                                <label>
                                     タイトル
                                     <TextInput aria-label="アイテムタイトル入力" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} fullWidth required />
                                 </label>
                                 {!showNewMemo ? (
                                     <button
                                         type="button"
-                                        data-tutorial={type === "habit" ? "habit-memo" : undefined}
                                         onClick={() => setShowNewMemo(true)}
                                         style={{ background: "none", border: `1px dashed ${theme.border}`, borderRadius: 8, padding: "8px 12px", cursor: "pointer", color: theme.subtext, fontSize: 13, display: "flex", alignItems: "center", gap: 6, width: "100%" }}
                                     >
@@ -381,16 +416,14 @@ function TaskListModal({
                                         />
                                     </div>
                                 )}
-                                <label data-tutorial={type === "habit" ? "habit-priority" : undefined}>
-                                    優先度（1-5）: <b>{priority}</b>
-                                    <Slider min="1" max="5" step="1" value={priority} onChange={(e) => setPriority(Number(e.target.value))} fullWidth />
-                                </label>
-                                <label data-tutorial={type === "habit" ? "habit-volume" : undefined}>
-                                    ボリューム（1-10）: <b>{volume}{volumeUnit !== "none" ? ` (${formatVolumeLabel(volume, volumeUnit)})` : ""}</b>
-                                    <Slider min="1" max="10" step="1" value={volume} onChange={(e) => setVolume(Number(e.target.value))} fullWidth />
-                                </label>
+                                <GoalLinkField groups={goal?.goalOptions ?? []} value={newGoalCell} onChange={setNewGoalCell} />
+                                {/* マイルールは時間をかけてやるものではないので、優先度・ボリュームは持たない */}
+                                {type !== "rule" && <LevelFields priority={priority} volume={volume} onPriority={setPriority} onVolume={setVolume} />}
+                                {repeating && (
+                                    <FrequencyPicker value={newFreq} onChange={setNewFreq} />
+                                )}
                                 {type === "habit" && (
-                                    <div data-tutorial="habit-remind" style={{ display: "grid", gap: 8 }}>
+                                    <div style={{ display: "grid", gap: 8 }}>
                                         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                                             <ToggleSwitch
                                                 checked={newRemindOn}
@@ -439,7 +472,7 @@ function TaskListModal({
                                     </div>
                                 )}
                                 <div style={{ display: "flex", gap: 8 }}>
-                                    <PrimaryBtn type="submit" disabled={!newTitle.trim()}>追加</PrimaryBtn>
+                                    <PrimaryBtn type="submit" disabled={!newTitle.trim() || (repeating && !isValidFrequency(newFreq))}>追加</PrimaryBtn>
                                     <SecondaryBtn onClick={() => setAdding(false)}>キャンセル</SecondaryBtn>
                                 </div>
                             </form>
@@ -463,6 +496,7 @@ function TaskListModal({
 
             {editingItem && <TaskEditModal
                 item={editingItem}
+                goal={goal}
                 type={type}
                 title={title}
                 setMsg={setMsg}
@@ -485,13 +519,13 @@ function TaskRow({
     getRowCardStyle
 }: {
     task: Task;
-    type: "habit" | "oneoff";
+    type: Task["task_type"];
     updateTask: (id: string, patch: any) => Promise<void>;
     setEditingItem: (item: Task) => void;
     getRowCardStyle: (accentColor?: string, isDone?: boolean) => React.CSSProperties;
 }) {
     const isHidden = !!(task as any).is_hidden;
-    const accentColor = type === "habit" ? theme.habit : theme.task;
+    const accentColor = type === "habit" ? theme.habit : type === "rule" ? theme.rule : theme.task;
 
     return (
         <div
@@ -513,6 +547,9 @@ function TaskRow({
                 <div style={{ opacity: 0.75, display: "flex", alignItems: "center", gap: 8 }}>
                     <PriorityBadge value={(task as any).priority} />
                     <VolBar value={(task as any).volume} />
+                    {type !== "oneoff" && task.frequency_kind && task.frequency_kind !== "daily" && (
+                        <span style={{ fontSize: 12, fontWeight: 600 }}>{frequencyLabel(currentFrequency(task))}</span>
+                    )}
                 </div>
                 {task.due_date && <div style={{ fontSize: 12, opacity: 0.7 }}>期限：{task.due_date}</div>}
             </div>
@@ -535,10 +572,11 @@ function TaskEditModal({
     setEditingItem,
     overlayStyle,
     modalStyle,
-    closeBtnStyle
+    closeBtnStyle,
+    goal,
 }: {
     item: Task;
-    type: "habit" | "oneoff";
+    type: Task["task_type"];
     title: string;
     setMsg: (s: string) => void;
     updateTask: (id: string, patch: any) => Promise<void>;
@@ -547,11 +585,12 @@ function TaskEditModal({
     overlayStyle: React.CSSProperties;
     modalStyle: React.CSSProperties;
     closeBtnStyle: React.CSSProperties;
+    goal?: GoalLinkApi;
 }) {
-    const { volumeUnit } = useUserSettings();
     const [tTitle, setTTitle] = useState(item.title);
-    const [tPriority, setTPriority] = useState((item as any).priority ?? 3);
-    const [tVolume, setTVolume] = useState((item as any).volume ?? 5);
+    const [tGoalCell, setTGoalCell] = useState<string | null>(item.mandala_cell_id ?? null);
+    const [tPriority, setTPriority] = useState(item.priority ?? 0);
+    const [tVolume, setTVolume] = useState(item.volume ?? 0);
     const [tDueDate, setTDueDate] = useState(item.due_date ?? "");
     const [tDueDateCleared, setTDueDateCleared] = useState(false);
     const [tMemo, setTMemo] = useState(item.memo ?? "");
@@ -559,20 +598,26 @@ function TaskEditModal({
     const [tRemindOn, setTRemindOn] = useState(item.remind_on ?? false);
     const [tRemindHour, setTRemindHour] = useState(item.remind_hour ?? 8);
     const [tRemindMinute, setTRemindMinute] = useState(item.remind_minute ?? 0);
+    const [tFreq, setTFreq] = useState<Frequency>(currentFrequency(item));
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
         setMsg("");
         try {
+            // 頻度を変えたときは、変える前の頻度を昨日までの履歴に残す(今日から新しい頻度で数える)
+            const freqPatch = type !== "oneoff" ? changeFrequencyPatch(item, tFreq, todayJST()) : null;
+            const newTitle = tTitle.trim() || item.title;
             await updateTask(item.id, {
-                title: tTitle.trim() || item.title,
+                title: newTitle,
                 priority: tPriority, volume: tVolume,
                 due_date: type === "oneoff"
                     ? tDueDateCleared ? null : (tDueDate || item.due_date || null)
                     : null,
                 memo: tMemo.trim() || null,
                 ...(type === "habit" ? { remind_on: tRemindOn, remind_hour: tRemindHour, remind_minute: tRemindMinute } : {}),
+                ...(freqPatch ?? {}),
             } as any);
+            await goal?.setTaskCell({ ...item, title: newTitle }, tGoalCell);
             setEditingItem(null);
             setMsg("更新しました。");
         } catch (err: any) {
@@ -605,7 +650,7 @@ function TaskEditModal({
 
     return (
         <div style={{ ...overlayStyle, zIndex: 110 }} onClick={() => setEditingItem(null)}>
-            <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
+            <div style={modalStyle} data-tutorial="edit-item" onClick={(e) => e.stopPropagation()}>
                 <div style={{ position: "relative", padding: "24px 16px 16px", flexShrink: 0 }}>
                     <button style={{ ...closeBtnStyle, padding: 0 }} onClick={() => setEditingItem(null)}>
                         <CloseIcon size={20} />
@@ -643,14 +688,9 @@ function TaskEditModal({
                                 />
                             </div>
                         )}
-                        <label>
-                            優先度（1-5）: <b>{tPriority}</b>
-                            <Slider min="1" max="5" step="1" value={tPriority} onChange={(e) => setTPriority(Number(e.target.value))} fullWidth />
-                        </label>
-                        <label>
-                            ボリューム（1-10）: <b>{tVolume}{volumeUnit !== "none" ? ` (${formatVolumeLabel(tVolume, volumeUnit)})` : ""}</b>
-                            <Slider min="1" max="10" step="1" value={tVolume} onChange={(e) => setTVolume(Number(e.target.value))} fullWidth />
-                        </label>
+                        <GoalLinkField groups={goal?.goalOptions ?? []} value={tGoalCell} onChange={setTGoalCell} />
+                        {type !== "rule" && <LevelFields priority={tPriority} volume={tVolume} onPriority={setTPriority} onVolume={setTVolume} />}
+                        {type !== "oneoff" && <FrequencyPicker value={tFreq} onChange={setTFreq} />}
                         {type === "habit" && (
                             <div style={{ display: "grid", gap: 8 }}>
                                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -703,7 +743,7 @@ function TaskEditModal({
 
                         <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
                             <div style={{ flex: 1 }}>
-                                <PrimaryBtn type="submit" fullWidth>保存</PrimaryBtn>
+                                <PrimaryBtn type="submit" fullWidth disabled={type !== "oneoff" && !isValidFrequency(tFreq)}>保存</PrimaryBtn>
                             </div>
                             <div style={{ flex: 1 }}>
                                 <SecondaryBtn type="button" onClick={() => setEditingItem(null)} fullWidth>キャンセル</SecondaryBtn>

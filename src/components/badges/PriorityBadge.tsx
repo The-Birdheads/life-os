@@ -5,7 +5,9 @@ type Props = {
 
 export default function PriorityBadge({ value, showLabel = true }: Props) {
   const vRaw = Number(value);
-  const v = Number.isFinite(vRaw) ? Math.min(5, Math.max(1, Math.trunc(vRaw))) : 1;
+  // 0 / 空 は「未設定」なので何も出さない
+  if (!Number.isFinite(vRaw) || vRaw < 1) return null;
+  const v = Math.min(5, Math.trunc(vRaw));
 
   // パワプロっぽい A(赤)〜E(青)
   // 5->A, 4->B, 3->C, 2->D, 1->E
