@@ -19,7 +19,7 @@
                                 <rect key="frame" x="0.0" y="0.0" width="375" height="667"/>
                             </imageView>
                         </subviews>
-                        <color key="backgroundColor" red="0.42745098039215684" green="0.79215686274509803" blue="0.65490196078431373" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
+                        <color key="backgroundColor" red="0.39215686274509803" green="0.88235294117647056" blue="0.70588235294117652" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
                         <constraints>
                             <constraint firstItem="kId-c2-rCX" firstAttribute="leading" secondItem="Ze5-6b-2t3" secondAttribute="leading" id="Aqb-aR-hXe"/>
                             <constraint firstItem="kId-c2-rCX" firstAttribute="trailing" secondItem="Ze5-6b-2t3" secondAttribute="trailing" id="Vis-XH-hXL"/>
