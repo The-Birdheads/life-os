@@ -2,7 +2,8 @@ import React, { useState } from "react";
 import { theme } from "../../lib/ui/theme";
 import { radius } from "../../lib/ui/radius";
 
-type Props = React.InputHTMLAttributes<HTMLInputElement> & {
+// React 19 では ref も props で受け取れる(ComponentProps<"input"> に ref が入っている)
+type Props = React.ComponentProps<"input"> & {
     fullWidth?: boolean;
 };
 

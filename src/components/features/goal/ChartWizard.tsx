@@ -6,9 +6,23 @@ import PrimaryBtn from "../../ui/PrimaryBtn";
 import SecondaryBtn from "../../ui/SecondaryBtn";
 import TextInput from "../../ui/TextInput";
 import { ChevronLeftIcon, ChevronRightIcon } from "../../ui/Icon";
+import ChartGridEditor from "./ChartGridEditor";
+
+type Mode = "steps" | "grid";
+
+// 前に選んだ作り方を覚えておく(端末ごと。読めなければステップで始める)
+const MODE_KEY = "habitas.chartWizard.mode";
+function readMode(): Mode {
+    try { return localStorage.getItem(MODE_KEY) === "grid" ? "grid" : "steps"; } catch { return "steps"; }
+}
+function saveMode(m: Mode) {
+    try { localStorage.setItem(MODE_KEY, m); } catch { /* 覚えられなくても、毎回ステップで始まるだけ */ }
+}
 
 /**
- * チャートの作成(3ステップ: 大目標 → 8つの要素 → 要素ごとの行動目標)。
+ * チャートの作成。作り方は2つから選べる(途中で切り替えても、書いた内容はそのまま)。
+ * - ステップで作る: 大目標 → 8つの要素 → 要素ごとの行動目標(はじめての人向け)
+ * - 9×9 で作る: 紙のマンダラチャートと同じ表に、好きな順で書く(マンダラチャートを使ったことがある人向け)
  * 全部埋めなくても「完了」できる。保存は最後にまとめて行う(キャンセルすると何も残らない)。
  * replacing: 今のチャートを終えて、新しいチャートを作るとき
  * initial: 今のチャートを引き継ぐときの下書き(大目標・要素・行動目標を入れた状態で始める)
@@ -29,6 +43,13 @@ export default function ChartWizard({
     const [step, setStep] = useState<1 | 2 | 3>(1);
     const [wizElem, setWizElem] = useState(0);
     const [saving, setSaving] = useState(false);
+    const [mode, setModeState] = useState<Mode>(readMode);
+    const setMode = (m: Mode) => {
+        setModeState(m);
+        saveMode(m);
+        // 9×9 で書いた内容に合わせて、ステップの位置を戻す(大目標が無ければ 1、要素が無ければ 2)
+        if (m === "steps") setStep((s) => (!draft.title.trim() ? 1 : s === 3 && !draft.elements.some((x) => x.trim()) ? 2 : s));
+    };
 
     const named = draft.elements.map((n, i) => (n.trim() ? i : -1)).filter((i) => i >= 0);
     const curElem = named.length ? named[Math.min(wizElem, named.length - 1)] : 0;
@@ -69,14 +90,51 @@ export default function ChartWizard({
     return (
         <div style={{ display: "grid", gap: 14 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: theme.subtext }}>{replacing ? "新しいチャートの作成" : "チャートの作成"}　ステップ {step}/3</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: theme.subtext }}>
+                    {replacing ? "新しいチャートの作成" : "チャートの作成"}{mode === "steps" && `　ステップ ${step}/3`}
+                </span>
                 <button type="button" onClick={onCancel} style={{ minHeight: 44, border: "none", background: "none", color: theme.subtext, fontSize: 13, cursor: "pointer" }}>キャンセル</button>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 6, marginTop: -8 }}>
-                {[1, 2, 3].map((n) => <span key={n} style={{ height: 4, borderRadius: 2, background: n <= step ? theme.habit : theme.border }} />)}
+            <div role="radiogroup" aria-label="作り方" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, padding: 4, borderRadius: 12, background: theme.card, border: `1px solid ${theme.border}`, marginTop: -8 }}>
+                {([["steps", "ステップで作る", "はじめての人に"], ["grid", "9×9 で作る", "使ったことがある人に"]] as const).map(([m, title, sub]) => (
+                    <button key={m} type="button" role="radio" aria-checked={mode === m} onClick={() => setMode(m)}
+                        style={{
+                            minHeight: 48, borderRadius: 9, border: "none", cursor: "pointer", fontFamily: "inherit", display: "grid", gap: 1, alignContent: "center",
+                            background: mode === m ? "#1E293B" : "transparent", color: mode === m ? "#F8FAFC" : "var(--text)",
+                        }}>
+                        <span style={{ fontSize: 13, fontWeight: 700 }}>{title}</span>
+                        <span style={{ fontSize: 10, opacity: 0.75 }}>{sub}</span>
+                    </button>
+                ))}
             </div>
+            {mode === "steps" && (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 6, marginTop: -4 }}>
+                    {[1, 2, 3].map((n) => <span key={n} style={{ height: 4, borderRadius: 2, background: n <= step ? theme.habit : theme.border }} />)}
+                </div>
+            )}
 
-            {step === 1 && (
+            {mode === "grid" && (
+                <div style={{ display: "grid", gap: 12 }}>
+                    {carrying && (
+                        <p style={{ margin: 0, fontSize: 12, lineHeight: 1.7, color: theme.subtext, background: theme.card, borderRadius: 10, padding: "8px 10px" }}>
+                            今のチャートの内容が入っています。直したいマスだけ書き換えてください。文言を変えなかった行動目標は、ひもづいた習慣・タスクを引き継ぎます。
+                        </p>
+                    )}
+                    <ChartGridEditor draft={draft} setDraft={setDraft} />
+                    <label style={{ display: "grid", gap: 6, fontSize: 14 }}>
+                        いつまでに（任意）
+                        <TextInput type="date" value={draft.endDate ?? ""} onChange={(e) => setDraft({ ...draft, endDate: e.target.value || null })} fullWidth />
+                    </label>
+                    <PrimaryBtn fullWidth disabled={saving || !draft.title.trim()} onClick={save} style={{ minHeight: 52 }}>完了</PrimaryBtn>
+                    <p style={{ margin: "-4px 0 0", fontSize: 12, lineHeight: 1.7, color: theme.subtext }}>
+                        {draft.title.trim()
+                            ? "全部埋めなくても、ここまでの内容で保存できます。空いたマスは、チャートからいつでも書けます。"
+                            : "まん中の大目標を書くと、保存できます。"}
+                    </p>
+                </div>
+            )}
+
+            {mode === "steps" && step === 1 && (
                 <div style={{ display: "grid", gap: 12 }}>
                     <h2 style={{ margin: "8px 0 0", fontSize: 20 }}>どんな自分になりたい？</h2>
                     {carrying && (
@@ -96,7 +154,7 @@ export default function ChartWizard({
                 </div>
             )}
 
-            {step === 2 && (
+            {mode === "steps" && step === 2 && (
                 <div style={{ display: "grid", gap: 10 }}>
                     <h2 style={{ margin: "8px 0 0", fontSize: 18, lineHeight: 1.5 }}>大目標のために必要なことを、8 つ挙げよう</h2>
                     <p style={{ margin: 0, fontSize: 12, color: theme.subtext }}>マスに書き込みます。空いたマスは、あとで埋められます</p>
@@ -114,7 +172,7 @@ export default function ChartWizard({
                 </div>
             )}
 
-            {step === 3 && (
+            {mode === "steps" && step === 3 && (
                 <div style={{ display: "grid", gap: 10 }}>
                     <h2 style={{ margin: "8px 0 0", fontSize: 18, lineHeight: 1.5 }}>「{draft.elements[curElem]}」のために、できることは？</h2>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
