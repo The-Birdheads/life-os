@@ -661,7 +661,7 @@ struct HabitasHabitWidget: Widget {
             HabitWidgetEntryView(entry: entry)
                 .containerBackground(for: .widget) { WidgetBackground() }
         }
-        .configurationDisplayName("Habitas 習慣")
+        .configurationDisplayName("まいにちコンパス 習慣")
         .description("今日の習慣を確認して、その場で完了にできます。")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }
@@ -674,7 +674,7 @@ struct HabitasTaskWidget: Widget {
             TaskWidgetEntryView(entry: entry)
                 .containerBackground(for: .widget) { WidgetBackground() }
         }
-        .configurationDisplayName("Habitas タスク")
+        .configurationDisplayName("まいにちコンパス タスク")
         .description("未完了のタスクを確認して、その場で完了にできます。")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }

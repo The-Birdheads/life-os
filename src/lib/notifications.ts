@@ -210,7 +210,7 @@ async function schedulePerHabitReminders(habits: Task[], doneTodaySet: Set<strin
 
             notificationsToSchedule.push({
                 id: baseId + i,
-                title: "Habitas",
+                title: "まいにちコンパス",
                 body: `「${habit.title}」の時間です！`,
                 schedule: { at: scheduledTime, allowWhileIdle: true },
                 sound: 'default',
@@ -239,7 +239,7 @@ async function scheduleForDays(baseId: number, hour: number, minute: number, get
         if (scheduledTime > now) {
             notificationsToSchedule.push({
                 id: baseId + i,
-                title: "Habitas",
+                title: "まいにちコンパス",
                 body: msg,
                 schedule: { at: scheduledTime, allowWhileIdle: true },
                 sound: 'default',

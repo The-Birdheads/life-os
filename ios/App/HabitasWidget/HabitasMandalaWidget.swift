@@ -333,7 +333,7 @@ struct HabitasMandalaWidget: Widget {
             MandalaWidgetEntryView(entry: entry)
                 .containerBackground(for: .widget) { WidgetBackground() }
         }
-        .configurationDisplayName("Habitas 目標")
+        .configurationDisplayName("まいにちコンパス 目標")
         .description("マンダラチャートの進み具合を確認できます。")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }

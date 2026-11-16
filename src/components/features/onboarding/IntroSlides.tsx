@@ -30,7 +30,7 @@ const SLIDES: Slide[] = [
             { icon: <SearchIcon size={14} />, label: "振り返り" },
             { icon: <CalendarIcon size={14} />, label: "推移" },
         ],
-        title: "Habitas へようこそ",
+        title: "まいにちコンパスへようこそ",
         body: "大きな目標を立てて、毎日の習慣・タスクで少しずつ進める。記録して、振り返って、また次へ。そのくり返しを、ひとつのアプリで続けられます。",
     },
     {
@@ -112,7 +112,7 @@ export default function IntroSlides({
     const accent = slide?.color ?? "#1D4ED8";
 
     return (
-        <div role="dialog" aria-modal="true" aria-label="Habitas の紹介"
+        <div role="dialog" aria-modal="true" aria-label="まいにちコンパスの紹介"
             style={{
                 position: "fixed", inset: 0, zIndex: 600, background: "var(--bg)", color: "var(--text)",
                 display: "flex", flexDirection: "column", boxSizing: "border-box",
@@ -140,7 +140,7 @@ export default function IntroSlides({
                         ))}
                     </div>
                 )}
-                <h1 style={{ margin: 0, fontSize: 22, lineHeight: 1.4 }}>{slide ? slide.title : "Habitas で何をしたいですか？"}</h1>
+                <h1 style={{ margin: 0, fontSize: 22, lineHeight: 1.4 }}>{slide ? slide.title : "まいにちコンパスで何をしたいですか？"}</h1>
                 <p style={{ margin: 0, fontSize: slide ? 15 : 14, lineHeight: 1.8, color: theme.subtext, maxWidth: 420 }}>
                     {slide
                         ? slide.body

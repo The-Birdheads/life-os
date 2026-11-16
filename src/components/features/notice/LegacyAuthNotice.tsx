@@ -49,7 +49,7 @@ export default function LegacyAuthNotice({ isOpen, onClose }: Props) {
           </button>
         </div>
         <div style={{ fontSize: 14, lineHeight: 1.7, marginBottom: 20 }}>
-          Habitasのログイン基盤を、Memory Calendarと共通のものに変更しました。
+          まいにちコンパス（旧Habitas）のログイン基盤を、Memory Calendarと共通のものに変更しました。
           <br />
           お手数ですが、<b>以前と同じ方法（GoogleまたはApple）</b>でもう一度ログインしてください。ログインすると、これまでのデータが引き継がれます。
           <br />

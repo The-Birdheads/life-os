@@ -1,10 +1,22 @@
-# App Store 掲載情報（Habitas）
+# App Store 掲載情報（まいにちコンパス / 旧 Habitas）
 
 ## 1.4.0
+
+1.4.0 からアプリの名前を「Habitas」から「まいにちコンパス」に変えます。
+バンドルID(`com.morikuma.habitas`)・ログインの戻り先・DB(`habitas` スキーマ)・ウィジェットの種類(kind)・App Group は、既存ユーザーのログインやウィジェットが切れないよう、そのままにしています。
+
+### 名前とサブタイトル
+
+| 項目 | 内容 |
+|---|---|
+| 名前(30文字まで) | まいにちコンパス |
+| サブタイトル(30文字まで) | タスク・習慣・目標を、毎日の1歩に |
+| キャッチコピー(紹介文の冒頭など) | 迷ったら、今日の1歩だけ。 |
 
 ### このバージョンの最新情報
 
 ```
+・アプリの名前を「Habitas」から「まいにちコンパス」に変えました。これまでの記録・ログイン・ウィジェットは、そのまま使えます
 ・目標タブを追加しました。大きな目標をマンダラチャートで8つの要素と行動目標に分け、毎日の習慣・タスクにひもづけて、直近7日の進み具合を色で確かめられます
 ・チャートの見直しと履歴の保存、過去のチャートの確認、新しいチャートの作成ができます
 ・振り返りタブに「目標の進み」を追加しました。その日に進めた行動目標がわかります
@@ -32,6 +44,7 @@
 
 ```
 What's new in this version (1.4.0):
+- The app is renamed from "Habitas" to "まいにちコンパス" (Mainichi Compass). The bundle ID, sign-in, stored data and widgets are unchanged; existing users keep their records and login.
 - New "Goal" tab: users break a main goal into 8 areas and up to 64 action goals (a Mandala chart), link them to habits and tasks, and see progress over the last 7 days. Charts can be reviewed, saved to history, and replaced with a new chart; past charts are view-only.
 - "My rules": items the user marks kept (○) or missed (×) at the end of the day.
 - The "Week" tab is replaced by a "Trend" tab (weekly/monthly view of records).

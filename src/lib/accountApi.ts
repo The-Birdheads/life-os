@@ -135,18 +135,18 @@ export function deleteConfirmVariant(usage: AppId[] | null): DeleteConfirmVarian
 export function deleteConfirmMessage(variant: DeleteConfirmVariant): string {
   switch (variant) {
     case "data-only":
-      return "Habitasのデータがすべて削除されます。このアカウントはMemory Calendarでも使われているため、アカウント自体とMemory Calendarのデータは削除されません。削除したデータは復元できませんがよろしいですか？";
+      return "まいにちコンパスのデータがすべて削除されます。このアカウントはMemory Calendarでも使われているため、アカウント自体とMemory Calendarのデータは削除されません。削除したデータは復元できませんがよろしいですか？";
     case "account":
       return "登録済みのすべてのデータが削除され、アカウントも削除されます。復元することはできませんがよろしいですか？";
     default:
-      return "Habitasのデータがすべて削除されます。Memory Calendarなど他のアプリでもこのアカウントを使っている場合、アカウント自体は削除されません。削除したデータは復元できませんがよろしいですか？";
+      return "まいにちコンパスのデータがすべて削除されます。Memory Calendarなど他のアプリでもこのアカウントを使っている場合、アカウント自体は削除されません。削除したデータは復元できませんがよろしいですか？";
   }
 }
 
 export function deleteDoneMessage(accountDeleted: boolean, revocation?: AppleRevocationOutcome): string {
   const base = accountDeleted
     ? "アカウントを削除しました"
-    : "Habitasのデータを削除しました（アカウントはMemory Calendarで引き続き使えます）";
+    : "まいにちコンパスのデータを削除しました（アカウントはMemory Calendarで引き続き使えます）";
   // Apple でログインした人には、Apple 側の連携解除の結果も伝える(失敗時は手動で解除できる)
   if (revocation === "revoked") return `${base}。Appleのサインインも解除しました`;
   if (revocation === "failed") {

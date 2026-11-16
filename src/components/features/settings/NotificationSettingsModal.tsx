@@ -192,7 +192,7 @@ export default function NotificationSettingsModal({ isOpen, onClose, userId, set
                                     <span style={{ color: theme.warning, fontSize: 16, flexShrink: 0 }}>⚠</span>
                                     <div style={{ fontSize: 13, lineHeight: 1.55 }}>
                                         <b>通知がオフになっています。</b><br />
-                                        ONにするには、iOSの設定からHabitasの通知を許可してください。
+                                        ONにするには、iOSの設定からまいにちコンパスの通知を許可してください。
                                     </div>
                                 </div>
                                 <button
