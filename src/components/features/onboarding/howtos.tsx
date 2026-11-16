@@ -141,8 +141,8 @@ export const HOWTO_GROUPS: HowToGroup[] = [
                 build: needChart((ctx) => [
                     {
                         kind: "explain", tab: "goal", enter: () => ctx.goal("center"), target: "goal-grid", accent: GOAL_ACCENT,
-                        title: "色の濃さが進み具合です",
-                        body: "直近 7 日に、ひもづけた習慣・タスクをどれだけできたかを色で表します。要素を開くと、行動目標ごとの進み具合も見られます。",
+                        title: "やった回数だけ、色が濃くなります",
+                        body: "チャートを始めてから、ひもづけた習慣・タスクをやった回数を数えます。休んでも減りません。点は今週やった日です。要素を開くと、行動目標ごとの回数も見られます。",
                     },
                     {
                         kind: "explain", tab: "review", target: "review-goal", accent: GOAL_ACCENT,
@@ -156,7 +156,7 @@ export const HOWTO_GROUPS: HowToGroup[] = [
                 build: needChart((ctx) => [{
                     kind: "explain", tab: "goal", enter: () => ctx.goal("center"), target: "goal-review", side: "top", accent: GOAL_ACCENT,
                     title: "「見直す」と「チャートの履歴」",
-                    body: "「見直す」では、進み具合の低い順にマスを見て、ハードルを下げる・やり方を変える・達成にする、などを決めます。「チャートの履歴」では、今の状態を保存したり、過去のチャートを見返したりできます。",
+                    body: "「見直す」では、しばらくやっていないマスから順に見て、ハードルを下げる・やり方を変える・達成にする、などを決めます。「チャートの履歴」では、今の状態を保存したり、過去のチャートを見返したりできます。",
                 }]),
             },
             {

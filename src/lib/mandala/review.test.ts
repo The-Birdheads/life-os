@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { MandalaCell, MandalaChart, Task } from '../types';
 import { buildChartModel, tasksByCell } from './chart';
 import { doneDaysByTask } from './progress';
-import { buildSnapshot, describeDecision, parseSnapshot, recordKind } from './review';
+import { buildSnapshot, describeDecision, hasCounts, parseSnapshot, recordKind, recountSnapshot, type ReviewSnapshot } from './review';
 
 const chart: MandalaChart = { id: 'c1', user_id: 'u1', title: '健康的な体をつくる', start_date: '2026-10-01', end_date: null, status: 'active' };
 const cell = (id: string, e: number, a: number | null, text: string, patch: Partial<MandalaCell> = {}): MandalaCell => ({
@@ -33,22 +33,57 @@ describe('buildSnapshot', () => {
     ]);
     const snap = buildSnapshot(buildChartModel(chart, cells), tasksByCell(tasks), done, WEEK);
 
-    it('keeps the chart before the review, with the rates at that time', () => {
+    it('keeps the chart before the review, with the counts until then', () => {
         expect(snap.title).toBe('健康的な体をつくる');
         const sleep = snap.elements[1];
         expect(sleep.name).toBe('睡眠');
         expect(sleep.cells.map((c) => c.text)).toEqual(['23時に寝る', 'スマホを寝室に持ち込まない']);
-        // t1: 2/7 = 29%、t2: 週2回のうち1回 = 50% → 平均 40%(四捨五入)
-        expect(sleep.cells[0].rate).toBe(40);
-        expect(sleep.cells[0].tasks.map((t) => `${t.title}:${t.frequency}`)).toEqual(['23時に布団に入る:毎日', 'ジムに行く:週2回']);
-        expect(sleep.cells[1]).toMatchObject({ status: 'paused', rate: null });
-        expect(sleep.rate).toBe(40);
-        expect(snap.elements[0].rate).toBeNull();
+        // t1 の2回と t2 の1回(割合ではなく回数)
+        expect(sleep.cells[0].count).toBe(3);
+        expect(sleep.cells[0].tasks.map((t) => `${t.title}:${t.frequency}:${t.count}`)).toEqual(['23時に布団に入る:毎日:2', 'ジムに行く:週2回:1']);
+        expect(sleep.cells[1]).toMatchObject({ status: 'paused', count: 0 });
+        expect(sleep.count).toBe(3);
+        expect(snap.elements[0].count).toBe(0);
+        expect(hasCounts(snap)).toBe(true);
     });
 
     it('can be read back from JSON', () => {
         expect(parseSnapshot(JSON.parse(JSON.stringify(snap)))?.elements[1].name).toBe('睡眠');
         expect(parseSnapshot({})).toBeNull();
+    });
+});
+
+describe('recountSnapshot', () => {
+    const cells = [cell('e1', 1, null, '睡眠'), cell('a1', 1, 0, '23時に寝る')];
+    const model = buildChartModel(chart, cells);
+    // 回数を数える前の記録(割合だけ)
+    const old: ReviewSnapshot = {
+        title: '健康的な体をつくる', period: WEEK,
+        elements: [
+            { index: 0, name: '', color: '#000', rate: null, cells: [] },
+            { index: 1, name: '睡眠', color: '#000', rate: 40, cells: [{ index: 0, text: '23時に寝る', status: 'active', rate: 40, tasks: [{ title: '23時に布団に入る', type: 'habit', frequency: '毎日', rate: 29 }] }] },
+        ],
+    };
+    const done = doneDaysByTask([
+        { task_id: 't1', day: '2026-10-05', status: 'done' },
+        { task_id: 't1', day: '2026-10-27', status: 'done' },
+        { task_id: 't1', day: '2026-11-02', status: 'done' }, // 保存した日より後は数えない
+        { task_id: 't9', day: '2026-10-27', status: 'done' }, // ひもづいていない
+    ]);
+
+    it('counts from the chart start until the day it was saved, using the tasks linked to the cell', () => {
+        const linked = new Map([['a1', new Set(['t1'])]]);
+        const r = recountSnapshot(old, model, linked, done, [{ id: 't1', title: '23時に布団に入る' }]);
+        expect(r.period).toEqual({ from: '2026-10-01', to: '2026-11-01' });
+        expect(r.elements[1].count).toBe(2);
+        expect(r.elements[1].cells[0].count).toBe(2);
+        expect(r.elements[1].cells[0].tasks[0].count).toBe(2);
+        expect(hasCounts(old)).toBe(false);
+    });
+
+    it('leaves records that already have counts as they are', () => {
+        const withCounts = { ...old, elements: old.elements.map((e) => ({ ...e, count: 5 })) };
+        expect(recountSnapshot(withCounts, model, new Map(), done, [])).toBe(withCounts);
     });
 });
 

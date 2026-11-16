@@ -8,11 +8,11 @@ import { todayJST } from "../day";
 import type { MandalaCell, MandalaCellEvent, MandalaCellEventKind, MandalaChart, MandalaReview, Task } from "../types";
 import { buildChartModel, ELEMENT_COLORS, tasksByCell, type ChartModel } from "./chart";
 import { addDays } from "./dates";
-import { periodEndingOn } from "./dayProgress";
 import { carriedCells } from "./carryOver";
 import { changeFrequencyPatch, currentFrequency, frequencyLabel, type Frequency } from "./frequency";
 import { doneDaysByTask, isCounted, type Period } from "./progress";
-import { buildSnapshot, describeDecision, type ReviewDecision } from "./review";
+import { buildSnapshot, describeDecision, hasCounts, recountSnapshot, type ReviewDecision, type ReviewSnapshot } from "./review";
+import { chartPeriod } from "./tally";
 import type { TaskState } from "../taskState";
 import { saveRuleAnswer, saveTaskState } from "../taskEntries";
 import { isRepeating, KIND_LABEL, type RuleAnswer } from "../taskKind";
@@ -67,23 +67,25 @@ export function useMandala(
   const [pastCharts, setPastCharts] = useState<MandalaChart[]>([]);
   const [loaded, setLoaded] = useState(false);
 
-  // 進み具合は「直近7日(今日を含む)」で数える。チャートを始めた日より前は数えない(新しく作り直したら、そこから数え直す)
+  // 回数は「チャートを始めた日から今日まで」で数える(新しく作り直したら、そこから数え直す)
   const today = todayJST();
   const startDate = chart?.start_date ?? null;
-  const period: Period = useMemo(() => periodEndingOn(today, startDate), [today, startDate]);
+  const period: Period = useMemo(() => chartPeriod(today, startDate), [today, startDate]);
 
   const load = useCallback(async () => {
     if (!userId) return;
     const c = await sqliteRepo.getActiveChart(userId);
     setChart(c);
+    // 読み込んだチャートの開始日で数える(チャートが変わった直後でも、前の期間で読まないように)
+    const range = chartPeriod(today, c?.start_date);
     setCells(c ? await sqliteRepo.getCells(userId, c.id) : []);
     setReviews(c ? await sqliteRepo.getReviews(userId, c.id) : []);
     setPastCharts(await sqliteRepo.getFinishedCharts(userId));
-    const entries = await sqliteRepo.getTaskEntriesBetween(userId, period.from, period.to);
+    const entries = await sqliteRepo.getTaskEntriesBetween(userId, range.from, range.to);
     setDoneByTask(doneDaysByTask(entries));
-    setMissedToday(new Set(entries.filter((e) => e.status === "missed" && e.day === period.to).map((e) => e.task_id)));
+    setMissedToday(new Set(entries.filter((e) => e.status === "missed" && e.day === range.to).map((e) => e.task_id)));
     setLoaded(true);
-  }, [userId, period]);
+  }, [userId, today]);
 
   useEffect(() => {
     load().catch((e) => console.warn("[mandala] load failed:", e));
@@ -129,7 +131,7 @@ export function useMandala(
     return cell;
   }, [userId, cells, addEvent]);
 
-  /** 今のチャートと進み具合(直近7日)を、履歴に残す */
+  /** 今のチャートと、ここまでの回数を、履歴に残す */
   const addSnapshotRecord = useCallback(async (kind: "save" | "final", note: string) => {
     if (!userId || !model) return;
     const snapshot = { ...buildSnapshot(model, byCell, doneByTask, period), kind };
@@ -451,13 +453,33 @@ export function useMandala(
     await afterWrite();
   }, [userId, byCell, addEvent, reloadTasks, afterWrite]);
 
-  /** 達成を取り消して、進み具合を数えるマスに戻す(終えた習慣は戻さない) */
+  /** 達成を取り消す(終えた習慣は戻さない) */
   const unachieveCell = useCallback(async (cell: MandalaCell) => {
     if (!userId) return;
     await sqliteRepo.upsertCell({ ...cell, status: "active" });
     await addEvent(cell.id, "resumed", "達成を取り消した");
     await afterWrite();
   }, [userId, addEvent, afterWrite]);
+
+  /** 回数を数える前に保存した履歴の記録に、回数を入れ直す(見るときに数える。保存はし直さない) */
+  const recountRecord = useCallback(async (snap: ReviewSnapshot, chartModel: ChartModel, force = false): Promise<ReviewSnapshot> => {
+    if (!userId || (!force && hasCounts(snap))) return snap;
+    const cellIds = new Set(chartModel.elements.flatMap((el) => el.actions.map((c) => c?.id)).filter((id): id is string => !!id));
+    const kinds: MandalaCellEventKind[] = ["linked", "unlinked", "changed", "lowered"];
+    const events = (await Promise.all(kinds.map((kind) => sqliteRepo.getCellEventsByKind(userId, kind)))).flat();
+    const linkedIds = new Map<string, Set<string>>();
+    const add = (cellId: string, taskId: string) => {
+      if (!cellIds.has(cellId)) return;
+      const set = linkedIds.get(cellId) ?? new Set<string>();
+      set.add(taskId);
+      linkedIds.set(cellId, set);
+    };
+    for (const e of events) if (e.task_id) add(e.cell_id, e.task_id);
+    for (const t of tasks) if (t.mandala_cell_id) add(t.mandala_cell_id, t.id);
+    const from = chartModel.chart.start_date ?? snap.period.to;
+    const entries = await sqliteRepo.getTaskEntriesBetween(userId, from <= snap.period.to ? from : snap.period.to, snap.period.to);
+    return recountSnapshot(snap, chartModel, linkedIds, doneDaysByTask(entries), tasks, force);
+  }, [userId, tasks]);
 
   /** 過去のチャートの中身と履歴(見るだけ) */
   const loadPastChart = useCallback(async (c: MandalaChart): Promise<{ model: ChartModel; reviews: MandalaReview[] } | null> => {
@@ -470,6 +492,7 @@ export function useMandala(
   return {
     loaded, model, byCell, doneByTask, missedToday, period, reviews, pastCharts,
     reload: load,
+    recountRecord,
     createChart, updateChart, saveCurrentState, loadPastChart, setElementName, setActionText,
     createTaskForCell, linkTask, unlinkTask, getEvents, goalOptions, setTaskCell,
     taskStateOf, doingSince: doingSince ?? new Map<string, string>(), setTaskStateToday, setRuleAnswerToday,

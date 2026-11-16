@@ -3,7 +3,7 @@ import { theme } from "../../../lib/ui/theme";
 import type { MandalaChart, MandalaReview } from "../../../lib/types";
 import type { ChartModel } from "../../../lib/mandala/chart";
 import { localDateLabel } from "../../../lib/mandala/dates";
-import { buildSnapshot } from "../../../lib/mandala/review";
+import { buildSnapshot, type ReviewSnapshot } from "../../../lib/mandala/review";
 import type { MandalaState } from "../../../lib/mandala/useMandala";
 import ChartHistory, { HistoryHeader, SnapshotView } from "./ChartHistory";
 
@@ -26,6 +26,7 @@ export default function PastCharts({
 
     if (open) {
         const back = () => setOpen(null);
+        const recount = (snap: ReviewSnapshot, force?: boolean) => mandala.recountRecord(snap, open.model, force);
         // 保存した記録が無いチャートは、中身だけ出す(進み具合は残っていない)
         if (open.reviews.length === 0) {
             const snap = buildSnapshot(open.model, new Map(), new Map(), {
@@ -35,9 +36,9 @@ export default function PastCharts({
                 <div style={{ display: "grid", gap: 12 }}>
                     <HistoryHeader title={open.chart.title} backLabel="一覧へ" onBack={back} />
                     <p style={{ margin: 0, fontSize: 13, lineHeight: 1.7, color: theme.subtext, background: theme.card, borderRadius: 14, padding: 14 }}>
-                        このチャートは、進み具合を保存せずに終えました。チャートの中身だけを表示します。
+                        このチャートは、回数を保存せずに終えました。チャートの中身と、記録から数えた回数を表示します。
                     </p>
-                    <SnapshotView snap={snap} model={null} intro="終えたときのチャート" />
+                    <SnapshotView snap={snap} model={null} intro="終えたときのチャート" recount={recount} forceRecount />
                 </div>
             );
         }
@@ -48,6 +49,7 @@ export default function PastCharts({
                 onBack={back}
                 records={open.reviews}
                 model={open.model}
+                recount={recount}
                 emptyText=""
             />
         );

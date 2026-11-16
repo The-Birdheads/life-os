@@ -1,16 +1,21 @@
 /**
  * 見直し(docs/mandala-chart.md 4-9, 4-10)。
- * - 見直しの記録(snapshot): 見直す前のチャートと、当時の進み具合。保存後は変えない
+ * - 見直しの記録(snapshot): 見直す前のチャートと、当時までの回数。保存後は変えない
  * - 次の手(decision): マスごとに選ぶ。保存したときに、まとめてチャート・習慣へ反映する
  */
 import type { MandalaCell, MandalaReview, Task } from "../types";
-import { actionRate, elementRate, type ChartModel } from "./chart";
+import { type ChartModel } from "./chart";
 import { currentFrequency, frequencyLabel, type Frequency } from "./frequency";
-import { isCounted, taskProgress, type Period } from "./progress";
+import { isCounted, type Period } from "./progress";
+import { actionTally, elementTally, taskTally } from "./tally";
 
-export type SnapshotTask = { title: string; type: Task["task_type"]; frequency: string | null; rate: number | null };
-export type SnapshotCell = { index: number; text: string; status: MandalaCell["status"]; rate: number | null; tasks: SnapshotTask[] };
-export type SnapshotElement = { index: number; name: string; color: string; rate: number | null; cells: SnapshotCell[] };
+/**
+ * 回数(count)は、チャートを始めた日から保存した日までの、やった回数。
+ * 回数を数えるようになる前(1.4.0 の途中まで)の記録には、直近7日の割合(rate)だけが入っている
+ */
+export type SnapshotTask = { title: string; type: Task["task_type"]; frequency: string | null; count?: number; rate?: number | null };
+export type SnapshotCell = { index: number; text: string; status: MandalaCell["status"]; count?: number; rate?: number | null; tasks: SnapshotTask[] };
+export type SnapshotElement = { index: number; name: string; color: string; count?: number; rate?: number | null; cells: SnapshotCell[] };
 export type ReviewSnapshot = {
   title: string;
   period: Period;
@@ -49,7 +54,7 @@ export function buildSnapshot(
       index: el.index,
       name: el.name,
       color: el.color,
-      rate: el.name ? elementRate(el, byCell, doneByTask, period) : null,
+      count: elementTally(el, byCell, doneByTask, period)?.count ?? 0,
       cells: el.actions.flatMap((c, a) => {
         if (!c || !c.text.trim()) return [];
         const tasks = (byCell.get(c.id) ?? []).filter(isCounted);
@@ -57,16 +62,57 @@ export function buildSnapshot(
           index: a,
           text: c.text,
           status: c.status,
-          rate: actionRate(c, byCell, doneByTask, period),
+          count: actionTally(c, byCell, doneByTask, period)?.count ?? 0,
           tasks: tasks.map((t) => ({
             title: t.title,
             type: t.task_type,
             frequency: t.task_type !== "oneoff" ? frequencyLabel(currentFrequency(t)) : null,
-            rate: taskProgress(t, doneByTask.get(t.id), period, c.paused_periods).rate,
+            count: taskTally(doneByTask.get(t.id), period, c.paused_periods).count,
           })),
         }];
       }),
     })),
+  };
+}
+
+/** 回数を数えるようになってからの記録か */
+export function hasCounts(snap: ReviewSnapshot): boolean {
+  return snap.elements.some((e) => typeof e.count === "number");
+}
+
+/**
+ * 回数を数える前に保存した記録(割合だけのもの)に、回数を入れ直す。
+ * その時点までの完了の記録から数える。マスにひもづいていた習慣・タスクは、マスの変更の履歴(linkedIdsByCell)から集める
+ * (チャートを終えると、ひもづけは外れているため)。数えた期間は、チャートを始めた日から保存した日まで
+ */
+export function recountSnapshot(
+  snap: ReviewSnapshot,
+  model: ChartModel,
+  linkedIdsByCell: Map<string, Set<string>>,
+  doneByTask: Map<string, Set<string>>,
+  tasks: Pick<Task, "id" | "title">[],
+  /** 回数が入っていても数え直す(回数を保存せずに終えたチャートを、記録から数えるとき) */
+  force = false
+): ReviewSnapshot {
+  if (!force && hasCounts(snap)) return snap;
+  const period = { from: model.chart.start_date && model.chart.start_date <= snap.period.to ? model.chart.start_date : snap.period.to, to: snap.period.to };
+  const titleOf = new Map(tasks.map((t) => [t.id, t.title]));
+  return {
+    ...snap,
+    period,
+    elements: snap.elements.map((el) => {
+      const cells = el.cells.map((c) => {
+        const cell = model.elements[el.index]?.actions[c.index] ?? null;
+        const ids = cell ? [...(linkedIdsByCell.get(cell.id) ?? [])] : [];
+        const per = ids.map((id) => ({ id, count: taskTally(doneByTask.get(id), period, cell?.paused_periods).count }));
+        return {
+          ...c,
+          count: per.reduce((a, b) => a + b.count, 0),
+          tasks: c.tasks.map((t) => ({ ...t, count: per.filter((x) => titleOf.get(x.id) === t.title).reduce((a, b) => a + b.count, 0) })),
+        };
+      });
+      return { ...el, count: cells.reduce((a, c) => a + c.count, 0), cells };
+    }),
   };
 }
 
@@ -84,7 +130,7 @@ export type ReviewDecision =
   | { kind: "change"; newText: string; newHabit: { title: string; frequency: Frequency } | null }
   /** いったん休む: マスを休止し、習慣を記録タブから外す(休止中の日は数えない) */
   | { kind: "pause" }
-  /** 達成にする: マスは 100%。習慣は続けるか終えるかを選ぶ */
+  /** 達成にする: マスに「達成」の印を付ける。習慣は続けるか終えるかを選ぶ */
   | { kind: "achieve"; endHabits: boolean }
   /** 目標から外す: マスを空にする。習慣は残すか終えるかを選ぶ */
   | { kind: "remove"; endHabits: boolean };

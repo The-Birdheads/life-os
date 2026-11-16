@@ -4,8 +4,9 @@ import type { MandalaCell, MandalaCellEvent, Task } from "../../../lib/types";
 import type { ElementModel } from "../../../lib/mandala/chart";
 import type { MandalaState } from "../../../lib/mandala/useMandala";
 import { currentFrequency, frequencyLabel, isValidFrequency, type Frequency } from "../../../lib/mandala/frequency";
-import { isCounted, taskProgress, weekCountStatus } from "../../../lib/mandala/progress";
-import { addDays, localDateLabel, maxDay } from "../../../lib/mandala/dates";
+import { isCounted, weekCountStatus } from "../../../lib/mandala/progress";
+import { localDateLabel } from "../../../lib/mandala/dates";
+import { cellTally, countText, lastDoneText, taskTally, weekDoneDays } from "../../../lib/mandala/tally";
 import PrimaryBtn from "../../ui/PrimaryBtn";
 import SecondaryBtn from "../../ui/SecondaryBtn";
 import TextInput from "../../ui/TextInput";
@@ -78,8 +79,11 @@ export default function CellSheet({
         }
     };
 
-    /** 習慣・マイルールの実施状況の文言。週n回は今週の回数、それ以外は数え始めた日からの回数(マイルールは ○ の日数) */
-    const habitStat = (t: Task, p: { done: number; target: number }): string | null => {
+    /**
+     * 習慣・マイルールの今週の様子。週n回は記録タブと同じく「今週 2/3回」、それ以外は今週やった数だけ(予定と比べない)。
+     * マイルールは ○ の日数
+     */
+    const habitStat = (t: Task, days: Set<string>): string | null => {
         if (!isRepeating(t)) return null;
         const rule = t.task_type === "rule";
         const freq = currentFrequency(t);
@@ -87,10 +91,8 @@ export default function CellSheet({
             const w = weekCountStatus(t, mandala.doneByTask.get(t.id), mandala.period.to);
             return `${frequencyLabel(freq)} ・ 今週 ${rule ? "○ " : ""}${w.done}/${w.target}${rule ? "日" : "回"}`;
         }
-        // ひもづけた日か、チャートを始めた日が直近7日の中にあれば、その日から数えている
-        const since = maxDay(t.mandala_linked_at, mandala.period.from)!;
-        const from = since > addDays(mandala.period.to, -6) ? `${since.slice(5).replace("-", "/")}から` : "直近7日";
-        return `${frequencyLabel(freq)} ・ ${from} ${rule ? "○ " : ""}${p.done}/${p.target}${rule ? "日" : "回"}`;
+        const n = weekDoneDays({ count: days.size, days, last: null }, mandala.period.to);
+        return `${frequencyLabel(freq)} ・ 今週 ${rule ? "○ " : ""}${n}${rule ? "日" : "回"}`;
     };
 
     const savedText = cellIndex === null ? element.name : cell?.text ?? "";
@@ -180,7 +182,7 @@ export default function CellSheet({
                 />
                 <div style={{ display: "grid", gap: 8 }}>
                     {list.map((t) => {
-                        const p = taskProgress(t, mandala.doneByTask.get(t.id), mandala.period, cell.paused_periods);
+                        const tl = taskTally(mandala.doneByTask.get(t.id), mandala.period, cell.paused_periods);
                         const state = stateOf(t);
                         const checked = state === "done";
                         const answer = type === "rule" ? ruleAnswerOf(t) : null;
@@ -204,8 +206,8 @@ export default function CellSheet({
                                             setMsg(next === "doing" ? `「${t.title}」を対応中にしました` : `「${t.title}」を未完了に戻しました`);
                                         }}
                                     />}
-                                notes={[habitStat(t, p)]}
-                                // マイルールは右に % と「外す」があるので、今日の ○× は下に出す
+                                notes={[habitStat(t, tl.days)]}
+                                // マイルールは右に回数と「外す」があるので、今日の ○× は下に出す
                                 footer={type === "rule" && (
                                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                                         <span style={{ fontSize: 12, opacity: 0.8 }}>今日</span>
@@ -215,7 +217,7 @@ export default function CellSheet({
                                 right={
                                     // 縦に積むとカードが高くなり、下に余白ができるため横に並べる
                                     <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
-                                        <b style={{ fontSize: 14 }}>{p.rate === null ? "-" : `${p.rate}%`}</b>
+                                        <b style={{ fontSize: 14, whiteSpace: "nowrap" }} aria-label={`これまで${countText(tl.count)}`}>{countText(tl.count)}</b>
                                         <button type="button" aria-label={`${t.title}のひもづけを外す`} disabled={busy}
                                             onClick={() => run(() => mandala.unlinkTask(t), "ひもづけを外しました")}
                                             style={{ minHeight: 32, border: "none", background: "none", color: "inherit", opacity: 0.7, fontSize: 12, cursor: "pointer", padding: "0 0 0 8px", fontFamily: "inherit" }}>外す</button>
@@ -246,7 +248,7 @@ export default function CellSheet({
                 {cell && cellIndex !== null && cell.status !== "active" && (
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, background: theme.card, border: `1px solid ${theme.border}`, borderRadius: 12, padding: "8px 8px 8px 12px" }}>
                         <span style={{ fontSize: 13, fontWeight: 700 }}>
-                            {cell.status === "paused" ? "このマスは休止中です（進み具合に数えません）" : "このマスは達成済みです（100% として数えます）"}
+                            {cell.status === "paused" ? "このマスは休止中です（休んでいる日は回数に数えません）" : "このマスは達成済みです（いちばん濃い色で表示します）"}
                         </span>
                         {cell.status === "paused" && (
                             <PrimaryBtn disabled={busy} style={{ whiteSpace: "nowrap", flexShrink: 0 }} onClick={() => run(() => mandala.resumeCell(cell), "再開しました。習慣が記録タブに戻ります")}>再開する</PrimaryBtn>
@@ -273,6 +275,17 @@ export default function CellSheet({
 
                 {cellIndex !== null && !dirty && cell && savedText && mode === "main" && (
                     <>
+                        {linked.length > 0 && (() => {
+                            const tl = cellTally(cell, linked, mandala.doneByTask, mandala.period);
+                            const today = mandala.period.to;
+                            return tl && (
+                                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: "4px 14px", background: theme.card, borderRadius: 12, padding: "10px 12px", fontSize: 13 }}>
+                                    <span>これまで <b style={{ fontSize: 18 }}>{countText(tl.count)}</b></span>
+                                    <span>今週 <b>{weekDoneDays(tl, today)}日</b></span>
+                                    <span style={{ color: theme.subtext }}>最後にやったのは {lastDoneText(tl.last, today)}</span>
+                                </div>
+                            );
+                        })()}
                         <h3 style={sectionTitle}>ひもづいた習慣・タスク・マイルール</h3>
                         {activeLinked.length === 0 && (
                             <p style={{ margin: 0, fontSize: 13, lineHeight: 1.7, color: theme.subtext }}>まだありません。下のボタンから作るか、登録済みのものをひもづけてください。</p>
@@ -358,7 +371,7 @@ export default function CellSheet({
                     <div style={{ display: "grid", gap: 12, borderTop: `1px solid ${theme.border}`, paddingTop: 14 }}>
                         <h3 style={{ margin: 0, fontSize: 16 }}>「{savedText}」を達成にする</h3>
                         <p style={{ margin: 0, fontSize: 13, lineHeight: 1.7, color: theme.subtext }}>
-                            達成にしたマスは、進み具合で 100% として数えます。あとから取り消せます。
+                            達成にしたマスは、いちばん濃い色で表示します。これまでの回数はそのまま残ります。あとから取り消せます。
                         </p>
                         {activeHabits.length > 0 ? (
                             <>

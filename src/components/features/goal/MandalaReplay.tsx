@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { sqliteRepo } from "../../../lib/db/instance";
 import { todayJST } from "../../../lib/day";
-import { AROUND, rateLevel, rateText, rateTint, type ChartModel } from "../../../lib/mandala/chart";
-import { dayProgress, gain, periodEndingOn, type DayProgress } from "../../../lib/mandala/dayProgress";
+import { AROUND, type ChartModel } from "../../../lib/mandala/chart";
+import { dayProgress, gain, type DayProgress } from "../../../lib/mandala/dayProgress";
+import { chartPeriod, countLevel, countText, levelTint } from "../../../lib/mandala/tally";
 import { localDateLabel } from "../../../lib/mandala/dates";
 import { doneDaysByTask } from "../../../lib/mandala/progress";
 import type { Task } from "../../../lib/types";
@@ -35,7 +36,7 @@ function markSeen(day: string) {
 }
 
 /**
- * 振り返りタブの「目標の進み」。その日に進めたマスを、昨日までの色から今日の色へ育てて見せる。
+ * 振り返りタブの「目標の進み」。その日に進めたマスの回数を数え上げ、色を育てて見せる(回数は減らない)。
  * 一度流した日は 6 時間は自動で流さず、結果だけを出す。「もう一度見る」で何度でも見られ、再生中は「スキップ」できる。
  * 動きを減らす設定のときは、結果だけを出す
  */
@@ -56,7 +57,7 @@ export default function MandalaReplay({
         if (!userId) return;
         let alive = true;
         (async () => {
-            const period = periodEndingOn(day, model.chart.start_date);
+            const period = chartPeriod(day, model.chart.start_date);
             const [entries, achieved] = await Promise.all([
                 sqliteRepo.getTaskEntriesBetween(userId, period.from, period.to),
                 sqliteRepo.getCellEventsByKind(userId, "achieved"),
@@ -166,7 +167,7 @@ export default function MandalaReplay({
                 ) : undefined}
             />
 
-            <div style={{ fontSize: 12, color: theme.subtext, marginBottom: 8 }}>{dayLabel}までの直近 7 日の進み具合</div>
+            <div style={{ fontSize: 12, color: theme.subtext, marginBottom: 8 }}>チャートを始めてから{dayLabel}までの回数</div>
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 6 }}>
                 {Array.from({ length: 9 }, (_, pos) => {
@@ -183,13 +184,12 @@ export default function MandalaReplay({
                     const el = model.elements[AROUND.indexOf(pos as (typeof AROUND)[number])];
                     if (!el.name) return <div key={pos} style={{ ...cellBase, border: "2px dashed #CBD5E1", background: "transparent" }} />;
                     const r = shown[el.index];
-                    const t = rateTint(el.color, r);
-                    const strong = rateLevel(r) === 3;
+                    const t = levelTint(el.color, countLevel(r ?? 0));
                     const isActive = active === el.index;
                     const g = gains.get(el.index);
                     return (
                         <button key={pos} type="button" onClick={() => onOpenGoal?.(el.index)}
-                            aria-label={`${el.name}、${rateText(progress.elements[el.index].after)}${g ? `、${dayLabel} ${g}% 進んだ` : ""}。目標タブで開く`}
+                            aria-label={`${el.name}、これまで${countText(progress.elements[el.index].after ?? 0)}${g ? `、${dayLabel} ${g}回` : ""}。目標タブで開く`}
                             style={{
                                 ...cellBase, position: "relative", background: t.bg, color: t.fg, border: `2px solid ${t.border}`,
                                 justifyContent: "space-between", cursor: onOpenGoal ? "pointer" : "default",
@@ -199,16 +199,11 @@ export default function MandalaReplay({
                                 transition: "background-color 0.6s ease, border-color 0.6s ease, color 0.6s ease, transform 0.3s ease, box-shadow 0.3s ease",
                             }}>
                             <span style={{ fontSize: 13, fontWeight: 700, lineHeight: 1.35 }}>{el.name}</span>
-                            <span style={{ display: "grid", gap: 5 }}>
-                                <span style={{ height: 6, borderRadius: 3, overflow: "hidden", background: strong ? "rgba(255,255,255,0.35)" : "rgba(15,23,42,0.12)" }}>
-                                    <span style={{ display: "block", height: 6, width: `${r ?? 0}%`, background: strong ? "#fff" : el.color, transition: "width 0.7s ease" }} />
-                                </span>
-                                <span style={{ fontSize: 13, fontWeight: 700 }}><CountUp value={r} /></span>
-                            </span>
+                            <span style={{ fontSize: 17, fontWeight: 800, lineHeight: 1 }}><CountUp value={r} /></span>
                             {g !== undefined && g > 0 && (
                                 <>
-                                    {/* 浮かんで消える「+◯%」と、残る目印 */}
-                                    {isActive && <span aria-hidden style={{ ...gainFloat, color: el.color }}>+{g}%</span>}
+                                    {/* 浮かんで消える「+◯回」と、残る目印 */}
+                                    {isActive && <span aria-hidden style={{ ...gainFloat, color: el.color }}>+{g}回</span>}
                                     <span aria-hidden style={{ ...gainBadge, background: el.color, animation: "mr-pop 0.4s ease-out" }}>+{g}</span>
                                 </>
                             )}
@@ -231,7 +226,6 @@ export default function MandalaReplay({
                         {progress.cells.map((c, i) => {
                             const el = model.elements[c.element];
                             const open = i < revealed;
-                            const r = open ? c.after : c.before;
                             return (
                                 <button key={c.cell.id} type="button" onClick={() => onOpenGoal?.(c.element)}
                                     style={{
@@ -246,12 +240,10 @@ export default function MandalaReplay({
                                             <b style={{ fontSize: 14 }}>{c.cell.text}</b>
                                         </span>
                                         <span style={{ fontSize: 12, fontWeight: 700, whiteSpace: "nowrap", color: el.color }}>
-                                            {c.achieved ? "達成" : `${rateText(c.before)} → ${rateText(c.after)}`}
+                                            {c.achieved ? "達成" : `+${c.after - c.before}回`}
                                         </span>
                                     </span>
-                                    <span style={{ height: 6, borderRadius: 3, overflow: "hidden", background: "rgba(15,23,42,0.1)" }}>
-                                        <span style={{ display: "block", height: 6, width: `${r ?? 0}%`, background: el.color, transition: "width 0.8s ease 0.15s" }} />
-                                    </span>
+                                    {!c.achieved && <span style={{ fontSize: 11, color: theme.subtext }}>これまで {countText(c.after)}</span>}
                                     {c.doneTasks.length > 0 && (
                                         <span style={{ display: "flex", flexWrap: "wrap", gap: "4px 10px", fontSize: 12, color: theme.subtext }}>
                                             {c.doneTasks.map((t) => (
@@ -299,7 +291,7 @@ function CountUp({ value }: { value: number | null }) {
         raf = requestAnimationFrame(tick);
         return () => cancelAnimationFrame(raf);
     }, [value]);
-    return <>{rateText(n)}</>;
+    return <>{countText(n ?? 0)}</>;
 }
 
 const KEYFRAMES = `

@@ -6,15 +6,15 @@ import SwiftUI
 
 struct WidgetMandalaCell: Codable {
     let text: String
-    /// -1=空き・休止中、0=未着手、1〜3=進み具合(〜30% / 〜70% / 70%〜)
+    /// -1=空き・休止中、0=まだ、1〜3=やった回数の段階(1回〜 / 10回〜 / 30回〜)
     let level: Int
 }
 
 struct WidgetMandalaElement: Codable {
     let name: String
     let color: String
-    /// 0〜100。未着手は -1
-    let rate: Int
+    /// チャートを始めてからの回数(回数を数える前の版のデータには無い)
+    let count: Int?
     let level: Int
     let cells: [WidgetMandalaCell]
 }
@@ -28,12 +28,12 @@ struct WidgetMandala: Codable {
     static var placeholder: WidgetMandala {
         let names = ["運動", "睡眠", "食事", "仕事", "学び", "お金", "家族", "心"]
         let colors = ["#1D4ED8", "#C2410C", "#0F766E", "#6D28D9", "#BE185D", "#A16207", "#15803D", "#475569"]
-        let rates = [72, 40, 15, 55, -1, 30, 85, 8]
+        let counts = [42, 18, 6, 25, 0, 11, 33, 2]
         return WidgetMandala(
             title: "健康で、毎日を楽しむ",
             elements: (0..<8).map { i in
                 WidgetMandalaElement(
-                    name: names[i], color: colors[i], rate: rates[i], level: levelOf(rates[i]),
+                    name: names[i], color: colors[i], count: counts[i], level: levelOf(counts[i]),
                     cells: (0..<8).map { a in WidgetMandalaCell(text: "", level: (i + a) % 5 - 1) }
                 )
             },
@@ -41,11 +41,12 @@ struct WidgetMandala: Codable {
         )
     }
 
-    static func levelOf(_ rate: Int) -> Int {
-        if rate < 0 { return 0 }
-        if rate < 30 { return 1 }
-        if rate < 70 { return 2 }
-        return 3
+    /// アプリの tally.countLevel と同じ段階
+    static func levelOf(_ count: Int) -> Int {
+        if count >= 30 { return 3 }
+        if count >= 10 { return 2 }
+        if count >= 1 { return 1 }
+        return 0
     }
 }
 
@@ -64,7 +65,7 @@ extension Color {
     }
 }
 
-/// 進み具合の段階 → マスの色(色だけに頼らないよう、小・中では % も出す)
+/// 回数の段階 → マスの色(色だけに頼らないよう、小・中では回数も出す)
 private func mandalaTint(_ level: Int, _ color: Color) -> Color {
     switch level {
     case ..<0: return Color.primary.opacity(0.04)
@@ -73,6 +74,11 @@ private func mandalaTint(_ level: Int, _ color: Color) -> Color {
     case 2:    return color.opacity(0.60)
     default:   return color
     }
+}
+
+/// 回数の文言(アプリの tally.countText と同じ)
+private func countText(_ count: Int) -> String {
+    count > 0 ? "\(count)回" : "まだ"
 }
 
 /// 大目標のマス(アプリのチャートの中心と同じ濃いスレート)
@@ -141,7 +147,7 @@ struct MandalaCenterGrid: View {
                             .lineLimit(2)
                             .minimumScaleFactor(0.7)
                         Spacer(minLength: 0)
-                        Text(el.rate < 0 ? "未着手" : "\(el.rate)%")
+                        Text(countText(el.count ?? 0))
                             .font(.system(size: nameSize + 1, weight: .heavy))
                             .minimumScaleFactor(0.7)
                     }
@@ -251,11 +257,8 @@ struct MandalaSmallView: View {
 struct MandalaMediumView: View {
     let mandala: WidgetMandala
     private var named: [WidgetMandalaElement] { mandala.elements.filter { !$0.name.isEmpty } }
-    /// 要素の平均(未着手は除く)
-    private var average: Int? {
-        let rates = named.map(\.rate).filter { $0 >= 0 }
-        return rates.isEmpty ? nil : Int((Double(rates.reduce(0, +)) / Double(rates.count)).rounded())
-    }
+    /// 要素の回数の合計
+    private var total: Int { named.reduce(0) { $0 + ($1.count ?? 0) } }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -270,8 +273,8 @@ struct MandalaMediumView: View {
                     .minimumScaleFactor(0.8)
                 Spacer(minLength: 0)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("直近7日").font(.system(size: 10)).foregroundStyle(.secondary)
-                    Text(average.map { "\($0)%" } ?? "未着手")
+                    Text("始めてから").font(.system(size: 10)).foregroundStyle(.secondary)
+                    Text(countText(total))
                         .font(.system(size: 22, weight: .heavy))
                         .foregroundStyle(.primary)
                 }

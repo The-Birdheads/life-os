@@ -3,7 +3,6 @@
  * 要素・行動目標は 0〜7 の番号で持ち、3×3 では中心(位置4)のまわりに並べる。
  */
 import type { MandalaCell, MandalaChart, Task } from "../types";
-import { average, cellRate, type Period } from "./progress";
 
 /** 要素の色(番号順)。白い文字を載せても読める濃さにしている */
 export const ELEMENT_COLORS = ["#1D4ED8", "#C2410C", "#0F766E", "#6D28D9", "#BE185D", "#A16207", "#15803D", "#475569"] as const;
@@ -66,45 +65,4 @@ export function tasksByCell(tasks: Task[]): Map<string, Task[]> {
     map.set(t.mandala_cell_id, list);
   }
   return map;
-}
-
-export function actionRate(
-  cell: MandalaCell | null,
-  byCell: Map<string, Task[]>,
-  doneByTask: Map<string, Set<string>>,
-  period: Period
-): number | null {
-  if (!cell) return null;
-  return cellRate(cell, byCell.get(cell.id) ?? [], doneByTask, period);
-}
-
-export function elementRate(
-  element: ElementModel,
-  byCell: Map<string, Task[]>,
-  doneByTask: Map<string, Set<string>>,
-  period: Period
-): number | null {
-  return average(element.actions.map((c) => actionRate(c, byCell, doneByTask, period)));
-}
-
-/** 進み具合の4段階(0=未着手, 1=〜30%, 2=〜70%, 3=70%〜) */
-export function rateLevel(rate: number | null): 0 | 1 | 2 | 3 {
-  if (rate === null) return 0;
-  if (rate < 30) return 1;
-  if (rate < 70) return 2;
-  return 3;
-}
-
-/** 進み具合の色(背景・文字・枠)。色だけに頼らないよう、画面では % も出す */
-export function rateTint(color: string, rate: number | null): { bg: string; fg: string; border: string } {
-  switch (rateLevel(rate)) {
-    case 0: return { bg: "#E2E8F0", fg: "#334155", border: "#CBD5E1" };
-    case 1: return { bg: `${color}1F`, fg: "#0F172A", border: `${color}59` };
-    case 2: return { bg: `${color}66`, fg: "#0F172A", border: color };
-    default: return { bg: color, fg: "#FFFFFF", border: color };
-  }
-}
-
-export function rateText(rate: number | null): string {
-  return rate === null ? "未着手" : `${rate}%`;
 }

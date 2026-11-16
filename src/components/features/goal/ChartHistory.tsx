@@ -1,15 +1,16 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { theme } from "../../../lib/ui/theme";
 import type { MandalaReview } from "../../../lib/types";
-import { AROUND, rateText, rateTint, type ChartModel } from "../../../lib/mandala/chart";
+import { AROUND, type ChartModel } from "../../../lib/mandala/chart";
+import { countLevel, countText, levelTint } from "../../../lib/mandala/tally";
 import { localDateLabel } from "../../../lib/mandala/dates";
-import { parseSnapshot, RECORD_LABELS, recordKind, type ReviewSnapshot } from "../../../lib/mandala/review";
+import { hasCounts, parseSnapshot, RECORD_LABELS, recordKind, type ReviewSnapshot } from "../../../lib/mandala/review";
 import PrimaryBtn from "../../ui/PrimaryBtn";
 import TextInput from "../../ui/TextInput";
 import { ChevronLeftIcon, ChevronRightIcon } from "../../ui/Icon";
 
 /**
- * チャートの履歴。見直し・保存・終えたときの保存の一覧と、その時点のチャート(当時の進み具合・見るだけ)。
+ * チャートの履歴。見直し・保存・終えたときの保存の一覧と、その時点のチャート(当時までの回数・見るだけ)。
  * onSave があれば(使用中のチャート)、一覧の上に「今の状態を保存する」を出す。
  * compareNow なら、今と文言が違うマスに、今の文言を添える(何を変えたかを比べられるように)。
  */
@@ -24,6 +25,7 @@ export default function ChartHistory({
     pastCount = 0,
     onOpenPast,
     emptyText,
+    recount,
 }: {
     title: string;
     backLabel: string;
@@ -35,6 +37,8 @@ export default function ChartHistory({
     pastCount?: number;
     onOpenPast?: () => void;
     emptyText: string;
+    /** 回数を数える前に保存した記録に、回数を入れ直す */
+    recount?: (snap: ReviewSnapshot, force?: boolean) => Promise<ReviewSnapshot>;
 }) {
     const [openId, setOpenId] = useState<string | null>(null);
     const [note, setNote] = useState("");
@@ -50,7 +54,8 @@ export default function ChartHistory({
                 <SnapshotView
                     snap={snap}
                     model={compareNow ? model : null}
-                    intro={kind === "review" ? "見直す前のチャートと、その時点の進み具合" : "保存した時点のチャートと進み具合"}
+                    recount={recount}
+                    intro={kind === "review" ? "見直す前のチャートと、その時点までの回数" : "保存した時点のチャートと、その時点までの回数"}
                 />
                 {kind === "review" ? (
                     <div style={notesBox}>
@@ -90,7 +95,7 @@ export default function ChartHistory({
             {onSave && (
                 <div style={{ display: "grid", gap: 8, background: theme.card, borderRadius: 16, padding: 14 }}>
                     <span style={{ fontSize: 14, fontWeight: 700 }}>今の状態を保存する</span>
-                    <span style={{ fontSize: 12, lineHeight: 1.6, color: theme.subtext }}>今のチャートと、直近 7 日の進み具合を履歴に残します</span>
+                    <span style={{ fontSize: 12, lineHeight: 1.6, color: theme.subtext }}>今のチャートと、ここまでの回数を履歴に残します</span>
                     <TextInput value={note} onChange={(e) => setNote(e.target.value)} placeholder="メモ（任意）" fullWidth />
                     <PrimaryBtn fullWidth disabled={saving} onClick={save}>保存する</PrimaryBtn>
                 </div>
@@ -135,8 +140,35 @@ export function HistoryHeader({ title, backLabel, onBack }: { title: string; bac
  * 保存したチャート(3×3 と、選んだ要素の行動目標)。見るだけ。
  * model を渡すと、今と文言が違うマスに今の文言を添える
  */
-export function SnapshotView({ snap, model, intro }: { snap: ReviewSnapshot; model: ChartModel | null; intro: string }) {
+export function SnapshotView({
+    snap: raw, model, intro, recount, forceRecount = false,
+}: {
+    snap: ReviewSnapshot;
+    model: ChartModel | null;
+    intro: string;
+    recount?: (snap: ReviewSnapshot, force?: boolean) => Promise<ReviewSnapshot>;
+    /** 回数が入っていても、記録から数え直す */
+    forceRecount?: boolean;
+}) {
     const [elem, setElem] = useState<number | null>(null);
+    // 回数を数える前の記録は、見るときに記録から数え直す(数え終わるまでは「…」)
+    const needs = !!recount && (forceRecount || !hasCounts(raw));
+    const [snap, setSnap] = useState<ReviewSnapshot>(raw);
+    const [ready, setReady] = useState(!needs);
+    // 親が描き直すたびに数え直さないよう、関数は ref で持ち、記録が変わったときだけ数える
+    const recountRef = useRef(recount);
+    recountRef.current = recount;
+    useEffect(() => {
+        setSnap(raw);
+        setReady(!needs);
+        if (!needs || !recountRef.current) return;
+        let alive = true;
+        recountRef.current(raw, forceRecount)
+            .then((s) => { if (alive) { setSnap(s); setReady(true); } })
+            .catch((e) => console.warn("[mandala] recount failed:", e));
+        return () => { alive = false; };
+    }, [raw, needs, forceRecount]);
+    const shown = (n: number | undefined) => (ready && typeof n === "number" ? countText(n) : "…");
     const el = elem !== null ? snap.elements[elem] : null;
     const range = `${snap.period.from.slice(5).replace("-", "/")}〜${snap.period.to.slice(5).replace("-", "/")}`;
 
@@ -153,12 +185,12 @@ export function SnapshotView({ snap, model, intro }: { snap: ReviewSnapshot; mod
                     const e = AROUND.indexOf(pos as (typeof AROUND)[number]);
                     const s = snap.elements[e];
                     if (!s?.name) return <div key={pos} style={{ ...tile, background: "#F8FAFC", border: "2px solid #E2E8F0" }} />;
-                    const t = rateTint(s.color, s.rate);
+                    const t = levelTint(s.color, countLevel(ready ? s.count ?? 0 : 0));
                     return (
-                        <button key={pos} type="button" aria-label={`${s.name} 当時 ${rateText(s.rate)}`} onClick={() => setElem(e)}
+                        <button key={pos} type="button" aria-label={`${s.name} 当時までに ${shown(s.count)}`} onClick={() => setElem(e)}
                             style={{ ...tile, background: t.bg, color: t.fg, border: `2px solid ${elem === e ? "#0F172A" : t.border}`, cursor: "pointer", fontFamily: "inherit" }}>
                             <span style={{ fontSize: 12, fontWeight: 700 }}>{s.name}</span>
-                            <span style={{ fontSize: 12, fontWeight: 700 }}>{rateText(s.rate)}</span>
+                            <span style={{ fontSize: 13, fontWeight: 800 }}>{shown(s.count)}</span>
                         </button>
                     );
                 })}
@@ -178,7 +210,7 @@ export function SnapshotView({ snap, model, intro }: { snap: ReviewSnapshot; mod
                                     <span style={{ fontSize: 13, fontWeight: 700 }}>{c.text}</span>
                                     <span style={{ fontSize: 11, color: theme.subtext }}>
                                         {c.status === "paused" ? "休止中 ・ " : c.status === "achieved" ? "達成 ・ " : ""}
-                                        {c.tasks.length ? c.tasks.map((t) => `${t.title}${t.frequency ? `（${t.frequency}）` : ""}`).join("、") : "習慣・タスクなし"}
+                                        {c.tasks.length ? c.tasks.map((t) => `${t.title}${t.frequency ? `（${t.frequency}）` : ""}${ready && t.count ? ` ${t.count}回` : ""}`).join("、") : "習慣・タスクなし"}
                                     </span>
                                     {nowText !== c.text && (
                                         <span style={{ justifySelf: "start", fontSize: 11, fontWeight: 700, color: "#9A3412", background: "#FFEDD5", borderRadius: 6, padding: "2px 6px" }}>
@@ -186,7 +218,7 @@ export function SnapshotView({ snap, model, intro }: { snap: ReviewSnapshot; mod
                                         </span>
                                     )}
                                 </span>
-                                <b style={{ fontSize: 13 }}>{c.status === "paused" ? "休止" : rateText(c.rate)}</b>
+                                <b style={{ fontSize: 13, whiteSpace: "nowrap" }}>{shown(c.count)}</b>
                             </div>
                         );
                     })}

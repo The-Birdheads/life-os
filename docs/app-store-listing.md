@@ -17,7 +17,7 @@
 
 ```
 ・アプリの名前を「Habitas」から「まいにちコンパス」に変えました。これまでの記録・ログイン・ウィジェットは、そのまま使えます
-・目標タブを追加しました。大きな目標をマンダラチャートで8つの要素と行動目標に分け、毎日の習慣・タスクにひもづけて、直近7日の進み具合を色で確かめられます
+・目標タブを追加しました。大きな目標をマンダラチャートで8つの要素と行動目標に分け、毎日の習慣・タスクにひもづけて、やった回数と今週の足あとで確かめられます。回数は休んでも減らず、増えるほどマスの色が濃くなります
 ・チャートの見直しと履歴の保存、過去のチャートの確認、新しいチャートの作成ができます
 ・振り返りタブに「目標の進み」を追加しました。その日に進めた行動目標がわかります
 ・マイルールを追加しました。「夜更かししない」など、守りたいことに一日の終わりに ○× をつけられます
@@ -45,7 +45,7 @@
 ```
 What's new in this version (1.4.0):
 - The app is renamed from "Habitas" to "まいにちコンパス" (Mainichi Compass). The bundle ID, sign-in, stored data and widgets are unchanged; existing users keep their records and login.
-- New "Goal" tab: users break a main goal into 8 areas and up to 64 action goals (a Mandala chart), link them to habits and tasks, and see progress over the last 7 days. Charts can be reviewed, saved to history, and replaced with a new chart; past charts are view-only.
+- New "Goal" tab: users break a main goal into 8 areas and up to 64 action goals (a Mandala chart), link them to habits and tasks, and see how many times they have done them since the chart started (counts never go down; cells get darker as the count grows) plus this week's done days. Charts can be reviewed, saved to history, and replaced with a new chart; past charts are view-only.
 - "My rules": items the user marks kept (○) or missed (×) at the end of the day.
 - The "Week" tab is replaced by a "Trend" tab (weekly/monthly view of records).
 - Habit frequency (daily / n times a week / specific weekdays), task "in progress" state and manual ordering.

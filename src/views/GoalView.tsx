@@ -1,10 +1,8 @@
 import { useEffect, useState } from "react";
 import { theme } from "../lib/ui/theme";
 import type { Task } from "../lib/types";
-import {
-    actionRate, AROUND, elementRate, namedElements, rateText, rateTint, rateLevel,
-    type ElementModel,
-} from "../lib/mandala/chart";
+import { AROUND, namedElements, type ElementModel } from "../lib/mandala/chart";
+import { actionTally, countLevel, countText, elementTally, lastDoneText, LEVEL_STEPS, levelTint, weekDoneDays } from "../lib/mandala/tally";
 import { draftFromModel, type MandalaState } from "../lib/mandala/useMandala";
 import { isCounted } from "../lib/mandala/progress";
 import ChartWizard from "../components/features/goal/ChartWizard";
@@ -13,6 +11,7 @@ import ReviewFlow from "../components/features/goal/ReviewFlow";
 import ChartHistory from "../components/features/goal/ChartHistory";
 import PastCharts from "../components/features/goal/PastCharts";
 import ChartSheet from "../components/features/goal/ChartSheet";
+import Footprints from "../components/features/goal/Footprints";
 import PrimaryBtn from "../components/ui/PrimaryBtn";
 import SecondaryBtn from "../components/ui/SecondaryBtn";
 import { ChevronLeftIcon, ChevronRightIcon, ClockIcon, CloseIcon, GridIcon, PencilIcon, PlusIcon, TargetIcon } from "../components/ui/Icon";
@@ -99,7 +98,8 @@ export default function GoalView({
     }
 
     const named = namedElements(model);
-    const rateOfElement = (el: ElementModel) => elementRate(el, mandala.byCell, mandala.doneByTask, mandala.period);
+    const today = mandala.period.to;
+    const tallyOfElement = (el: ElementModel) => elementTally(el, mandala.byCell, mandala.doneByTask, mandala.period);
     const linkedCount = (type: Task["task_type"]) => {
         const ids = new Set(model.elements.flatMap((el) => el.actions.map((c) => c?.id).filter(Boolean)));
         return tasks.filter((t) => t.task_type === type && t.mandala_cell_id && ids.has(t.mandala_cell_id) && isCounted(t)).length;
@@ -154,7 +154,7 @@ export default function GoalView({
                             </div>
                         )}
                     </div>
-                    <div style={{ fontSize: 12, color: theme.subtext }}>直近 7 日の進み具合　・　要素をタップして開く</div>
+                    <div style={{ fontSize: 12, color: theme.subtext }}>チャートを始めてからの回数と、今週の足あと　・　要素をタップして開く</div>
                     <Grid3 tutorial="goal-grid">
                         {Array.from({ length: 9 }, (_, pos) => {
                             if (pos === 4) {
@@ -169,19 +169,20 @@ export default function GoalView({
                             if (!el.name) {
                                 return <EmptyCell key={pos} height={112} label="要素を書く" onClick={() => setSheet({ element: el.index, cell: null })} />;
                             }
-                            const r = rateOfElement(el);
-                            const t = rateTint(el.color, r);
-                            const strong = rateLevel(r) === 3;
+                            const tl = tallyOfElement(el);
+                            const count = tl?.count ?? 0;
+                            const level = countLevel(count);
+                            const t = levelTint(el.color, level);
+                            const strong = level === 3;
                             return (
-                                <button key={pos} type="button" aria-label={`${el.name}、${rateText(r)}。開く`}
+                                <button key={pos} type="button"
+                                    aria-label={`${el.name}、これまで${countText(count)}、今週${weekDoneDays(tl, today)}日。開く`}
                                     onClick={() => { setElem(el.index); setView("element"); }}
                                     style={{ ...cellBase, height: 112, background: t.bg, color: t.fg, border: `2px solid ${t.border}`, justifyContent: "space-between", cursor: "pointer" }}>
                                     <span style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.35 }}>{el.name}</span>
-                                    <span style={{ display: "grid", gap: 5 }}>
-                                        <span style={{ height: 6, borderRadius: 3, overflow: "hidden", background: strong ? "rgba(255,255,255,0.35)" : "rgba(15,23,42,0.12)" }}>
-                                            <span style={{ display: "block", height: 6, width: `${r ?? 0}%`, background: strong ? "#fff" : el.color }} />
-                                        </span>
-                                        <span style={{ fontSize: 13, fontWeight: 700 }}>{rateText(r)}</span>
+                                    <span style={{ display: "grid", gap: 6 }}>
+                                        <span style={{ fontSize: count > 0 ? 17 : 13, fontWeight: 800, lineHeight: 1 }}>{countText(count)}</span>
+                                        <Footprints days={tl?.days ?? new Set()} today={today} color={el.color} onStrong={strong} />
                                     </span>
                                 </button>
                             );
@@ -214,6 +215,7 @@ export default function GoalView({
                     onBack={() => setView("center")}
                     records={mandala.reviews}
                     model={model}
+                    recount={(snap, force) => mandala.recountRecord(snap, model, force)}
                     compareNow
                     onSave={async (note) => {
                         await mandala.saveCurrentState(note);
@@ -245,7 +247,8 @@ export default function GoalView({
                                     <button key={pos} type="button" aria-label={`要素「${element.name}」の名前を変える`} onClick={() => setSheet({ element: element.index, cell: null })}
                                         style={{ ...cellBase, height: 118, background: element.color, color: "#fff", border: "none", justifyContent: "center", alignItems: "center", textAlign: "center", cursor: "pointer" }}>
                                         <span style={{ fontSize: 15, fontWeight: 700 }}>{element.name}</span>
-                                        <span style={{ fontSize: 12 }}>{rateText(rateOfElement(element))}</span>
+                                        <span style={{ fontSize: 13, fontWeight: 700 }}>これまで {countText(elementTally(element, mandala.byCell, mandala.doneByTask, mandala.period)?.count ?? 0)}</span>
+                                        <Footprints days={elementTally(element, mandala.byCell, mandala.doneByTask, mandala.period)?.days ?? new Set()} today={today} color={element.color} onStrong size={8} />
                                     </button>
                                 );
                             }
@@ -263,20 +266,21 @@ export default function GoalView({
                                     </button>
                                 );
                             }
-                            const r = actionRate(c, mandala.byCell, mandala.doneByTask, mandala.period);
-                            const t = c.status === "paused" ? { bg: "#E2E8F0", fg: "#334155", border: "#CBD5E1" } : rateTint(element.color, r);
+                            const tl = actionTally(c, mandala.byCell, mandala.doneByTask, mandala.period);
+                            const count = tl?.count ?? 0;
+                            const t = c.status === "paused" ? { bg: "#E2E8F0", fg: "#334155", border: "#CBD5E1" } : levelTint(element.color, countLevel(count, c.status === "achieved"));
                             const h = linked.filter((x) => x.task_type === "habit").length;
                             const k = linked.filter((x) => x.task_type === "oneoff").length;
                             const rl = linked.filter((x) => x.task_type === "rule").length;
                             const meta = c.status === "paused" ? "休止中" : c.status === "achieved" ? "達成"
                                 : [h ? `習慣${h}` : "", k ? `タスク${k}` : "", rl ? `ルール${rl}` : ""].filter(Boolean).join("・");
                             return (
-                                <button key={pos} type="button" aria-label={`${c.text}、${meta}、${rateText(r)}。開く`} onClick={open}
+                                <button key={pos} type="button" aria-label={`${c.text}、${meta}、これまで${countText(count)}、最後にやったのは${lastDoneText(tl?.last ?? null, today)}。開く`} onClick={open}
                                     style={{ ...cellBase, height: 118, background: t.bg, color: t.fg, border: `2px solid ${t.border}`, justifyContent: "space-between", cursor: "pointer" }}>
                                     <CellText text={c.text} />
                                     <span style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 4 }}>
                                         <span style={{ fontSize: 10 }}>{meta}</span>
-                                        <b style={{ fontSize: 13 }}>{c.status === "paused" ? "" : rateText(r)}</b>
+                                        <b style={{ fontSize: 13, whiteSpace: "nowrap" }}>{countText(count)}</b>
                                     </span>
                                 </button>
                             );
@@ -307,7 +311,7 @@ export default function GoalView({
                                         if (q === 4) return tiny(model.chart.title, "#1E293B", "#F8FAFC", () => setView("center"), true);
                                         const el = model.elements[AROUND.indexOf(q as (typeof AROUND)[number])];
                                         if (!el.name) return tiny("", "#F8FAFC", "#475569");
-                                        const t = rateTint(el.color, rateOfElement(el));
+                                        const t = levelTint(el.color, countLevel(tallyOfElement(el)?.count ?? 0));
                                         return tiny(el.name, t.bg, t.fg, () => { setElem(el.index); setView("element"); }, true);
                                     }
                                     const el = model.elements[AROUND.indexOf(bp as (typeof AROUND)[number])];
@@ -316,14 +320,16 @@ export default function GoalView({
                                     if (q === 4) return tiny(el.name, el.color, "#fff", openEl, true);
                                     const c = el.actions[AROUND.indexOf(q as (typeof AROUND)[number])];
                                     if (!c || !c.text.trim()) return tiny("", "#F8FAFC", "#475569", openEl);
-                                    const r = actionRate(c, mandala.byCell, mandala.doneByTask, mandala.period);
-                                    const t = r === null ? { bg: "#FFFFFF", fg: "#334155" } : rateTint(el.color, r);
+                                    const linkedAny = (mandala.byCell.get(c.id) ?? []).length > 0;
+                                    const t = !linkedAny && c.status === "active"
+                                        ? { bg: "#FFFFFF", fg: "#334155" }
+                                        : levelTint(el.color, countLevel(actionTally(c, mandala.byCell, mandala.doneByTask, mandala.period)?.count ?? 0, c.status === "achieved"));
                                     return tiny(c.text, t.bg, t.fg, openEl);
                                 })}
                             </div>
                         ))}
                     </div>
-                    <p style={{ margin: 0, fontSize: 12, lineHeight: 1.7, color: theme.subtext }}>色の濃さで、全体の進み具合を眺める画面です。マスをタップすると、その要素を開きます。</p>
+                    <p style={{ margin: 0, fontSize: 12, lineHeight: 1.7, color: theme.subtext }}>色の濃さで、全体の進み具合を眺める画面です。やった回数が増えるほど濃くなります。マスをタップすると、その要素を開きます。</p>
                 </>
             )}
 
@@ -334,14 +340,14 @@ export default function GoalView({
                         style={{ width: "100%", maxWidth: 360, background: "var(--bg)", borderRadius: 18, padding: 20, display: "grid", gap: 12 }}>
                         <span style={{ fontSize: 16, fontWeight: 700 }}>新しいチャートを作る</span>
                         <p style={{ margin: 0, fontSize: 13, lineHeight: 1.7, color: theme.subtext }}>
-                            今のチャートを終えて、新しいチャートを作ります。進み具合は、作った日から数え直します。習慣・タスクと記録はそのまま残ります。
+                            今のチャートを終えて、新しいチャートを作ります。回数は、作った日から数え直します。習慣・タスクと記録はそのまま残ります。
                             切り替わるのは、新しいチャートを保存したときです。
                         </p>
                         <label style={{ display: "flex", alignItems: "flex-start", gap: 10, fontSize: 13, lineHeight: 1.6, cursor: "pointer" }}>
                             <input type="checkbox" checked={saveOnReplace} onChange={(e) => setSaveOnReplace(e.target.checked)}
                                 style={{ width: 20, height: 20, marginTop: 1, flexShrink: 0, accentColor: theme.habit }} />
                             <span>
-                                今のチャートと進み具合を、履歴に保存する<br />
+                                今のチャートと回数を、履歴に保存する<br />
                                 <span style={{ fontSize: 12, color: theme.subtext }}>終えたチャートは「チャートの履歴 › 過去のチャート」から見られます</span>
                             </span>
                         </label>
@@ -427,7 +433,7 @@ function DeadlineBanner({ chartId, endDate, onExtend, onNext }: { chartId: strin
                 <div style={{ flex: 1, minWidth: 0, display: "grid", gap: 2, paddingTop: 2 }}>
                     <b style={{ fontSize: 14, color: "#78350F" }}>{Number(endDate.slice(5, 7))}/{Number(endDate.slice(8, 10))} の期限を過ぎました</b>
                     <span style={{ fontSize: 12, lineHeight: 1.6, color: "#92400E" }}>
-                        続けるなら期限を延ばし、区切るなら進み具合を履歴に残して次のチャートへ進みましょう。
+                        続けるなら期限を延ばし、区切るならここまでの回数を履歴に残して次のチャートへ進みましょう。
                     </span>
                 </div>
                 <button type="button" onClick={dismiss} aria-label="期限のお知らせを閉じる"
@@ -489,10 +495,11 @@ function Legend({ withCellStates, color = "#1D4ED8" }: { withCellStates?: boolea
         <div style={{ display: "flex", flexWrap: "wrap", gap: 10, fontSize: 11, color: "var(--text)" }}>
             {withCellStates && item({ ...sw("transparent"), border: "2px dashed #94A3B8" }, "空き")}
             {withCellStates && item(sw("#FFFFFF", "#CBD5E1"), "未設定")}
-            {item(sw("#E2E8F0", "#CBD5E1"), withCellStates ? "未着手・休止中" : "未着手")}
-            {item(sw(`${color}1F`, `${color}59`), "〜30%")}
-            {item(sw(`${color}66`), "〜70%")}
-            {item(sw(color), "70%〜")}
+            {item(sw("#E2E8F0", "#CBD5E1"), withCellStates ? "まだ・休止中" : "まだ")}
+            {item(sw(`${color}1F`, `${color}59`), `${LEVEL_STEPS[0]}回〜`)}
+            {item(sw(`${color}66`), `${LEVEL_STEPS[1]}回〜`)}
+            {item(sw(color), withCellStates ? `${LEVEL_STEPS[2]}回〜・達成` : `${LEVEL_STEPS[2]}回〜`)}
+            {!withCellStates && item({ width: 8, height: 8, borderRadius: 4, background: color }, "今週やった日")}
         </div>
     );
 }

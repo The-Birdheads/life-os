@@ -2,11 +2,13 @@ import { useMemo, useState } from "react";
 import { theme } from "../../../lib/ui/theme";
 import type { MandalaCell, Task } from "../../../lib/types";
 import type { MandalaState } from "../../../lib/mandala/useMandala";
-import { actionRate, elementRate, namedElements, rateText, type ElementModel } from "../../../lib/mandala/chart";
+import { namedElements, type ElementModel } from "../../../lib/mandala/chart";
+import { actionTally, countText, elementTally, lastDoneText, weekDoneDays, type Tally } from "../../../lib/mandala/tally";
+import Footprints from "./Footprints";
 import { currentFrequency, frequencyLabel, isValidFrequency, type Frequency } from "../../../lib/mandala/frequency";
 import { isCounted } from "../../../lib/mandala/progress";
 import { isRepeating, KIND_LABEL } from "../../../lib/taskKind";
-import { DECISION_LABELS, parseSnapshot, RECORD_LABELS, recordKind, type ReviewDecision } from "../../../lib/mandala/review";
+import { DECISION_LABELS, hasCounts, parseSnapshot, RECORD_LABELS, recordKind, type ReviewDecision } from "../../../lib/mandala/review";
 import { localDateLabel } from "../../../lib/mandala/dates";
 import PrimaryBtn from "../../ui/PrimaryBtn";
 import SecondaryBtn from "../../ui/SecondaryBtn";
@@ -17,11 +19,11 @@ import FrequencyPicker from "../register/FrequencyPicker";
 const DAILY: Frequency = { kind: "daily", count: null, days: null };
 const FIRST_SHOWN = 5;
 
-type Row = { element: ElementModel; cell: MandalaCell; rate: number | null; linked: Task[]; sort: number };
+type Row = { element: ElementModel; cell: MandalaCell; tally: Tally | null; linked: Task[]; sort: string; today: string };
 
 /**
  * チャートの見直し(好きなタイミングで行う)。
- * 1. 結果を見る(要素ごとの進み具合と、前回の見直しとの差)
+ * 1. 結果を見る(要素ごとの回数・今週の足あとと、前回の記録から増えた回数)
  * 2. マスごとに次の手を決める(保存するまでチャートは変わらない)
  * 3. メモを残して保存 → 見直す前のチャートと結果・決めたこと・メモが記録として残る
  */
@@ -47,6 +49,8 @@ export default function ReviewFlow({
     const lastReview = mandala.reviews.length ? mandala.reviews[mandala.reviews.length - 1] : null;
     const lastSnap = lastReview ? parseSnapshot(lastReview.snapshot) : null;
     const named = namedElements(model);
+    const today = mandala.period.to;
+    const counted = lastSnap && hasCounts(lastSnap) ? lastSnap : null;
 
     const rows: Row[] = useMemo(() => {
         const out: Row[] = [];
@@ -56,12 +60,13 @@ export default function ReviewFlow({
                 if (!c || !c.text.trim()) continue;
                 const linked = (mandala.byCell.get(c.id) ?? []).filter(isCounted);
                 if (!linked.length && c.status === "active") continue;
-                const rate = actionRate(c, mandala.byCell, mandala.doneByTask, mandala.period);
-                const sort = c.status === "achieved" ? 1000 : c.status === "paused" ? 999 : rate ?? 998;
-                out.push({ element: el, cell: c, rate, linked, sort });
+                const tally = actionTally(c, mandala.byCell, mandala.doneByTask, mandala.period);
+                // しばらくやっていないマスから並べる(まだのマスがいちばん上。休止・達成は最後)
+                const sort = c.status === "achieved" ? "3" : c.status === "paused" ? "2" : `1${tally?.last ?? "0000-00-00"}`;
+                out.push({ element: el, cell: c, tally, linked, sort, today: mandala.period.to });
             }
         }
-        return out.sort((a, b) => a.sort - b.sort);
+        return out.sort((a, b) => a.sort.localeCompare(b.sort, "en"));
     }, [model, mandala.byCell, mandala.doneByTask, mandala.period]);
 
     const decide = (cellId: string, d: ReviewDecision) => {
@@ -93,9 +98,9 @@ export default function ReviewFlow({
                 <span style={{ width: 64 }} />
             </div>
             <p style={{ margin: "-6px 0 0", fontSize: 12, lineHeight: 1.7, color: theme.subtext }}>
-                {lastReview
-                    ? `直近7日の結果と、前回の${RECORD_LABELS[recordKind(lastReview)]}（${localDateLabel(lastReview.reviewed_at)}）との差です。`
-                    : "直近7日の結果です。初めての見直しです。"}
+                {counted
+                    ? `チャートを始めてからの回数と、前回の${RECORD_LABELS[recordKind(lastReview!)]}（${localDateLabel(lastReview!.reviewed_at)}）から増えた回数です。`
+                    : lastReview ? "チャートを始めてからの回数です。" : "チャートを始めてからの回数です。初めての見直しです。"}
                 決めた内容は、保存したときにチャートと習慣に反映されます。
             </p>
 
@@ -103,19 +108,20 @@ export default function ReviewFlow({
             <div style={{ background: theme.card, borderRadius: 16, padding: "4px 14px" }}>
                 {named.map((e) => {
                     const el = model.elements[e];
-                    const now = elementRate(el, mandala.byCell, mandala.doneByTask, mandala.period);
-                    const prev = lastSnap?.elements[e]?.rate ?? null;
-                    const delta = now !== null && prev !== null ? now - prev : null;
+                    const tl = elementTally(el, mandala.byCell, mandala.doneByTask, mandala.period);
+                    const now = tl?.count ?? 0;
+                    const prev = counted?.elements[e]?.count;
+                    // 増えた分だけ出す(減ったように見せない)
+                    const delta = typeof prev === "number" ? now - prev : null;
                     return (
-                        <div key={e} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: "1px solid #F1F5F9" }}>
+                        <div key={e} aria-label={`${el.name}、これまで${countText(now)}、今週${weekDoneDays(tl, today)}日${delta && delta > 0 ? `、前回から${delta}回` : ""}`}
+                            style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: "1px solid #F1F5F9" }}>
                             <span style={{ width: 10, height: 10, borderRadius: 5, background: el.color, flexShrink: 0 }} />
-                            <span style={{ width: 76, fontSize: 13, fontWeight: 700, flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{el.name}</span>
-                            <span style={{ flex: 1, height: 6, borderRadius: 3, background: "#E2E8F0", overflow: "hidden" }}>
-                                <span style={{ display: "block", height: 6, width: `${now ?? 0}%`, background: el.color }} />
-                            </span>
-                            <span style={{ width: 48, textAlign: "right", fontSize: 13, fontWeight: 700 }}>{rateText(now)}</span>
-                            <span style={{ width: 44, textAlign: "right", fontSize: 12, fontWeight: 700, color: delta === null ? theme.subtext : delta > 0 ? "#15803D" : delta < 0 ? "#B91C1C" : theme.subtext }}>
-                                {delta === null ? (lastSnap ? "新規" : "") : delta > 0 ? `+${delta}` : delta === 0 ? "±0" : delta}
+                            <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{el.name}</span>
+                            <Footprints days={tl?.days ?? new Set()} today={today} color={el.color} size={8} />
+                            <span style={{ width: 48, textAlign: "right", fontSize: 13, fontWeight: 700 }}>{countText(now)}</span>
+                            <span style={{ width: 44, textAlign: "right", fontSize: 12, fontWeight: 700, color: "#15803D" }}>
+                                {delta !== null && delta > 0 ? `+${delta}` : ""}
                             </span>
                         </div>
                     );
@@ -123,7 +129,7 @@ export default function ReviewFlow({
             </div>
 
             <h2 style={h2}>2. マスごとに、次の手を決める</h2>
-            <p style={{ margin: "-8px 0 0", fontSize: 12, color: theme.subtext }}>進み具合の低い順です。タップして選びます（選ばなければ「続ける」）</p>
+            <p style={{ margin: "-8px 0 0", fontSize: 12, color: theme.subtext }}>しばらくやっていないマスから並べています。タップして選びます（選ばなければ「続ける」）</p>
             {rows.length === 0 && (
                 <p style={{ margin: 0, fontSize: 13, color: theme.subtext }}>習慣・タスクがひもづいたマスがありません。</p>
             )}
@@ -139,11 +145,14 @@ export default function ReviewFlow({
                                 {r.cell.status === "paused" ? "休止中" : r.cell.status === "achieved" ? "達成"
                                     : r.linked.map((t) => `${t.title}（${isRepeating(t) ? frequencyLabel(currentFrequency(t)) : "タスク"}）`).join("、")}
                             </span>
+                            {r.cell.status === "active" && (
+                                <span style={{ fontSize: 11, color: theme.subtext }}>最後にやったのは {lastDoneText(r.tally?.last ?? null, today)}</span>
+                            )}
                             {d && d.kind !== "keep" && (
                                 <span style={{ justifySelf: "start", fontSize: 11, fontWeight: 700, color: "#1E3A8A", background: "#DBEAFE", borderRadius: 6, padding: "2px 6px" }}>→ {DECISION_LABELS[d.kind]}</span>
                             )}
                         </span>
-                        <b style={{ fontSize: 14 }}>{r.cell.status === "paused" ? "休止" : rateText(r.rate)}</b>
+                        <b style={{ fontSize: 14, whiteSpace: "nowrap" }}>{countText(r.tally?.count ?? 0)}</b>
                     </button>
                 );
             })}
@@ -215,7 +224,7 @@ function DecisionSheet({
             onClick: () => { if (target) pickHabit(target); setMode("lower"); }, disabled: habits.length === 0,
         },
         { kind: "change", desc: "このやり方は合わなかった。今の習慣を終えて、新しい習慣を作ります", onClick: () => { setTitle(""); setFreq(DAILY); setMode("change"); } },
-        { kind: "pause", desc: "今は優先しない。習慣を記録タブから外し、進み具合の計算からも外します", onClick: () => onDecide({ kind: "pause" }), disabled: row.cell.status === "paused" },
+        { kind: "pause", desc: "今は優先しない。習慣を記録タブから外します（これまでの回数は残ります）", onClick: () => onDecide({ kind: "pause" }), disabled: row.cell.status === "paused" },
         { kind: "achieve", desc: "もう意識しなくてもできる。マスに「達成」の印を付けます", onClick: () => setMode("achieve"), disabled: row.cell.status === "achieved" },
         { kind: "remove", desc: "そもそも要らなかった。マスを空にします（変更の履歴は残ります）", onClick: () => setMode("remove") },
     ];
@@ -244,7 +253,10 @@ function DecisionSheet({
                     {row.linked.map((t) => (
                         <span key={t.id} style={{ fontSize: 12 }}>{KIND_LABEL[t.task_type]} ・ {t.title}（{isRepeating(t) ? frequencyLabel(currentFrequency(t)) : "タスク"}）</span>
                     ))}
-                    <span style={{ fontSize: 12, fontWeight: 700 }}>直近7日：{row.cell.status === "paused" ? "休止中" : rateText(row.rate)}</span>
+                    <span style={{ fontSize: 12, fontWeight: 700 }}>
+                        これまで {countText(row.tally?.count ?? 0)}
+                        {row.cell.status === "paused" ? " ・ 休止中" : ` ・ 今週 ${weekDoneDays(row.tally, row.today)}日 ・ 最後にやったのは ${lastDoneText(row.tally?.last ?? null, row.today)}`}
+                    </span>
                 </div>
 
                 {mode === "choose" && options.map((o) => (
@@ -302,7 +314,7 @@ function DecisionSheet({
                     <>
                         <h3 style={{ margin: 0, fontSize: 16 }}>{DECISION_LABELS[mode]}</h3>
                         <p style={{ margin: 0, fontSize: 12, color: theme.subtext }}>
-                            {mode === "achieve" ? "マスに「達成」の印が付き、要素の進み具合では 100% として数えます。" : "マスを空にします。変更の履歴は残ります。"}
+                            {mode === "achieve" ? "マスに「達成」の印が付き、いちばん濃い色で表示します。これまでの回数は残ります。" : "マスを空にします。変更の履歴は残ります。"}
                         </p>
                         <SecondaryBtn fullWidth onClick={() => onDecide({ kind: mode, endHabits: false })}>
                             {mode === "achieve" ? "習慣は続ける" : "習慣は記録タブに残す"}

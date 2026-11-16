@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import type { MandalaCell, MandalaChart, Task } from '../types';
 import { buildChartModel, tasksByCell } from './chart';
-import { dayProgress, gain, periodEndingOn } from './dayProgress';
+import { dayProgress, gain } from './dayProgress';
+import { chartPeriod } from './tally';
 import { carriedCells, draftFromModel } from './carryOver';
 import { doneDaysByTask } from './progress';
 import { buildWidgetMandala } from './widget';
@@ -45,23 +46,21 @@ describe('dayProgress', () => {
     it('lists the action goals moved forward on that day, in chart order', () => {
         expect(p.cells.map((c) => c.cell.text)).toEqual(['毎朝走る', '階段を使う', '夜にスマホを見ない']);
         expect(p.cells[0].doneTasks.map((t) => t.title)).toEqual(['朝ラン']);
-        expect(p.cells[2]).toMatchObject({ achieved: true, after: 100, doneTasks: [] });
+        expect(p.cells[2]).toMatchObject({ achieved: true, before: 0, after: 0, doneTasks: [] });
     });
 
-    it('compares the rate without and with that day', () => {
-        // 朝ラン: 1/7 = 14% → 2/7 = 29%
-        expect(p.cells[0]).toMatchObject({ before: 14, after: 29 });
-        expect(gain(p.cells[0])).toBe(15);
-        // 階段(0%) と 本を返す(0% → 100%) の平均
-        expect(p.cells[1]).toMatchObject({ before: 0, after: 50 });
-        // 直接達成にする前は、ひもづいた習慣・タスクが無いので未着手
-        expect(p.cells[2].before).toBeNull();
+    it('compares the count without and with that day (counted from the chart start)', () => {
+        // 朝ラン: 10/31 の1回 → 11/1 を入れて2回
+        expect(p.cells[0]).toMatchObject({ before: 1, after: 2 });
+        expect(gain(p.cells[0])).toBe(1);
+        // 本を返す(タスク)の完了で 0回 → 1回
+        expect(p.cells[1]).toMatchObject({ before: 0, after: 1 });
     });
 
-    it('averages the element rates the same way as the goal tab', () => {
-        expect(p.elements[0]).toEqual({ index: 0, before: 7, after: 40 });
-        // 23時に寝る 1/7 = 14%、達成 100% → 達成の前は 14%
-        expect(p.elements[1]).toEqual({ index: 1, before: 14, after: 57 });
+    it('adds up the element counts the same way as the goal tab', () => {
+        expect(p.elements[0]).toEqual({ index: 0, before: 1, after: 3 });
+        // 23時に寝る(10/30 の1回)だけ。この日は増えていない
+        expect(p.elements[1]).toEqual({ index: 1, before: 1, after: 1 });
         expect(p.elements[2]).toEqual({ index: 2, before: null, after: null });
     });
 
@@ -71,34 +70,36 @@ describe('dayProgress', () => {
 });
 
 describe('buildWidgetMandala', () => {
-    const w = buildWidgetMandala(model, tasksByCell(tasks), done, { from: '2026-10-26', to: DAY });
+    const w = buildWidgetMandala(model, tasksByCell(tasks), done, { from: '2026-10-01', to: DAY });
 
-    it('passes the chart as levels for the widget', () => {
+    it('passes the chart as counts and levels for the widget', () => {
         expect(w.title).toBe('健康的な体をつくる');
-        expect(w.elements[0]).toMatchObject({ name: '運動', rate: 40, level: 2 });
+        expect(w.elements[0]).toMatchObject({ name: '運動', count: 3, level: 1 });
         expect(w.elements[0].cells.slice(0, 3)).toEqual([
             { text: '毎朝走る', level: 1 },
-            { text: '階段を使う', level: 2 },
+            { text: '階段を使う', level: 1 },
             { text: '', level: -1 },
         ]);
+        // 達成にしたマスはいちばん濃く、休止中のマスは出さない
+        expect(w.elements[1].cells[1]).toEqual({ text: '夜にスマホを見ない', level: 3 });
         expect(w.elements[1].cells[2]).toEqual({ text: '昼寝しない', level: -1 });
-        expect(w.elements[2]).toMatchObject({ name: '', rate: -1, level: -1 });
+        expect(w.elements[2]).toMatchObject({ name: '', count: 0, level: -1 });
         expect(w.todayCount).toBe(2);
     });
 });
 
 describe('チャートを始めた日から数える', () => {
-    it('直近7日でも、チャートを始めた日より前は数えない', () => {
-        expect(periodEndingOn(DAY, '2026-10-31')).toEqual({ from: '2026-10-31', to: DAY });
-        expect(periodEndingOn(DAY, '2026-10-01')).toEqual({ from: '2026-10-26', to: DAY });
-        expect(periodEndingOn(DAY, null)).toEqual({ from: '2026-10-26', to: DAY });
+    it('期間はチャートを始めた日から、その日まで', () => {
+        expect(chartPeriod(DAY, '2026-10-31')).toEqual({ from: '2026-10-31', to: DAY });
+        expect(chartPeriod(DAY, '2026-10-01')).toEqual({ from: '2026-10-01', to: DAY });
+        expect(chartPeriod(DAY, null)).toEqual({ from: DAY, to: DAY });
     });
 
     it('作り直した当日は、前の日に完了した分を数えない', () => {
         const fresh = buildChartModel({ ...chart, start_date: DAY }, cells);
         const p = dayProgress(fresh, tasksByCell(tasks), done, DAY);
-        // 毎朝走る: 当日だけを数えて 0% → 100%(前日の完了は入らない)
-        expect(p.cells.find((c) => c.cell.id === 'a0')).toMatchObject({ before: 0, after: 100 });
+        // 毎朝走る: 当日の1回だけ(前日の完了は入らない)
+        expect(p.cells.find((c) => c.cell.id === 'a0')).toMatchObject({ before: 0, after: 1 });
     });
 });
 

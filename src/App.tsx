@@ -746,7 +746,7 @@ export default function App() {
     else startStory(action);
   };
   // ------- Widget Sync -------
-  // ウィジェットのチャートは、目標タブと同じ直近7日の進み具合
+  // ウィジェットのチャートは、目標タブと同じく、チャートを始めてからの回数
   const widgetMandala = useMemo(
     () => (mandala.model && namedElements(mandala.model).length > 0
       ? buildWidgetMandala(mandala.model, mandala.byCell, mandala.doneByTask, mandala.period)

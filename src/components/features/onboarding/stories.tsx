@@ -105,7 +105,7 @@ export function buildStory(story: Story, ctx: GuideCtx): GuideStep[] {
             {
                 kind: "do", tab: "goal", enter: () => ctx.goal("center"), target: "goal-grid", accent: GOAL_ACCENT,
                 title: "要素を開いてみましょう",
-                body: "まん中が大目標、まわりの 8 マスが要素です。色の濃さで、直近 7 日の進み具合がわかります。要素のマスをタップして開いてください。",
+                body: "まん中が大目標、まわりの 8 マスが要素です。やった回数が増えるほど、色が濃くなります。要素のマスをタップして開いてください。",
                 until: () => !!findTarget("goal-element-grid"),
             },
             {
