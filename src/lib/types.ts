@@ -1,8 +1,21 @@
+/** 習慣の頻度。daily=毎日 / weekly_count=週n回 / weekdays=曜日指定 */
+export type FrequencyKind = "daily" | "weekly_count" | "weekdays";
+
+/** 変える前の頻度。from〜to(YYYY-MM-DD、両端を含む)の期間は、この頻度で数える */
+export type FrequencySegment = {
+  from: string | null;
+  to: string;
+  kind: FrequencyKind;
+  count: number | null;
+  days: number | null;
+};
+
 export type Task = {
   id: string;
   user_id: string;
   title: string;
-  task_type: "habit" | "oneoff";
+  /** habit=習慣 / oneoff=タスク / rule=マイルール(一日の終わりに、守れたかを ○× でつける) */
+  task_type: "habit" | "oneoff" | "rule";
   due_date: string | null;
   is_active: boolean;
   is_hidden: boolean;
@@ -12,6 +25,93 @@ export type Task = {
   remind_on?: boolean;
   remind_hour?: number;
   remind_minute?: number;
+  /** 習慣の頻度(タスクでは daily のまま) */
+  frequency_kind?: FrequencyKind;
+  /** 週n回の n(1〜6) */
+  frequency_count?: number | null;
+  /** 曜日指定(ビット: 月=1, 火=2, 水=4, 木=8, 金=16, 土=32, 日=64) */
+  frequency_days?: number | null;
+  /** 変える前の頻度の履歴(古い順) */
+  frequency_history?: FrequencySegment[];
+  /** ひもづいたマンダラチャートのマス(行動目標) */
+  mandala_cell_id?: string | null;
+  /** マスにひもづけた日(YYYY-MM-DD)。この日より前は、マスの進み具合に数えない */
+  mandala_linked_at?: string | null;
+  /** 見直しなどで終了した日(YYYY-MM-DD)。終了した習慣も記録は残す */
+  ended_at?: string | null;
+  /** 記録画面で自分で並べたときの順(小さいほど上)。並べたことが無ければ null */
+  sort_order?: number | null;
+  /** 作った日時(ISO)。古い端末の行では、同期するまで null のことがある */
+  created_at?: string | null;
+};
+
+export type MandalaChartStatus = "active" | "finished";
+
+export type MandalaChart = {
+  id: string;
+  user_id: string;
+  /** 大目標 */
+  title: string;
+  start_date: string | null;
+  /** 期限(任意) */
+  end_date: string | null;
+  status: MandalaChartStatus;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type MandalaCellStatus = "active" | "paused" | "achieved";
+
+/** 休止した期間(両端を含む。to が null なら休止中)。task_ids は休止で記録タブから外した習慣・タスク(再開で戻す) */
+export type PausedPeriod = { from: string; to: string | null; task_ids?: string[] };
+
+export type MandalaCell = {
+  id: string;
+  user_id: string;
+  chart_id: string;
+  /** 要素の位置 0〜7 */
+  element_index: number;
+  /** null = 要素のマス / 0〜7 = 行動目標のマス */
+  cell_index: number | null;
+  text: string;
+  /** 要素の色(要素のマスだけ) */
+  color: string | null;
+  status: MandalaCellStatus;
+  /** 休止した期間。この期間は進み具合に数えない */
+  paused_periods: PausedPeriod[];
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type MandalaCellEventKind =
+  | "created" | "edited" | "linked" | "unlinked" | "lowered" | "changed"
+  | "paused" | "resumed" | "achieved" | "removed";
+
+export type MandalaCellEvent = {
+  id: string;
+  user_id: string;
+  cell_id: string;
+  kind: MandalaCellEventKind;
+  note: string;
+  task_id: string | null;
+  created_at: string;
+};
+
+/** 習慣・タスクの履歴に出す、目標でのできごと(そのマスの文言つき) */
+export type TaskCellEvent = MandalaCellEvent & { cell_text?: string | null };
+
+export type MandalaReview = {
+  id: string;
+  user_id: string;
+  chart_id: string;
+  reviewed_at: string;
+  good_note: string | null;
+  next_note: string | null;
+  /** 決めたこと(表示用の文言) */
+  decisions: string[];
+  /** 見直す前のチャートと、当時の進み具合(src/lib/mandala の ReviewSnapshot) */
+  snapshot: Record<string, unknown>;
+  created_at?: string;
 };
 
 export type Action = {
@@ -29,7 +129,16 @@ export type TaskEntry = {
   user_id: string;
   day: string; // YYYY-MM-DD
   task_id: string;
-  status: "todo" | "doing" | "done";
+  /** マイルールは ○=done / ×=missed。答えていない日は todo か記録なし */
+  status: "todo" | "doing" | "done" | "missed";
+};
+
+/** 習慣・タスクごと、状態ごとの記録の、いちばん早い日と遅い日 */
+export type TaskEntryBounds = {
+  task_id: string;
+  status: "doing" | "done" | "missed";
+  first: string;
+  last: string;
 };
 
 export type ActionEntry = {

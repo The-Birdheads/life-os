@@ -11,7 +11,9 @@ type Props = {
 export default function VolBar({ value, max = 10, showNumber = true, isReverse = false }: Props) {
   const { volumeUnit } = useUserSettings();
   const vRaw = Number(value);
-  const v = Number.isFinite(vRaw) ? Math.min(max, Math.max(0, vRaw)) : 0;
+  // 0 / 空 は「未設定」なので何も出さない
+  if (!Number.isFinite(vRaw) || vRaw <= 0) return null;
+  const v = Math.min(max, vRaw);
   const pct = max === 0 ? 0 : (v / max) * 100;
   const label = formatVolumeLabel(v, volumeUnit);
 

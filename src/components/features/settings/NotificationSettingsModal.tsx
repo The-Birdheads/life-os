@@ -146,7 +146,8 @@ export default function NotificationSettingsModal({ isOpen, onClose, userId, set
         transition: "opacity 0.2s ease",
     };
     const modalStyle: React.CSSProperties = {
-        width: "100%", maxWidth: 600, maxHeight: `calc(100dvh - max(env(safe-area-inset-top, 0px), 24px) - ${adHeight}px)`,
+        // 使い方の案内が上に出ているあいだは、そのぶん低くする(--guide-modal)
+        width: "100%", maxWidth: 600, maxHeight: `calc(100dvh - max(env(safe-area-inset-top, 0px), 24px) - ${adHeight}px - var(--guide-modal, 0px))`,
         background: "var(--bg)", borderTopLeftRadius: 20, borderTopRightRadius: 20,
         display: "flex", flexDirection: "column",
         boxShadow: "0 -4px 20px rgba(0,0,0,0.15)",
@@ -166,7 +167,7 @@ export default function NotificationSettingsModal({ isOpen, onClose, userId, set
 
     return (
         <div style={overlayStyle} onClick={onClose}>
-            <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
+            <div style={modalStyle} data-tutorial="notif-settings" onClick={(e) => e.stopPropagation()}>
                 <div style={{ position: "relative", padding: "24px 16px 16px", flexShrink: 0 }}>
                     <button style={closeBtnStyle} onClick={onClose}>×</button>
                     <h2 style={{ margin: 0, fontSize: 20 }}>通知設定</h2>
@@ -191,7 +192,7 @@ export default function NotificationSettingsModal({ isOpen, onClose, userId, set
                                     <span style={{ color: theme.warning, fontSize: 16, flexShrink: 0 }}>⚠</span>
                                     <div style={{ fontSize: 13, lineHeight: 1.55 }}>
                                         <b>通知がオフになっています。</b><br />
-                                        ONにするには、iOSの設定からHabitasの通知を許可してください。
+                                        ONにするには、iOSの設定からまいにちコンパスの通知を許可してください。
                                     </div>
                                 </div>
                                 <button

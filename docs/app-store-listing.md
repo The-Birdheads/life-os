@@ -1,4 +1,74 @@
-# App Store 掲載情報（Habitas）
+# App Store 掲載情報（まいにちコンパス / 旧 Habitas）
+
+## 1.4.0
+
+1.4.0 からアプリの名前を「Habitas」から「まいにちコンパス」に変えます。
+バンドルID(`com.morikuma.habitas`)・ログインの戻り先・DB(`habitas` スキーマ)・ウィジェットの種類(kind)・App Group は、既存ユーザーのログインやウィジェットが切れないよう、そのままにしています。
+
+### 名前とサブタイトル
+
+| 項目 | 内容 |
+|---|---|
+| 名前(30文字まで) | まいにちコンパス |
+| サブタイトル(30文字まで) | タスク・習慣・目標を、毎日の1歩に |
+| キャッチコピー(紹介文の冒頭など) | 迷ったら、今日の1歩だけ。 |
+
+### このバージョンの最新情報
+
+```
+・アプリの名前を「Habitas」から「まいにちコンパス」に変えました。これまでの記録・ログイン・ウィジェットは、そのまま使えます
+・目標タブを追加しました。大きな目標をマンダラチャートで8つの要素と行動目標に分け、毎日の習慣・タスクにひもづけて、やった回数と今週の足あとで確かめられます。回数は休んでも減らず、増えるほどマスの色が濃くなります
+・チャートの見直しと履歴の保存、過去のチャートの確認、新しいチャートの作成ができます
+・振り返りタブに「目標の進み」を追加しました。その日に進めた行動目標がわかります
+・マイルールを追加しました。「夜更かししない」など、守りたいことに一日の終わりに ○× をつけられます
+・週タブを「推移」タブにしました。週・月ごとに、記録の抜けや、習慣・マイルールの日ごとの記録、完了したタスクを確かめられます
+・習慣の頻度（毎日・週n回・曜日指定）を選べるようにしました
+・タスクの「対応中」と、並べ替えができるようにしました
+・ホーム画面のウィジェットで、目標の進み具合を見られるようにしました
+・「行動」の記録と「今日の振り返り」（充実度など）の入力をなくしました。これまでの記録は消えていません
+```
+
+### TestFlight のテスト内容
+
+ビルド 2(2026-11-16 にアップロード)用。TestFlight の「テスト内容」(4000文字まで)に貼る。
+
+```
+1.4.0 のテスト版（ビルド 2）です。
+
+■ ビルド 1 から変わったところ
+・アプリの名前を「まいにちコンパス」に変え、アイコンと起動画面を新しくしました（記録・ログイン・ウィジェットはそのまま使えます）
+・目標の進みを「％」から「やった回数」と今週の足あとに変えました。回数は休んでも減らず、増えるほどマスの色が濃くなります
+・チャートを「9×9 で作る」こともできるようにしました（作成画面の上で「ステップで作る」と切り替え）
+・今のチャートを引き継いで、新しいチャートを作れるようにしました
+・目標の「いつまでに」を過ぎると、目標タブの上にお知らせが出ます
+・習慣・タスク・マイルールの編集画面に「履歴」を追加しました
+・起動すると記録タブが開き、「すべて」の上にその日のまとめが出ます
+・使い方の案内を作り直しました（メニュー ≡ の「使い方を見る」からも探せます）
+・アプリ内の通知を、× で閉じられるカードにしました
+・ログインし直したときに、完了済みのタスクの一部が未完了に戻ることがある不具合を直しました
+
+■ 主に試してほしいこと
+・目標タブ：チャートの作成（ステップ / 9×9）、マスから習慣・タスク・マイルールを作る・ひもづける、回数と今週の足あと、見直し、履歴の保存、過去のチャート、新しいチャートの作成（引き継ぐ / 白紙から）
+・記録タブ：その日のまとめ、マイルールの ○×、タスクの対応中（長押し）、並べ替え、習慣の頻度、編集画面の「履歴」
+・振り返りタブ：目標の進み（+◯回、スキップ・もう一度見る）
+・推移タブ：週/月の切り替え、記録の抜けから記録タブへの移動
+・ホーム画面ウィジェット（習慣・タスク・目標）：名前が「まいにちコンパス」になっていること、目標が回数で出ること
+・ログアウトしてログインし直す、複数の端末で使う：完了の記録が消えたり、未完了に戻ったりしないこと
+```
+
+### 審査メモ（1.3.1 からの差分）
+
+```
+What's new in this version (1.4.0):
+- The app is renamed from "Habitas" to "まいにちコンパス" (Mainichi Compass). The bundle ID, sign-in, stored data and widgets are unchanged; existing users keep their records and login.
+- New "Goal" tab: users break a main goal into 8 areas and up to 64 action goals (a Mandala chart), link them to habits and tasks, and see how many times they have done them since the chart started (counts never go down; cells get darker as the count grows) plus this week's done days. Charts can be reviewed, saved to history, and replaced with a new chart; past charts are view-only.
+- "My rules": items the user marks kept (○) or missed (×) at the end of the day.
+- The "Week" tab is replaced by a "Trend" tab (weekly/monthly view of records).
+- Habit frequency (daily / n times a week / specific weekdays), task "in progress" state and manual ordering.
+- A home screen widget shows goal progress.
+- The "Action" log and the daily fulfillment input were removed from the UI (existing data is kept).
+All new data is stored on the device and, when logged in, synced to the same Supabase backend as before. No new external services, permissions, or tracking were added.
+```
 
 ## 1.3.1
 

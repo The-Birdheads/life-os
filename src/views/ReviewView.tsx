@@ -8,25 +8,32 @@ import Card from "../components/ui/Card";
 import IconBtn from "../components/ui/IconBtn";
 
 import CategoryBadge from "../components/badges/CategoryBadge";
-import PriorityBadge from "../components/badges/PriorityBadge";
 import VolBar from "../components/badges/VolBar";
 import PrimaryBtn from "../components/ui/PrimaryBtn";
 import SegmentedBar from "../components/ui/SegmentedBar";
+import { FEATURES } from "../lib/features";
 import SectionTitle from "../components/ui/SectionTitle";
-import { RepeatIcon, CheckIcon, ZapIcon, PencilIcon } from "../components/ui/Icon";
+import { RepeatIcon, CheckIcon, ZapIcon, PencilIcon, ShieldIcon, GridIcon } from "../components/ui/Icon";
+import { frequencyAt, frequencyLabel, isScheduledOn } from "../lib/mandala/frequency";
 import { space } from "../lib/ui/spacing";
 import { theme } from "../lib/ui/theme";
 import TextInput from "../components/ui/TextInput";
 import Slider from "../components/ui/Slider";
+import TaskCard from "../components/features/tasks/TaskCard";
+import GoalChip, { type GoalChipInfo } from "../components/features/tasks/GoalChip";
+import RuleAnswerButtons from "../components/features/tasks/RuleAnswerButtons";
+import { useHabitFrequencyNote } from "../components/features/tasks/useHabitFrequencyNote";
 
-type Filter = "all" | "habit" | "task" | "action";
+type Filter = "all" | "habit" | "task" | "rule" | "action";
 
+// 5つ並ぶと文字が切れるので、アイコンの下に小さく名前を出す(記録タブと同じ)
 const segmentedItems = [
-  { key: "all", label: "すべて" },
-  { key: "habit", label: "習慣" },
-  { key: "task", label: "タスク" },
-  { key: "action", label: "行動" },
-] as const;
+  { key: "all", label: "すべて", icon: <GridIcon size={16} /> },
+  { key: "habit", label: "習慣", icon: <RepeatIcon size={16} /> },
+  { key: "task", label: "タスク", icon: <CheckIcon size={16} /> },
+  { key: "rule", label: "ルール", icon: <ShieldIcon size={16} /> },
+  { key: "action", label: "行動", icon: <ZapIcon size={16} /> },
+].filter((it) => it.key !== "action" || FEATURES.actions);
 
 type Props = {
   userId: string | null;
@@ -35,6 +42,8 @@ type Props = {
 
   tasks: Task[];
   doneTaskIds: Set<string>;
+  /** マイルールで × をつけたもの */
+  missedTaskIds: Set<string>;
   actions: Action[];
   todayActionEntries: any[];
 
@@ -46,15 +55,24 @@ type Props = {
 
   cardStyle: React.CSSProperties; // ✅ App.tsx の cardStyle を渡して見た目維持
   dataVersion?: number; // フォアグラウンド復帰時の再取得トリガー
+  /** マンダラチャート(無ければ「目標の進み」を出さない) */
+  mandala?: { model: ChartModel | null; byCell: Map<string, Task[]> };
+  /** 目標タブで要素を開く */
+  onOpenGoal?: (element: number) => void;
+  /** カードに出す、要素のチップ(記録タブと同じ) */
+  goalChips?: Map<string, GoalChipInfo>;
 };
 
 import { sqliteRepo } from "../lib/db/instance";
+import { namedElements, type ChartModel } from "../lib/mandala/chart";
+import MandalaReplay from "../components/features/goal/MandalaReplay";
 
 export default function ReviewView({
   userId,
   day,
   tasks,
   doneTaskIds,
+  missedTaskIds,
   actions,
   todayActionEntries,
   note,
@@ -64,6 +82,9 @@ export default function ReviewView({
   setMsg,
   cardStyle,
   dataVersion,
+  mandala,
+  onOpenGoal,
+  goalChips,
 }: Props) {
   const { sortRule, prioritizeDue } = useUserSettings();
   const [reviewLoading, setReviewLoading] = useState(false);
@@ -137,6 +158,21 @@ export default function ReviewView({
     tasks.filter((t) => t.task_type === "oneoff" && doneTaskIds.has(t.id)),
     sortRule, prioritizeDue,
   );
+
+  // マイルール: その日の ○ / ×。予定があるのに答えていないものは、記録タブでつけてもらう
+  const sortedRules = sortTasks(tasks.filter((t) => t.task_type === "rule" && t.is_active), sortRule, false);
+  const keptRules = sortedRules.filter((t) => doneTaskIds.has(t.id));
+  const missedRules = sortedRules.filter((t) => missedTaskIds.has(t.id));
+  // 記録タブと同じく、○ と × を分けずにいつもの並びで出す
+  const answeredRules = sortedRules.filter((t) => doneTaskIds.has(t.id) || missedTaskIds.has(t.id));
+  const unansweredRules = sortedRules.filter(
+    (t) => !t.is_hidden && !doneTaskIds.has(t.id) && !missedTaskIds.has(t.id) && isScheduledOn(frequencyAt(t, day), day)
+  );
+
+  // カードは記録タブと同じもの(チェックだけ無し)
+  const habitFrequencyNote = useHabitFrequencyNote(userId, day, doneTaskIds);
+  const goalChip = (taskId: string) => <GoalChip chip={goalChips?.get(taskId)} onOpen={onOpenGoal} />;
+  const hiddenNote = (t: Task) => (t.is_hidden ? "（非表示・当日完了のため表示）" : null);
 
   // ✅ 行動（その日のログを表示）
   const actionById = new Map(actions.map((a) => [a.id, a]));
@@ -343,8 +379,22 @@ export default function ReviewView({
     <>
       <div style={{ display: "grid", gap: space.xl, marginTop: 0 }}>
 
+        {/* ── 目標の進み（チャートがあるときだけ） ── */}
+        {mandala?.model && namedElements(mandala.model).length > 0 && (
+          <div data-tutorial="review-goal">
+            <MandalaReplay
+              userId={userId}
+              day={day}
+              model={mandala.model}
+              byCell={mandala.byCell}
+              refreshKey={`${dataVersion}|${[...doneTaskIds].join(",")}`}
+              onOpenGoal={onOpenGoal}
+            />
+          </div>
+        )}
+
         {/* ── 目標の達成チェック（前日に tomorrow_note がある場合のみ表示） ── */}
-        {yesterdayNote && (
+        {FEATURES.dailyReview && yesterdayNote && (
           <div>
             <SectionTitle
               title="目標の達成チェック"
@@ -404,6 +454,7 @@ export default function ReviewView({
         )}
 
         {/* ✅ セクション：振り返り */}
+        {FEATURES.dailyReview && (
         <div>
           <SectionTitle
             title="今日の振り返り"
@@ -419,7 +470,7 @@ export default function ReviewView({
           />
 
           {/* ✅ 充実度Card：未登録時＆編集時 / 登録済で出し分け */}
-          <Card data-tutorial="review-content" style={cardStyle}>
+          <Card style={cardStyle}>
             {reviewLoading && <small style={{ opacity: 0.7 }}>読み込み中…</small>}
 
             {/* 登録済＆確認モード */}
@@ -545,6 +596,7 @@ export default function ReviewView({
             )}
           </Card>
         </div>
+        )}
 
         {/* ✅ 追加要望11: ダッシュボード（3分割パネル） */}
         <div>
@@ -568,7 +620,16 @@ export default function ReviewView({
               </div>
             </Card>
 
-            {/* 行動パネル */}
+            {/* 行動パネル(行動を外しているあいだは、マイルールの ○ の数を出す) */}
+            {!FEATURES.actions ? (
+              <Card style={{ ...cardStyle, background: theme.rule, color: "#ffffff", padding: "16px 8px" }}>
+                <div style={{ textAlign: "center", display: "flex", flexDirection: "column", gap: 4 }}>
+                  <div style={{ fontSize: 12, opacity: 0.9, fontWeight: "bold" }}>マイルール</div>
+                  <div style={{ fontSize: 28, fontWeight: 900, lineHeight: 1 }}>○ {keptRules.length}</div>
+                  <div style={{ fontSize: 10, opacity: 0.8 }}>× {missedRules.length}</div>
+                </div>
+              </Card>
+            ) : (
             <Card style={{ ...cardStyle, background: theme.action, color: "#ffffff", padding: "16px 8px" }}>
               <div style={{ textAlign: "center", display: "flex", flexDirection: "column", gap: 4 }}>
                 <div style={{ fontSize: 12, opacity: 0.9, fontWeight: "bold" }}>行動</div>
@@ -576,11 +637,12 @@ export default function ReviewView({
                 <div style={{ fontSize: 10, opacity: 0.8 }}>合計Vol: {actionsVol}</div>
               </div>
             </Card>
+            )}
           </div>
         </div>
 
         {/* ✅ 見出し：実施したこと一覧（SegmentedBarの上） */}
-        <div>
+        <div data-tutorial="review-content">
           <SectionTitle title="実施したこと一覧" isLarge={true} style={{ marginBottom: 0 }} />
 
           {/* ✅ SegmentedBar */}
@@ -612,15 +674,15 @@ export default function ReviewView({
             ) : (
               <div style={listWrap}>
                 {doneHabits.map((t) => (
-                  <div key={t.id} style={getItemCardStyle(theme.habit)}>
-                    <div style={{ minWidth: 0, width: "100%" }}>
-                      <div style={itemTitle}>{t.title}</div>
-                      <div style={metaLine}>
-                        <PriorityBadge value={(t as any).priority} />
-                        <VolBar value={(t as any).volume} isReverse={true} />
-                      </div>
-                    </div>
-                  </div>
+                  <TaskCard
+                    key={t.id}
+                    task={t}
+                    accentColor={theme.habit}
+                    checked
+                    hiddenNote={hiddenNote(t)}
+                    notes={[habitFrequencyNote(t)]}
+                    footer={goalChip(t.id)}
+                  />
                 ))}
               </div>
             )}
@@ -647,31 +709,67 @@ export default function ReviewView({
             ) : (
               <div style={listWrap}>
                 {doneOneoffs.map((t) => (
-                  <div key={t.id} style={getItemCardStyle(theme.task)}>
-                    <div style={{ minWidth: 0, width: "100%" }}>
-                      <div style={itemTitle}>{t.title}</div>
-
-                      <div style={metaLine}>
-                        <PriorityBadge value={(t as any).priority} />
-                        <VolBar value={(t as any).volume} isReverse={true} />
-                      </div>
-
-                      {t.due_date ? (
-                        <div style={{ ...metaLine, marginTop: 4 }}>
-                          <span style={smallLabel}>期限：</span>
-                          <span style={smallLabel}>{t.due_date}</span>
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
+                  <TaskCard
+                    key={t.id}
+                    task={t}
+                    accentColor={theme.task}
+                    checked
+                    hiddenNote={hiddenNote(t)}
+                    footer={goalChip(t.id)}
+                  />
                 ))}
               </div>
             )}
           </div>
         )}
 
+        {/* マイルール(○× は記録タブでつけ、ここでは見るだけ) */}
+        {(filter === "all" || filter === "rule") && (
+          <div>
+            <SectionTitle
+              title="マイルール"
+              icon={<ShieldIcon size={18} />}
+              accentColor={theme.rule}
+              right={
+                <div style={sectionStats}>
+                  <span style={{ ...statPill, background: "rgba(0,0,0,0.05)", borderColor: "transparent", color: "#334155" }}>○ {keptRules.length}</span>
+                  <span style={{ ...statPill, background: "rgba(0,0,0,0.05)", borderColor: "transparent", color: "#334155" }}>× {missedRules.length}</span>
+                </div>
+              }
+              style={{ marginBottom: 8 }}
+            />
+            {keptRules.length === 0 && missedRules.length === 0 ? (
+              <p style={{ margin: 0, opacity: 0.5, fontSize: 14 }}>まだありません</p>
+            ) : (
+              <div style={listWrap}>
+                {answeredRules.map((t) => {
+                  const kept = doneTaskIds.has(t.id);
+                  const freq = frequencyAt(t, day);
+                  return (
+                    <TaskCard
+                      key={t.id}
+                      task={t}
+                      accentColor={theme.rule}
+                      checked={kept}
+                      hiddenNote={t.is_hidden ? "（非表示・この日に答えたため表示）" : null}
+                      notes={[kept ? null : "この日は守れなかった", freq.kind !== "daily" ? frequencyLabel(freq) : null]}
+                      footer={goalChip(t.id)}
+                      right={<RuleAnswerButtons value={kept ? "done" : "missed"} title={t.title} onAccent={kept} readOnly />}
+                    />
+                  );
+                })}
+              </div>
+            )}
+            {unansweredRules.length > 0 && (
+              <p style={{ margin: "8px 0 0", fontSize: 12, opacity: 0.7 }}>
+                まだ ○× をつけていないもの：{unansweredRules.map((t) => t.title).join("、")}（記録タブでつけられます）
+              </p>
+            )}
+          </div>
+        )}
+
         {/* ✅ 行動 */}
-        {(filter === "all" || filter === "action") && (
+        {FEATURES.actions && (filter === "all" || filter === "action") && (
           <div>
             <SectionTitle
               title="行動"

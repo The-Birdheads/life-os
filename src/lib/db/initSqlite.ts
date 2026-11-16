@@ -155,6 +155,59 @@ async function createTables(db: SQLiteDBConnection) {
         prioritize_due INTEGER DEFAULT 0,
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP
       );
+
+      CREATE TABLE IF NOT EXISTS mandala_charts (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        title TEXT NOT NULL DEFAULT '',
+        start_date TEXT,
+        end_date TEXT,
+        status TEXT NOT NULL DEFAULT 'active',
+        deleted_at TEXT,
+        created_at TEXT,
+        updated_at TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS mandala_cells (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        chart_id TEXT NOT NULL,
+        element_index INTEGER NOT NULL,
+        cell_index INTEGER,
+        text TEXT NOT NULL DEFAULT '',
+        color TEXT,
+        status TEXT NOT NULL DEFAULT 'active',
+        paused_periods TEXT NOT NULL DEFAULT '[]',
+        deleted_at TEXT,
+        created_at TEXT,
+        updated_at TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS mandala_cell_events (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        cell_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        note TEXT NOT NULL DEFAULT '',
+        task_id TEXT,
+        deleted_at TEXT,
+        created_at TEXT,
+        updated_at TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS mandala_reviews (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        chart_id TEXT NOT NULL,
+        reviewed_at TEXT NOT NULL,
+        good_note TEXT,
+        next_note TEXT,
+        decisions TEXT NOT NULL DEFAULT '[]',
+        snapshot TEXT NOT NULL DEFAULT '{}',
+        deleted_at TEXT,
+        created_at TEXT,
+        updated_at TEXT
+      );
     `;
 
   try {
@@ -295,7 +348,63 @@ async function createTables(db: SQLiteDBConnection) {
       console.warn('Migration/Check failed for notification_settings sort columns', e);
     }
 
-    await db.execute("PRAGMA user_version = 10;");
+    // 10. tasks の頻度・マンダラチャートのひもづけ・終了日のカラム追加（v11マイグレーション）
+    //     マンダラチャートのテーブルは、上の schema の CREATE TABLE IF NOT EXISTS で作られる
+    try {
+      const tasksInfo3 = await db.query(`PRAGMA table_info(tasks);`);
+      const tasksColumns3 = (tasksInfo3.values || []).map((c: any) => c.name);
+      const v11Cols = [
+        { name: 'frequency_kind',    def: "TEXT NOT NULL DEFAULT 'daily'" },
+        { name: 'frequency_count',   def: 'INTEGER' },
+        { name: 'frequency_days',    def: 'INTEGER' },
+        { name: 'frequency_history', def: "TEXT NOT NULL DEFAULT '[]'" },
+        { name: 'mandala_cell_id',   def: 'TEXT' },
+        { name: 'mandala_linked_at', def: 'TEXT' },
+        { name: 'ended_at',          def: 'TEXT' },
+      ];
+      for (const col of v11Cols) {
+        if (!tasksColumns3.includes(col.name)) {
+          console.log(`Adding ${col.name} column to tasks...`);
+          await db.execute(`ALTER TABLE tasks ADD COLUMN ${col.name} ${col.def};`);
+        }
+      }
+    } catch (e) {
+      console.warn('Migration/Check failed for tasks frequency / mandala columns', e);
+    }
+
+    // 11. 記録画面で自分で並べる順(v12マイグレーション)
+    try {
+      const tasksInfo4 = await db.query(`PRAGMA table_info(tasks);`);
+      const tasksColumns4 = (tasksInfo4.values || []).map((c: any) => c.name);
+      if (!tasksColumns4.includes('sort_order')) {
+        console.log('Adding sort_order column to tasks...');
+        await db.execute(`ALTER TABLE tasks ADD COLUMN sort_order REAL;`);
+      }
+      // 並び順の既定を「自分で並べる」にする。並べるまでは優先度順と同じ並びなので、見た目は変わらない
+      if (currentVersion < 12) {
+        await db.run(
+          `UPDATE notification_settings SET sort_rule = 'manual', updated_at = ? WHERE sort_rule IS NULL OR sort_rule = 'priority'`,
+          [new Date().toISOString()]
+        );
+      }
+    } catch (e) {
+      console.warn('Migration/Check failed for tasks sort_order', e);
+    }
+
+    // 12. 作った日時(v13マイグレーション)。推移タブで、作る前の日を「やらなかった日」に数えないため。
+    // サーバーには前からあるので、既存の分は次の同期で埋まる
+    try {
+      const tasksInfo5 = await db.query(`PRAGMA table_info(tasks);`);
+      const tasksColumns5 = (tasksInfo5.values || []).map((c: any) => c.name);
+      if (!tasksColumns5.includes('created_at')) {
+        console.log('Adding created_at column to tasks...');
+        await db.execute(`ALTER TABLE tasks ADD COLUMN created_at TEXT;`);
+      }
+    } catch (e) {
+      console.warn('Migration/Check failed for tasks created_at', e);
+    }
+
+    await db.execute("PRAGMA user_version = 13;");
 
     // Web版では明示的に保存が必要
     if (Capacitor.getPlatform() === 'web' || Capacitor.getPlatform() === 'ios') {

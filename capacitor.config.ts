@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.morikuma.habitas',
-  appName: 'Habitas',
+  appName: 'まいにちコンパス',
   webDir: 'dist',
   ios: {
     dependencyManager: 'cocoapods'
@@ -11,7 +11,7 @@ const config: CapacitorConfig = {
     SplashScreen: {
       launchShowDuration: 2000,
       launchAutoHide: false,
-      backgroundColor: '#6DCAA6',
+      backgroundColor: '#64E1B4',
       iosSpinnerStyle: 'small',
       spinnerColor: '#ffffff',
       showSpinner: false,

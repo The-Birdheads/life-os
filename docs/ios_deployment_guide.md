@@ -68,7 +68,7 @@ iOSのライブラリ管理に必須です。**管理者（友人）のユーザ
 1. **Bundle ID の登録**: [Apple Developer Portal](https://developer.apple.com/account/resources/identifiers/list) にて、`com.kanta.lifeos` (または既存のもの) を登録します。
 2. **新規アプリの作成**: [App Store Connect](https://appstoreconnect.apple.com/apps) で「＋」をクリックし、新規Appを作成します。
    - **プラットフォーム**: iOS
-   - **名前**: Habitas
+   - **名前**: まいにちコンパス(1.4.0 で Habitas から改名)
    - **バンドルID**: 先ほど登録したものを選択
 
 ---

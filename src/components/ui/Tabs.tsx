@@ -1,9 +1,8 @@
 import React from "react";
 import { theme } from "../../lib/ui/theme";
 import { radius } from "../../lib/ui/radius";
-import { PencilIcon, SearchIcon, CalendarIcon } from "./Icon";
-
-type Tab = "today" | "review" | "week";
+import { PencilIcon, SearchIcon, CalendarIcon, TargetIcon } from "./Icon";
+import type { Tab } from "../../lib/tabs";
 
 type Props = {
   tab: Tab;
@@ -15,10 +14,12 @@ type TabItem = {
   label: string;
   icon: React.ReactNode;
 };
+// PDCA の順: 目標(P) → 記録(D) → 振り返り・推移(C)
 const items: TabItem[] = [
+  { key: "goal", label: "目標", icon: <TargetIcon size={20} /> },
   { key: "today", label: "記録", icon: <PencilIcon size={20} /> },
   { key: "review", label: "振り返り", icon: <SearchIcon size={20} /> },
-  { key: "week", label: "週", icon: <CalendarIcon size={20} /> },
+  { key: "week", label: "推移", icon: <CalendarIcon size={20} /> },
 ];
 
 export default function Tabs({ tab, setTab }: Props) {
@@ -30,7 +31,7 @@ export default function Tabs({ tab, setTab }: Props) {
 
   const rowStyle: React.CSSProperties = {
     display: "grid",
-    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+    gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))`,
     gap: 6,
   };
 

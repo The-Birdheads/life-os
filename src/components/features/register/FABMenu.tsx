@@ -1,16 +1,15 @@
 import React, { useState, useEffect } from "react";
 import { theme } from "../../../lib/ui/theme";
-import { RepeatIcon, CheckIcon, ZapIcon } from "../../ui/Icon";
+import { RepeatIcon, CheckIcon, ZapIcon, ShieldIcon } from "../../ui/Icon";
+import { FEATURES } from "../../../lib/features";
 
 type Props = {
-    onSelect: (type: "habit" | "oneoff" | "action") => void;
-    onFirstPress?: () => void;
-    forceOpen?: boolean;
+    onSelect: (type: "habit" | "oneoff" | "rule" | "action") => void;
 };
 
-export default function FABMenu({ onSelect, onFirstPress, forceOpen }: Props) {
+export default function FABMenu({ onSelect }: Props) {
     const [open, setOpen] = useState(false);
-    const isMenuOpen = forceOpen || open;
+    const isMenuOpen = open;
 
     // 外側クリックで閉じる
     useEffect(() => {
@@ -92,7 +91,7 @@ export default function FABMenu({ onSelect, onFirstPress, forceOpen }: Props) {
 
     return (
         <>
-            {isMenuOpen && !forceOpen && (
+            {isMenuOpen && (
                 <div
                     style={{
                         position: "fixed",
@@ -107,7 +106,7 @@ export default function FABMenu({ onSelect, onFirstPress, forceOpen }: Props) {
                     onClick={() => setOpen(false)}
                 />
             )}
-            <div style={menuStyle}>
+            <div style={menuStyle} data-tutorial="fab-menu" data-open={isMenuOpen}>
                 <button
                     data-tutorial="fab-menu-habit"
                     style={itemBtnStyle}
@@ -117,6 +116,7 @@ export default function FABMenu({ onSelect, onFirstPress, forceOpen }: Props) {
                     習慣の登録
                 </button>
                 <button
+                    data-tutorial="fab-menu-oneoff"
                     style={itemBtnStyle}
                     onClick={() => { onSelect("oneoff"); setOpen(false); }}
                 >
@@ -124,24 +124,27 @@ export default function FABMenu({ onSelect, onFirstPress, forceOpen }: Props) {
                     タスクの登録
                 </button>
                 <button
+                    data-tutorial="fab-menu-rule"
                     style={itemBtnStyle}
-                    onClick={() => { onSelect("action"); setOpen(false); }}
+                    onClick={() => { onSelect("rule"); setOpen(false); }}
                 >
-                    <div style={iconWrapStyle}><ZapIcon size={18} color={theme.primary} /></div>
-                    行動の登録
+                    <div style={iconWrapStyle}><ShieldIcon size={18} color={theme.primary} /></div>
+                    マイルールの登録
                 </button>
+                {FEATURES.actions && (
+                    <button
+                        style={itemBtnStyle}
+                        onClick={() => { onSelect("action"); setOpen(false); }}
+                    >
+                        <div style={iconWrapStyle}><ZapIcon size={18} color={theme.primary} /></div>
+                        行動の登録
+                    </button>
+                )}
             </div>
             <button
                 data-tutorial="fab"
                 style={fabStyle}
-                onClick={() => {
-                    if (forceOpen) return;
-                    if (onFirstPress && !localStorage.getItem("fab_tutorial_done")) {
-                        onFirstPress();
-                        return;
-                    }
-                    setOpen(!open);
-                }}
+                onClick={() => setOpen(!open)}
                 aria-label="メニューを開く"
             >
                 {/* SVG の + をボタン中央に正確に配置 */}
